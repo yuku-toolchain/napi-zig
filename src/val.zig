@@ -217,7 +217,6 @@ pub const Val = struct {
 /// Raw function call info.
 ///
 /// Wraps `napi_callback_info` for extracting arguments and `this`.
-/// Used by "raw mode" functions whose first parameter is `Env`.
 pub const CallInfo = struct {
     /// the underlying raw `napi_callback_info` handle.
     raw: c.napi_callback_info,
