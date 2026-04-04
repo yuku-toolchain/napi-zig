@@ -195,6 +195,74 @@ pub const Val = struct {
         try check(c.napi_get_buffer_info(env.raw, self.raw, &data, &len));
         return if (data) |ptr| @as([*]u8, @ptrCast(ptr))[0..len] else &.{};
     }
+
+    /// Calls this value as a JavaScript function.
+    ///
+    /// `this` is the receiver (`this` inside the function).
+    /// Pass a slice of `Val` as arguments.
+    pub fn callFunction(self: Val, env: Env, this: Val, args: []const Val) !Val {
+        var result: c.napi_value = undefined;
+        try check(c.napi_call_function(
+            env.raw,
+            this.raw,
+            self.raw,
+            args.len,
+            if (args.len > 0) @ptrCast(args.ptr) else null,
+            &result,
+        ));
+        return .{ .raw = result };
+    }
+};
+
+/// Raw function call info.
+///
+/// Wraps `napi_callback_info` for extracting arguments and `this`.
+/// Used by "raw mode" functions whose first parameter is `Env`.
+pub const CallInfo = struct {
+    /// the underlying raw `napi_callback_info` handle.
+    raw: c.napi_callback_info,
+
+    /// Extracts up to `max` arguments and returns the actual count passed.
+    ///
+    /// Args beyond what was actually passed are filled with `undefined`.
+    pub fn getArgs(self: CallInfo, env: Env, comptime max: usize) !struct { args: [max]Val, len: usize } {
+        var arg_count: usize = max;
+        if (max > 0) {
+            var argv: [max]c.napi_value = undefined;
+            try check(c.napi_get_cb_info(env.raw, self.raw, &arg_count, &argv, null, null));
+            const undef = try env.createUndefined();
+            var args: [max]Val = undefined;
+            inline for (0..max) |i| {
+                args[i] = if (i < arg_count) .{ .raw = argv[i] } else undef;
+            }
+            return .{ .args = args, .len = arg_count };
+        } else {
+            try check(c.napi_get_cb_info(env.raw, self.raw, &arg_count, null, null, null));
+            return .{ .args = .{}, .len = arg_count };
+        }
+    }
+
+    /// Extracts up to `max` arguments from the call.
+    ///
+    /// If fewer than `max` arguments were actually passed, the missing
+    /// positions are filled with JavaScript `undefined`.
+    pub fn get(self: CallInfo, env: Env, comptime max: usize) ![max]Val {
+        return (try self.getArgs(env, max)).args;
+    }
+
+    /// Returns the number of arguments the caller actually passed.
+    pub fn argCount(self: CallInfo, env: Env) !usize {
+        var count: usize = 0;
+        try check(c.napi_get_cb_info(env.raw, self.raw, &count, null, null, null));
+        return count;
+    }
+
+    /// Returns the `this` value of the function call.
+    pub fn getThis(self: CallInfo, env: Env) !Val {
+        var result: c.napi_value = undefined;
+        try check(c.napi_get_cb_info(env.raw, self.raw, null, null, &result, null));
+        return .{ .raw = result };
+    }
 };
 
 /// Error type returned by all Node-API wrapper functions.

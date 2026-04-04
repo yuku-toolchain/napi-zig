@@ -284,7 +284,7 @@ pub const Env = struct {
         data: ?*anyopaque,
     ) !c.napi_async_work {
         var name_val: c.napi_value = undefined;
-        try check(c.napi_create_string_utf8(self.raw, name, @import("c.zig").NAPI_AUTO_LENGTH, &name_val));
+        try check(c.napi_create_string_utf8(self.raw, name, c.NAPI_AUTO_LENGTH, &name_val));
         var work: c.napi_async_work = undefined;
         try check(c.napi_create_async_work(self.raw, null, name_val, execute, complete, data, &work));
         return work;

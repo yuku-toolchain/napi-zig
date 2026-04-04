@@ -2,10 +2,9 @@ const std = @import("std");
 const c = @import("c.zig");
 const Env = @import("env.zig").Env;
 const Val = @import("val.zig").Val;
-const check = @import("val.zig").check;
 const convert = @import("convert.zig");
 const util = @import("util.zig");
-const CallInfo = @import("call_info.zig").CallInfo;
+const CallInfo = @import("val.zig").CallInfo;
 
 pub const napi_module_version: u32 = 1;
 
@@ -73,7 +72,7 @@ fn ModuleInit(comptime Module: type) type {
 
 /// bridges a single Zig function to a C-callable Node-API callback.
 ///
-/// extracts JS arguments via `napi_get_cb_info`, converts them to zig types
+/// extracts JS arguments via `CallInfo.getArgs`, converts them to zig types
 /// with `convert.fromJs`, calls the user function, and converts the return
 /// value back with `convert.toJs`. errors become js exceptions.
 fn FnBridge(comptime Module: type, comptime name: []const u8) type {
@@ -90,21 +89,19 @@ fn FnBridge(comptime Module: type, comptime name: []const u8) type {
     const buf_len = if (param_count == 0) 1 else param_count;
 
     return struct {
-        fn call(raw_env: c.napi_env, info: c.napi_callback_info) callconv(.c) ?c.napi_value {
+        fn call(raw_env: c.napi_env, raw_info: c.napi_callback_info) callconv(.c) ?c.napi_value {
             const env: Env = .{ .raw = raw_env };
-            return invoke(env, info) catch {
+            const result = invoke(env, .{ .raw = raw_info }) catch {
                 if (!env.isExceptionPending()) {
                     env.throwError("napi-zig: call to '" ++ name ++ "' failed");
                 }
                 return null;
             };
+            return result.raw;
         }
 
-        fn invoke(env: Env, info: c.napi_callback_info) !c.napi_value {
-            var argc: usize = param_count;
-            var argv: [buf_len]c.napi_value = undefined;
-
-            try check(c.napi_get_cb_info(env.raw, info, &argc, if (param_count == 0) null else &argv, null, null));
+        fn invoke(env: Env, info: CallInfo) !Val {
+            const call = try info.getArgs(env, param_count);
 
             var string_allocs: [buf_len]?StringAlloc = .{null} ** buf_len;
 
@@ -112,7 +109,7 @@ fn FnBridge(comptime Module: type, comptime name: []const u8) type {
                 if (sa.*) |s| s.deinit();
             };
 
-            const args = try convertArgs(env, &argv, &string_allocs, argc);
+            const args = try convertArgs(env, call.args, &string_allocs, call.len);
 
             const result = @call(.auto, func, args);
 
@@ -124,10 +121,10 @@ fn FnBridge(comptime Module: type, comptime name: []const u8) type {
                 else => result,
             };
 
-            return (try convert.toJs(Payload, env, value)).raw;
+            return convert.toJs(Payload, env, value);
         }
 
-        fn convertArgs(env: Env, argv: []c.napi_value, string_allocs: []?StringAlloc, argc: usize) !std.meta.ArgsTuple(FnType) {
+        fn convertArgs(env: Env, argv: [param_count]Val, string_allocs: []?StringAlloc, argc: usize) !std.meta.ArgsTuple(FnType) {
             var args: std.meta.ArgsTuple(FnType) = undefined;
             inline for (0..param_count) |i| {
                 const T = params[i].type.?;
@@ -141,22 +138,14 @@ fn FnBridge(comptime Module: type, comptime name: []const u8) type {
                         return error.napi_error;
                     }
                 } else if (T == []const u8 or T == []u8) {
-                    const sa = try extractString(env, .{ .raw = argv[i] });
-                    string_allocs[i] = sa;
-                    args[i] = sa.bytes;
+                    const str = try argv[i].allocString(env, std.heap.c_allocator);
+                    string_allocs[i] = .{ .bytes = str, .allocator = std.heap.c_allocator };
+                    args[i] = str;
                 } else {
-                    args[i] = try convert.fromJs(T, env, .{ .raw = argv[i] });
+                    args[i] = try convert.fromJs(T, env, argv[i]);
                 }
             }
             return args;
-        }
-
-        fn extractString(env: Env, val: Val) !StringAlloc {
-            const len = try val.getStringLength(env);
-            const buf = try std.heap.c_allocator.alloc(u8, len + 1);
-            var written: usize = 0;
-            try check(c.napi_get_value_string_utf8(env.raw, val.raw, buf.ptr, buf.len, &written));
-            return .{ .bytes = buf[0..written], .allocator = std.heap.c_allocator };
         }
     };
 }

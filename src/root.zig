@@ -3,7 +3,7 @@ pub const Env = @import("env.zig").Env;
 pub const Val = @import("val.zig").Val;
 pub const NapiError = @import("val.zig").NapiError;
 pub const check = @import("val.zig").check;
-pub const CallInfo = @import("call_info.zig").CallInfo;
+pub const CallInfo = @import("val.zig").CallInfo;
 
 pub const toJs = @import("convert.zig").toJs;
 pub const fromJs = @import("convert.zig").fromJs;

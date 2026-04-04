@@ -121,6 +121,7 @@ pub extern fn napi_typeof(env: napi_env, value: napi_value, result: *napi_valuet
 
 
 pub extern fn napi_create_function(env: napi_env, utf8name: ?[*:0]const u8, length: usize, cb: napi_callback, data: ?*anyopaque, result: *napi_value) napi_status;
+pub extern fn napi_call_function(env: napi_env, recv: napi_value, func: napi_value, argc: usize, argv: ?[*]const napi_value, result: *napi_value) napi_status;
 
 
 pub extern fn napi_create_arraybuffer(env: napi_env, byte_length: usize, data: *?*anyopaque, result: *napi_value) napi_status;

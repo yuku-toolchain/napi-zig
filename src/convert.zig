@@ -1,8 +1,6 @@
 const std = @import("std");
-const c = @import("c.zig");
 const Env = @import("env.zig").Env;
 const Val = @import("val.zig").Val;
-const check = @import("val.zig").check;
 const util = @import("util.zig");
 
 /// Converts a Zig value to a JavaScript value.
