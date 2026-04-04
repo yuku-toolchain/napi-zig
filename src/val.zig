@@ -8,13 +8,10 @@ const Allocator = std.mem.Allocator;
 ///
 /// Wraps a raw `napi_value` and provides methods for extracting primitive data,
 /// inspecting types, and accessing object properties, array elements, and
-/// buffer contents. Most methods require an `Env` because every N-API call
-/// must go through the engine.
+/// buffer contents
 pub const Val = struct {
-    /// The underlying raw `napi_value` handle.
+    /// the underlying raw `napi_value` handle.
     raw: c.napi_value,
-
-    // ── Extract primitive values ─────────────────────────────────────
 
     /// Extracts the boolean value from a JavaScript `Boolean`.
     pub fn getBoolean(self: Val, env: Env) !bool {
@@ -67,8 +64,6 @@ pub const Val = struct {
         return result;
     }
 
-    // ── String access ────────────────────────────────────────────────
-
     /// Returns the UTF-8 byte length of a JavaScript `String`
     /// (excluding any null terminator).
     pub fn getStringLength(self: Val, env: Env) !usize {
@@ -98,8 +93,6 @@ pub const Val = struct {
         try check(c.napi_get_value_string_utf8(env.raw, self.raw, buf.ptr, buf.len, &written));
         return buf[0..written];
     }
-
-    // ── Type checking ────────────────────────────────────────────────
 
     /// Returns the `napi_valuetype` of this value (e.g. `.string`, `.number`,
     /// `.object`, `.function`, etc.).
@@ -137,8 +130,6 @@ pub const Val = struct {
         return result;
     }
 
-    // ── Object property access ───────────────────────────────────────
-
     /// Gets an object property by a dynamic key (another `Val`).
     pub fn getProperty(self: Val, env: Env, key: Val) !Val {
         var result: c.napi_value = undefined;
@@ -170,8 +161,6 @@ pub const Val = struct {
         return result;
     }
 
-    // ── Array element access ─────────────────────────────────────────
-
     /// Gets an element from a JavaScript `Array` by numeric index.
     pub fn getElement(self: Val, env: Env, index: u32) !Val {
         var result: c.napi_value = undefined;
@@ -191,8 +180,6 @@ pub const Val = struct {
         return result;
     }
 
-    // ── Buffer data access ───────────────────────────────────────────
-
     /// Returns a Zig slice over the raw bytes of an `ArrayBuffer`.
     pub fn getArrayBufferData(self: Val, env: Env) ![]u8 {
         var data: ?*anyopaque = null;
@@ -210,7 +197,7 @@ pub const Val = struct {
     }
 };
 
-/// Error type returned by all N-API wrapper functions.
+/// Error type returned by all Node-API wrapper functions.
 pub const NapiError = error{napi_error};
 
 /// Checks an `napi_status` and returns `error.napi_error` on failure.

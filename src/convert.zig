@@ -1,9 +1,3 @@
-/// Bidirectional type mapping between Zig values and JavaScript values.
-///
-/// `toJs` and `fromJs` handle automatic conversion of Zig primitives, optionals,
-/// enums, slices, and structs to/from their JavaScript equivalents. These are
-/// used by the module registration in `module.zig` and can also be called directly.
-
 const std = @import("std");
 const c = @import("c.zig");
 const Env = @import("env.zig").Env;
@@ -94,7 +88,7 @@ pub fn toJs(comptime T: type, env: Env, value: T) !Val {
 /// - floats        <- JS `Number`
 /// - `?T`          <- JS `null`/`undefined` -> Zig `null`, otherwise inner type
 /// - enums         <- JS `String` (accepts camelCase or exact Zig field name)
-/// - structs       <- JS `Object` (field names matched as camelCase; missing
+/// - structs       <- JS `Object` (field names matched as camelCase, missing
 ///                    fields use defaults or produce a `TypeError`)
 /// - `Val`         <- passed through as-is
 pub fn fromJs(comptime T: type, env: Env, value: Val) !T {

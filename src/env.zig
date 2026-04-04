@@ -2,16 +2,13 @@ const c = @import("c.zig");
 const Val = @import("val.zig").Val;
 const check = @import("val.zig").check;
 
-/// The N-API environment handle.
+/// The Node-API environment handle.
 ///
-/// Wraps `napi_env` and exposes ergonomic methods for creating JavaScript
+/// Wraps `napi_env` and exposes methods for creating JavaScript
 /// values, throwing exceptions, managing references, and scheduling async work.
-/// Every N-API call that touches the JS engine goes through an `Env`.
 pub const Env = struct {
-    /// The underlying raw `napi_env` handle from Node.js.
+    /// the underlying raw `napi_env` handle from Node.js.
     raw: c.napi_env,
-
-    // ── Primitive value constructors ─────────────────────────────────
 
     /// Creates a JavaScript `Boolean` value.
     pub fn createBoolean(self: Env, value: bool) !Val {
@@ -101,8 +98,6 @@ pub const Env = struct {
         return .{ .raw = result };
     }
 
-    // ── Container constructors ───────────────────────────────────────
-
     /// Creates an empty JavaScript plain object (`{}`).
     pub fn createObject(self: Env) !Val {
         var result: c.napi_value = undefined;
@@ -124,8 +119,6 @@ pub const Env = struct {
         return .{ .raw = result };
     }
 
-    // ── Function constructors ────────────────────────────────────────
-
     /// Creates a JavaScript function backed by a native callback.
     ///
     /// `name` is used for `Function.name` in JS (pass `null` for anonymous).
@@ -140,8 +133,6 @@ pub const Env = struct {
         try check(c.napi_create_function(self.raw, name, if (name) |_| c.NAPI_AUTO_LENGTH else 0, cb, data, &result));
         return .{ .raw = result };
     }
-
-    // ── Buffer / ArrayBuffer constructors ────────────────────────────
 
     /// Creates a new JavaScript `ArrayBuffer` of the given byte length.
     ///
@@ -191,8 +182,6 @@ pub const Env = struct {
         return .{ .raw = result };
     }
 
-    // ── Exception handling ───────────────────────────────────────────
-
     /// Throws an existing JavaScript value as an exception.
     ///
     /// Use this when you already have an `Error` object (or any JS value) to throw.
@@ -225,8 +214,6 @@ pub const Env = struct {
         return result;
     }
 
-    // ── Reference counting ───────────────────────────────────────────
-
     /// Creates a strong reference to a JavaScript value so it is not
     /// garbage-collected. The initial reference count is 1.
     ///
@@ -252,16 +239,12 @@ pub const Env = struct {
         return .{ .raw = result };
     }
 
-    // ── Version info ─────────────────────────────────────────────────
-
-    /// Returns the highest N-API version supported by this Node.js runtime.
+    /// Returns the highest Node-API version supported by this Node.js runtime.
     pub fn getVersion(self: Env) !u32 {
         var result: u32 = undefined;
         try check(c.napi_get_version(self.raw, &result));
         return result;
     }
-
-    // ── Promises ─────────────────────────────────────────────────────
 
     /// Creates a new JavaScript `Promise` together with its deferred handle.
     ///
@@ -287,8 +270,6 @@ pub const Env = struct {
     pub fn rejectDeferred(self: Env, deferred: c.napi_deferred, value: Val) !void {
         try check(c.napi_reject_deferred(self.raw, deferred, value.raw));
     }
-
-    // ── Async work ───────────────────────────────────────────────────
 
     /// Creates an async work item that executes `execute` on a worker thread,
     /// then calls `complete` back on the main JS thread.
