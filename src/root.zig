@@ -17,9 +17,11 @@ pub const CallInfo = struct {
         var argv: [max]c.napi_value = undefined;
         try check(c.napi_get_cb_info(env.raw, self.raw, &arg_count, &argv, null, null));
 
+        // fill missing args with JS undefined
+        const undef = try env.@"undefined"();
         var result: [max]Val = undefined;
         inline for (0..max) |i| {
-            result[i] = if (i < arg_count) .{ .raw = argv[i] } else Val.null_val;
+            result[i] = if (i < arg_count) .{ .raw = argv[i] } else undef;
         }
         return result;
     }

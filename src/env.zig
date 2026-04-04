@@ -195,4 +195,45 @@ pub const Env = struct {
         try check(c.napi_get_version(self.raw, &result));
         return result;
     }
+
+    // promises
+
+    pub fn createPromise(self: Env) !struct { promise: Val, deferred: c.napi_deferred } {
+        var deferred: c.napi_deferred = undefined;
+        var promise: c.napi_value = undefined;
+        try check(c.napi_create_promise(self.raw, &deferred, &promise));
+        return .{ .promise = .{ .raw = promise }, .deferred = deferred };
+    }
+
+    pub fn resolveDeferred(self: Env, deferred: c.napi_deferred, value: Val) !void {
+        try check(c.napi_resolve_deferred(self.raw, deferred, value.raw));
+    }
+
+    pub fn rejectDeferred(self: Env, deferred: c.napi_deferred, value: Val) !void {
+        try check(c.napi_reject_deferred(self.raw, deferred, value.raw));
+    }
+
+    // async work
+
+    pub fn createAsyncWork(
+        self: Env,
+        name: [*:0]const u8,
+        execute: c.napi_async_execute_callback,
+        complete: c.napi_async_complete_callback,
+        data: ?*anyopaque,
+    ) !c.napi_async_work {
+        var name_val: c.napi_value = undefined;
+        try check(c.napi_create_string_utf8(self.raw, name, @import("c.zig").NAPI_AUTO_LENGTH, &name_val));
+        var work: c.napi_async_work = undefined;
+        try check(c.napi_create_async_work(self.raw, null, name_val, execute, complete, data, &work));
+        return work;
+    }
+
+    pub fn queueAsyncWork(self: Env, work: c.napi_async_work) !void {
+        try check(c.napi_queue_async_work(self.raw, work));
+    }
+
+    pub fn deleteAsyncWork(self: Env, work: c.napi_async_work) !void {
+        try check(c.napi_delete_async_work(self.raw, work));
+    }
 };

@@ -2,6 +2,7 @@ pub const napi_env = *opaque {};
 pub const napi_value = *opaque {};
 pub const napi_ref = *opaque {};
 pub const napi_callback_info = *opaque {};
+pub const napi_deferred = *opaque {};
 
 pub const napi_callback = *const fn (napi_env, napi_callback_info) callconv(.c) ?napi_value;
 pub const napi_finalize = *const fn (napi_env, ?*anyopaque, ?*anyopaque) callconv(.c) void;
@@ -127,3 +128,16 @@ pub extern fn napi_delete_reference(env: napi_env, ref: napi_ref) napi_status;
 pub extern fn napi_get_reference_value(env: napi_env, ref: napi_ref, result: *napi_value) napi_status;
 
 pub extern fn napi_get_version(env: napi_env, result: *u32) napi_status;
+
+// -- promises --
+pub extern fn napi_create_promise(env: napi_env, deferred: *napi_deferred, promise: *napi_value) napi_status;
+pub extern fn napi_resolve_deferred(env: napi_env, deferred: napi_deferred, resolution: napi_value) napi_status;
+pub extern fn napi_reject_deferred(env: napi_env, deferred: napi_deferred, rejection: napi_value) napi_status;
+
+// -- async work --
+pub const napi_async_work = *opaque {};
+pub const napi_async_execute_callback = *const fn (napi_env, ?*anyopaque) callconv(.c) void;
+pub const napi_async_complete_callback = *const fn (napi_env, napi_status, ?*anyopaque) callconv(.c) void;
+pub extern fn napi_create_async_work(env: napi_env, async_resource: ?napi_value, async_resource_name: napi_value, execute: napi_async_execute_callback, complete: napi_async_complete_callback, data: ?*anyopaque, result: *napi_async_work) napi_status;
+pub extern fn napi_delete_async_work(env: napi_env, work: napi_async_work) napi_status;
+pub extern fn napi_queue_async_work(env: napi_env, work: napi_async_work) napi_status;

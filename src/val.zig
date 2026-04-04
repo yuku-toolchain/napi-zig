@@ -5,33 +5,28 @@ const Env = @import("env.zig").Env;
 pub const Val = struct {
     raw: c.napi_value,
 
-    pub const null_val: Val = .{ .raw = @ptrFromInt(0) };
-
-    pub inline fn isNull(self: Val) bool {
-        return @intFromPtr(self.raw) == 0;
-    }
 
     // extract primitives
 
-    pub fn boolean(self: Val, env: Env) !bool {
+    pub fn getBoolean(self: Val, env: Env) !bool {
         var result: bool = undefined;
         try check(c.napi_get_value_bool(env.raw, self.raw, &result));
         return result;
     }
 
-    pub fn getI32(self: Val, env: Env) !i32 {
+    pub fn getInt32(self: Val, env: Env) !i32 {
         var result: i32 = undefined;
         try check(c.napi_get_value_int32(env.raw, self.raw, &result));
         return result;
     }
 
-    pub fn getU32(self: Val, env: Env) !u32 {
+    pub fn getUInt32(self: Val, env: Env) !u32 {
         var result: u32 = undefined;
         try check(c.napi_get_value_uint32(env.raw, self.raw, &result));
         return result;
     }
 
-    pub fn getI64(self: Val, env: Env) !i64 {
+    pub fn getInt64(self: Val, env: Env) !i64 {
         var result: i64 = undefined;
         try check(c.napi_get_value_int64(env.raw, self.raw, &result));
         return result;
@@ -43,14 +38,14 @@ pub const Val = struct {
         return result;
     }
 
-    pub fn getBigintI64(self: Val, env: Env) !i64 {
+    pub fn getBigintInt64(self: Val, env: Env) !i64 {
         var result: i64 = undefined;
         var lossless: bool = undefined;
         try check(c.napi_get_value_bigint_int64(env.raw, self.raw, &result, &lossless));
         return result;
     }
 
-    pub fn getBigintU64(self: Val, env: Env) !u64 {
+    pub fn getBigintUInt64(self: Val, env: Env) !u64 {
         var result: u64 = undefined;
         var lossless: bool = undefined;
         try check(c.napi_get_value_bigint_uint64(env.raw, self.raw, &result, &lossless));
@@ -113,7 +108,7 @@ pub const Val = struct {
 
     // object property access
 
-    pub fn get(self: Val, env: Env, key: Val) !Val {
+    pub fn getProperty(self: Val, env: Env, key: Val) !Val {
         var result: c.napi_value = undefined;
         try check(c.napi_get_property(env.raw, self.raw, key.raw, &result));
         return .{ .raw = result };
@@ -125,7 +120,7 @@ pub const Val = struct {
         return .{ .raw = result };
     }
 
-    pub fn set(self: Val, env: Env, key: Val, value: Val) !void {
+    pub fn setProperty(self: Val, env: Env, key: Val, value: Val) !void {
         try check(c.napi_set_property(env.raw, self.raw, key.raw, value.raw));
     }
 
