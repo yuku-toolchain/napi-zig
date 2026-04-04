@@ -40,8 +40,15 @@ pub fn build(b: *std.Build) void {
     });
 }
 
+pub const Lib = struct {
+    compile: *std.Build.Step.Compile,
+    install: *std.Build.Step.InstallArtifact,
+    step: *std.Build.Step,
+};
+
 /// build a .node shared library for the current platform (dev mode).
-pub fn addLib(b: *std.Build, napi_dep: *std.Build.Dependency, options: LibOptions) *std.Build.Step.Compile {
+/// installs to `zig-out/lib/{name}.node`.
+pub fn addLib(b: *std.Build, napi_dep: *std.Build.Dependency, options: LibOptions) Lib {
     const napi_module = napi_dep.module("napi");
 
     const lib_mod = b.createModule(.{
@@ -62,7 +69,18 @@ pub fn addLib(b: *std.Build, napi_dep: *std.Build.Dependency, options: LibOption
     });
 
     configureLinkerFlags(lib, options.target);
-    return lib;
+
+    // install as {name}.node instead of platform default (lib*.dylib / lib*.so / *.dll)
+    const install = b.addInstallArtifact(lib, .{
+        .dest_dir = .{ .override = .lib },
+        .dest_sub_path = b.fmt("{s}.node", .{options.name}),
+    });
+
+    return .{
+        .compile = lib,
+        .install = install,
+        .step = &install.step,
+    };
 }
 
 /// add a pack step that cross-compiles for all platforms and generates npm packages.
