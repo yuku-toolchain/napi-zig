@@ -221,10 +221,11 @@ pub const CallInfo = struct {
     /// the underlying raw `napi_callback_info` handle.
     raw: c.napi_callback_info,
 
-    /// Extracts up to `max` arguments and returns the actual count passed.
+    /// Extracts up to `max` arguments from the call.
     ///
-    /// Args beyond what was actually passed are filled with `undefined`.
-    pub fn getArgs(self: CallInfo, env: Env, comptime max: usize) !struct { args: [max]Val, len: usize } {
+    /// If fewer than `max` arguments were actually passed, the missing
+    /// positions are filled with JavaScript `undefined`.
+    pub fn getArgs(self: CallInfo, env: Env, comptime max: usize) ![max]Val {
         var arg_count: usize = max;
         if (max > 0) {
             var argv: [max]c.napi_value = undefined;
@@ -234,23 +235,15 @@ pub const CallInfo = struct {
             inline for (0..max) |i| {
                 args[i] = if (i < arg_count) .{ .raw = argv[i] } else undef;
             }
-            return .{ .args = args, .len = arg_count };
+            return args;
         } else {
             try check(c.napi_get_cb_info(env.raw, self.raw, &arg_count, null, null, null));
-            return .{ .args = .{}, .len = arg_count };
+            return .{};
         }
     }
 
-    /// Extracts up to `max` arguments from the call.
-    ///
-    /// If fewer than `max` arguments were actually passed, the missing
-    /// positions are filled with JavaScript `undefined`.
-    pub fn get(self: CallInfo, env: Env, comptime max: usize) ![max]Val {
-        return (try self.getArgs(env, max)).args;
-    }
-
     /// Returns the number of arguments the caller actually passed.
-    pub fn argCount(self: CallInfo, env: Env) !usize {
+    pub fn getArgCount(self: CallInfo, env: Env) !usize {
         var count: usize = 0;
         try check(c.napi_get_cb_info(env.raw, self.raw, &count, null, null, null));
         return count;

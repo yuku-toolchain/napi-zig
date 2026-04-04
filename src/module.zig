@@ -101,7 +101,8 @@ fn FnBridge(comptime Module: type, comptime name: []const u8) type {
         }
 
         fn invoke(env: Env, info: CallInfo) !Val {
-            const extracted = try info.getArgs(env, param_count);
+            const arg_count = try info.getArgCount(env);
+            const arg_values = try info.getArgs(env, param_count);
 
             var string_allocs: [buf_len]?StringAlloc = .{null} ** buf_len;
 
@@ -109,7 +110,7 @@ fn FnBridge(comptime Module: type, comptime name: []const u8) type {
                 if (sa.*) |s| s.deinit();
             };
 
-            const args = try convertArgs(env, extracted.args, &string_allocs, extracted.len);
+            const args = try convertArgs(env, arg_values, &string_allocs, arg_count);
 
             const result = @call(.auto, func, args);
 
