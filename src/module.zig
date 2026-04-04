@@ -71,7 +71,7 @@ fn ModuleInit(comptime Module: type) type {
     };
 }
 
-/// bridges a single Zig function to a C-callable N-API callback.
+/// bridges a single Zig function to a C-callable Node-API callback.
 ///
 /// extracts JS arguments via `napi_get_cb_info`, converts them to zig types
 /// with `convert.fromJs`, calls the user function, and converts the return
