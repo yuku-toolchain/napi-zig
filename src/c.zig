@@ -1,12 +1,36 @@
+/// Raw C FFI bindings for the Node-API (N-API) ABI.
+///
+/// These are low-level declarations imported directly from the N-API headers.
+/// Prefer using `Env` and `Val` wrappers instead of calling these directly.
+
+// ── Opaque handle types ──────────────────────────────────────────────
+
+/// Opaque handle representing the N-API environment (one per addon instance).
 pub const napi_env = *opaque {};
+
+/// Opaque handle representing a single JavaScript value.
 pub const napi_value = *opaque {};
+
+/// Opaque handle for a persistent reference to a JavaScript value.
 pub const napi_ref = *opaque {};
+
+/// Opaque handle carrying information about a function call (arguments, `this`, etc.).
 pub const napi_callback_info = *opaque {};
+
+/// Opaque handle for resolving or rejecting a JS `Promise`.
 pub const napi_deferred = *opaque {};
 
+// ── Callback signatures ──────────────────────────────────────────────
+
+/// Signature for native functions callable from JavaScript.
 pub const napi_callback = *const fn (napi_env, napi_callback_info) callconv(.c) ?napi_value;
+
+/// Signature for release / destructor callbacks on externally-owned data.
 pub const napi_finalize = *const fn (napi_env, ?*anyopaque, ?*anyopaque) callconv(.c) void;
 
+// ── Status codes ─────────────────────────────────────────────────────
+
+/// Result code returned by every N-API function.
 pub const napi_status = enum(c_int) {
     ok = 0,
     invalid_arg = 1,
@@ -34,6 +58,9 @@ pub const napi_status = enum(c_int) {
     cannot_run_js = 23,
 };
 
+// ── Value-type enum ──────────────────────────────────────────────────
+
+/// The JavaScript type of a value, returned by `napi_typeof`.
 pub const napi_valuetype = enum(c_int) {
     undefined = 0,
     null = 1,
@@ -47,6 +74,9 @@ pub const napi_valuetype = enum(c_int) {
     bigint = 9,
 };
 
+// ── TypedArray element types ─────────────────────────────────────────
+
+/// Element type for `napi_create_typedarray`.
 pub const napi_typedarray_type = enum(c_int) {
     int8_array = 0,
     uint8_array = 1,
@@ -61,15 +91,24 @@ pub const napi_typedarray_type = enum(c_int) {
     biguint64_array = 10,
 };
 
+// ── Constants ────────────────────────────────────────────────────────
+
+/// Sentinel value meaning "compute the length automatically from the null terminator".
 pub const NAPI_AUTO_LENGTH: usize = @as(usize, @bitCast(@as(isize, -1)));
 
+// ── Callback info ────────────────────────────────────────────────────
+
 pub extern fn napi_get_cb_info(env: napi_env, cbinfo: napi_callback_info, argc: *usize, argv: ?[*]napi_value, this_arg: ?*napi_value, data: ?*?*anyopaque) napi_status;
+
+// ── Exception handling ───────────────────────────────────────────────
 
 pub extern fn napi_throw(env: napi_env, @"error": napi_value) napi_status;
 pub extern fn napi_throw_error(env: napi_env, code: ?[*:0]const u8, msg: [*:0]const u8) napi_status;
 pub extern fn napi_throw_type_error(env: napi_env, code: ?[*:0]const u8, msg: [*:0]const u8) napi_status;
 pub extern fn napi_throw_range_error(env: napi_env, code: ?[*:0]const u8, msg: [*:0]const u8) napi_status;
 pub extern fn napi_is_exception_pending(env: napi_env, result: *bool) napi_status;
+
+// ── Object operations ────────────────────────────────────────────────
 
 pub extern fn napi_create_object(env: napi_env, result: *napi_value) napi_status;
 pub extern fn napi_set_property(env: napi_env, object: napi_value, key: napi_value, value: napi_value) napi_status;
@@ -78,6 +117,8 @@ pub extern fn napi_set_named_property(env: napi_env, object: napi_value, utf8nam
 pub extern fn napi_get_named_property(env: napi_env, object: napi_value, utf8name: [*:0]const u8, result: *napi_value) napi_status;
 pub extern fn napi_has_named_property(env: napi_env, object: napi_value, utf8name: [*:0]const u8, result: *bool) napi_status;
 
+// ── Array operations ─────────────────────────────────────────────────
+
 pub extern fn napi_create_array(env: napi_env, result: *napi_value) napi_status;
 pub extern fn napi_create_array_with_length(env: napi_env, length: usize, result: *napi_value) napi_status;
 pub extern fn napi_is_array(env: napi_env, value: napi_value, result: *bool) napi_status;
@@ -85,8 +126,12 @@ pub extern fn napi_get_array_length(env: napi_env, value: napi_value, result: *u
 pub extern fn napi_set_element(env: napi_env, object: napi_value, index: u32, value: napi_value) napi_status;
 pub extern fn napi_get_element(env: napi_env, object: napi_value, index: u32, result: *napi_value) napi_status;
 
+// ── String operations ────────────────────────────────────────────────
+
 pub extern fn napi_create_string_utf8(env: napi_env, str: [*]const u8, length: usize, result: *napi_value) napi_status;
 pub extern fn napi_get_value_string_utf8(env: napi_env, value: napi_value, buf: ?[*]u8, bufsize: usize, result: ?*usize) napi_status;
+
+// ── Numeric operations ───────────────────────────────────────────────
 
 pub extern fn napi_create_int32(env: napi_env, value: i32, result: *napi_value) napi_status;
 pub extern fn napi_create_uint32(env: napi_env, value: u32, result: *napi_value) napi_status;
@@ -97,16 +142,26 @@ pub extern fn napi_get_value_uint32(env: napi_env, value: napi_value, result: *u
 pub extern fn napi_get_value_int64(env: napi_env, value: napi_value, result: *i64) napi_status;
 pub extern fn napi_get_value_double(env: napi_env, value: napi_value, result: *f64) napi_status;
 
+// ── Boolean operations ───────────────────────────────────────────────
+
 pub extern fn napi_get_boolean(env: napi_env, value: bool, result: *napi_value) napi_status;
 pub extern fn napi_get_value_bool(env: napi_env, value: napi_value, result: *bool) napi_status;
+
+// ── Null / undefined / global ────────────────────────────────────────
 
 pub extern fn napi_get_null(env: napi_env, result: *napi_value) napi_status;
 pub extern fn napi_get_undefined(env: napi_env, result: *napi_value) napi_status;
 pub extern fn napi_get_global(env: napi_env, result: *napi_value) napi_status;
 
+// ── Type introspection ───────────────────────────────────────────────
+
 pub extern fn napi_typeof(env: napi_env, value: napi_value, result: *napi_valuetype) napi_status;
 
+// ── Function creation ────────────────────────────────────────────────
+
 pub extern fn napi_create_function(env: napi_env, utf8name: ?[*:0]const u8, length: usize, cb: napi_callback, data: ?*anyopaque, result: *napi_value) napi_status;
+
+// ── ArrayBuffer / Buffer / TypedArray ────────────────────────────────
 
 pub extern fn napi_create_arraybuffer(env: napi_env, byte_length: usize, data: *?*anyopaque, result: *napi_value) napi_status;
 pub extern fn napi_create_external_arraybuffer(env: napi_env, external_data: ?*anyopaque, byte_length: usize, finalize_cb: ?napi_finalize, finalize_hint: ?*anyopaque, result: *napi_value) napi_status;
@@ -118,26 +173,40 @@ pub extern fn napi_create_buffer(env: napi_env, length: usize, data: *?*anyopaqu
 pub extern fn napi_is_buffer(env: napi_env, value: napi_value, result: *bool) napi_status;
 pub extern fn napi_get_buffer_info(env: napi_env, value: napi_value, data: *?*anyopaque, length: *usize) napi_status;
 
+// ── BigInt operations ────────────────────────────────────────────────
+
 pub extern fn napi_create_bigint_int64(env: napi_env, value: i64, result: *napi_value) napi_status;
 pub extern fn napi_create_bigint_uint64(env: napi_env, value: u64, result: *napi_value) napi_status;
 pub extern fn napi_get_value_bigint_int64(env: napi_env, value: napi_value, result: *i64, lossless: *bool) napi_status;
 pub extern fn napi_get_value_bigint_uint64(env: napi_env, value: napi_value, result: *u64, lossless: *bool) napi_status;
 
+// ── Reference management ─────────────────────────────────────────────
+
 pub extern fn napi_create_reference(env: napi_env, value: napi_value, initial_refcount: u32, result: *napi_ref) napi_status;
 pub extern fn napi_delete_reference(env: napi_env, ref: napi_ref) napi_status;
 pub extern fn napi_get_reference_value(env: napi_env, ref: napi_ref, result: *napi_value) napi_status;
 
+// ── Version ──────────────────────────────────────────────────────────
+
 pub extern fn napi_get_version(env: napi_env, result: *u32) napi_status;
 
-// promises
+// ── Promises ─────────────────────────────────────────────────────────
+
 pub extern fn napi_create_promise(env: napi_env, deferred: *napi_deferred, promise: *napi_value) napi_status;
 pub extern fn napi_resolve_deferred(env: napi_env, deferred: napi_deferred, resolution: napi_value) napi_status;
 pub extern fn napi_reject_deferred(env: napi_env, deferred: napi_deferred, rejection: napi_value) napi_status;
 
-// async work
+// ── Async work ───────────────────────────────────────────────────────
+
+/// Opaque handle for an async work item.
 pub const napi_async_work = *opaque {};
+
+/// Callback executed on a worker thread (must not call N-API functions).
 pub const napi_async_execute_callback = *const fn (napi_env, ?*anyopaque) callconv(.c) void;
+
+/// Callback executed on the main JS thread after the execute callback finishes.
 pub const napi_async_complete_callback = *const fn (napi_env, napi_status, ?*anyopaque) callconv(.c) void;
+
 pub extern fn napi_create_async_work(env: napi_env, async_resource: ?napi_value, async_resource_name: napi_value, execute: napi_async_execute_callback, complete: napi_async_complete_callback, data: ?*anyopaque, result: *napi_async_work) napi_status;
 pub extern fn napi_delete_async_work(env: napi_env, work: napi_async_work) napi_status;
 pub extern fn napi_queue_async_work(env: napi_env, work: napi_async_work) napi_status;

@@ -1,50 +1,47 @@
+/// Public entry point for the `napi-zig` module.
+///
+/// Re-exports every type and function that addon authors need:
+///
+/// ```zig
+/// const napi = @import("napi-zig");
+///
+/// pub const version = "1.0.0";
+/// pub const max_retries: i32 = 3;
+///
+/// pub fn add(a: i32, b: i32) i32 { return a + b; }
+///
+/// comptime { napi.module(@This()); }
+/// ```
+
 pub const c = @import("c.zig");
 pub const Env = @import("env.zig").Env;
 pub const Val = @import("val.zig").Val;
 pub const NapiError = @import("val.zig").NapiError;
 pub const check = @import("val.zig").check;
+pub const CallInfo = @import("call_info.zig").CallInfo;
 
 pub const toJs = @import("convert.zig").toJs;
 pub const fromJs = @import("convert.zig").fromJs;
 
-/// raw function call info. wraps napi_callback_info for raw-mode functions.
-pub const CallInfo = struct {
-    raw: c.napi_callback_info,
+/// N-API module ABI version exported by this library.
+pub const napi_module_version = @import("module.zig").napi_module_version;
 
-    /// extract up to `max` arguments.
-    pub fn get(self: CallInfo, env: Env, comptime max: usize) ![max]Val {
-        var arg_count: usize = max;
-        var argv: [max]c.napi_value = undefined;
-        try check(c.napi_get_cb_info(env.raw, self.raw, &arg_count, &argv, null, null));
-
-        // fill missing args with JS undefined
-        const undef = try env.@"undefined"();
-        var result: [max]Val = undefined;
-        inline for (0..max) |i| {
-            result[i] = if (i < arg_count) .{ .raw = argv[i] } else undef;
-        }
-        return result;
-    }
-
-    /// get the number of arguments passed.
-    pub fn argCount(self: CallInfo, env: Env) !usize {
-        var count: usize = 0;
-        try check(c.napi_get_cb_info(env.raw, self.raw, &count, null, null, null));
-        return count;
-    }
-
-    /// get `this` value.
-    pub fn getThis(self: CallInfo, env: Env) !Val {
-        var result: c.napi_value = undefined;
-        try check(c.napi_get_cb_info(env.raw, self.raw, null, null, &result, null));
-        return .{ .raw = result };
-    }
-};
-
-/// napi module version.
-pub const napi_module_version: u32 = 1;
-
-/// usage: `comptime { napi.module(@This()); }`
+/// Registers all public declarations from `Module` as a Node.js native addon.
+///
+/// Call this in a `comptime` block at the top level of your root source file:
+///
+/// ```zig
+/// const napi = @import("napi-zig");
+///
+/// pub const version = "1.0.0";
+/// pub fn add(a: i32, b: i32) i32 { return a + b; }
+///
+/// comptime { napi.module(@This()); }
+/// ```
+///
+/// - Every `pub fn` (except those starting with `_`) is exported as a JS function.
+/// - Every `pub const` with a JS-compatible type is exported as a JS value.
+/// - Snake_case names are automatically converted to camelCase.
 pub fn module(comptime Module: type) void {
-    @import("auto.zig").registerModule(Module);
+    @import("module.zig").registerModule(Module);
 }
