@@ -5,6 +5,7 @@ const c = @import("c.zig");
 const Env = @import("env.zig").Env;
 const Val = @import("val.zig").Val;
 const check = @import("val.zig").check;
+const util = @import("util.zig");
 
 /// convert a zig value to a js value.
 pub fn toJs(comptime T: type, env: Env, value: T) !Val {
@@ -45,7 +46,7 @@ pub fn toJs(comptime T: type, env: Env, value: T) !Val {
             if (T == Val) return value;
             const obj = try env.object();
             inline for (info.fields) |field| {
-                try obj.setNamed(env, comptime snakeToCamel(field.name), try toJs(field.type, env, @field(value, field.name)));
+                try obj.setNamed(env, comptime util.snakeToCamel(field.name), try toJs(field.type, env, @field(value, field.name)));
             }
             return obj;
         },
@@ -81,7 +82,7 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
             const str = try value.stringBuf(env, &buf);
             inline for (info.fields) |field| {
                 // accept camelCase (JS convention) or exact zig name
-                if (std.mem.eql(u8, str, comptime snakeToCamelSlice(field.name)) or
+                if (std.mem.eql(u8, str, comptime util.snakeToCamelSlice(field.name)) or
                     std.mem.eql(u8, str, field.name))
                     return @enumFromInt(field.value);
             }
@@ -97,7 +98,7 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
             if (T == Val) return value;
             var result: T = undefined;
             inline for (info.fields) |field| {
-                const js_key = comptime snakeToCamel(field.name);
+                const js_key = comptime util.snakeToCamel(field.name);
                 const has = try value.hasNamed(env, js_key);
                 if (has) {
                     const prop = try value.getNamed(env, js_key);
@@ -117,33 +118,4 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
         },
         else => @compileError("napi-zig: unsupported type for fromJs: " ++ @typeName(T)),
     };
-}
-
-// null-terminated
-pub fn snakeToCamel(comptime input: []const u8) [:0]const u8 {
-    return comptime blk: {
-        if (input.len == 0) break :blk &[_:0]u8{};
-        const s = snakeToCamelSlice(input);
-        const final = s ++ .{0};
-        break :blk final[0 .. final.len - 1 :0];
-    };
-}
-
-// no null terminator.
-fn snakeToCamelSlice(comptime input: []const u8) []const u8 {
-    comptime {
-        var result: []const u8 = "";
-        var cap = false;
-        for (input) |ch| {
-            if (ch == '_') {
-                cap = true;
-            } else if (cap) {
-                result = result ++ &[_]u8{if (ch >= 'a' and ch <= 'z') ch - 32 else ch};
-                cap = false;
-            } else {
-                result = result ++ &[_]u8{ch};
-            }
-        }
-        return result;
-    }
 }

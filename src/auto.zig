@@ -9,15 +9,6 @@ const Val = @import("val.zig").Val;
 const check = @import("val.zig").check;
 const convert = @import("convert.zig");
 
-const StringAlloc = struct {
-    bytes: []const u8,
-    allocator: std.mem.Allocator,
-
-    fn deinit(self: StringAlloc) void {
-        self.allocator.free(self.bytes);
-    }
-};
-
 fn isRawFn(comptime Fn: type) bool {
     const info = @typeInfo(Fn);
     if (info != .@"fn") return false;
@@ -169,6 +160,15 @@ fn ModuleInit(comptime Module: type) type {
         }
     };
 }
+
+const StringAlloc = struct {
+    bytes: []const u8,
+    allocator: std.mem.Allocator,
+
+    fn deinit(self: StringAlloc) void {
+        self.allocator.free(self.bytes);
+    }
+};
 
 pub fn registerModule(comptime Module: type) void {
     const Init = ModuleInit(Module);
