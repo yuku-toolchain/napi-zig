@@ -16,7 +16,7 @@ pub const Platform = enum {
         .linux_arm64_musl,
         .macos_x64,
         .macos_arm64,
-        // windows requires node.lib for linking - not yet supported
+        // windows requires node.lib for linking, not yet supported
     };
 
     const Info = struct {

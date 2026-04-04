@@ -9,7 +9,7 @@ pub fn snakeToCamel(comptime input: []const u8) [:0]const u8 {
 }
 
 // no null terminator.
-fn snakeToCamelSlice(comptime input: []const u8) []const u8 {
+pub fn snakeToCamelSlice(comptime input: []const u8) []const u8 {
     comptime {
         var result: []const u8 = "";
         var cap = false;

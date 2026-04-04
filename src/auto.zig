@@ -8,6 +8,7 @@ const Env = @import("env.zig").Env;
 const Val = @import("val.zig").Val;
 const check = @import("val.zig").check;
 const convert = @import("convert.zig");
+const util = @import("util.zig");
 
 fn isRawFn(comptime Fn: type) bool {
     const info = @typeInfo(Fn);
@@ -135,7 +136,7 @@ fn ModuleInit(comptime Module: type) type {
 
         fn register(env: Env, exports: Val) !void {
             inline for (names) |name| {
-                const js_name = comptime convert.snakeToCamel(name);
+                const js_name = comptime util.snakeToCamel(name);
 
                 if (comptime isRawFn(@TypeOf(@field(Module, name)))) {
                     const S = struct {
