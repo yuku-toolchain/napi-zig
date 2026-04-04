@@ -129,12 +129,12 @@ pub extern fn napi_get_reference_value(env: napi_env, ref: napi_ref, result: *na
 
 pub extern fn napi_get_version(env: napi_env, result: *u32) napi_status;
 
-// -- promises --
+// promises
 pub extern fn napi_create_promise(env: napi_env, deferred: *napi_deferred, promise: *napi_value) napi_status;
 pub extern fn napi_resolve_deferred(env: napi_env, deferred: napi_deferred, resolution: napi_value) napi_status;
 pub extern fn napi_reject_deferred(env: napi_env, deferred: napi_deferred, rejection: napi_value) napi_status;
 
-// -- async work --
+// async work
 pub const napi_async_work = *opaque {};
 pub const napi_async_execute_callback = *const fn (napi_env, ?*anyopaque) callconv(.c) void;
 pub const napi_async_complete_callback = *const fn (napi_env, napi_status, ?*anyopaque) callconv(.c) void;
