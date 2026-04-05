@@ -249,9 +249,7 @@ pub const Env = struct {
         return p.promise;
     }
 
-    // low-level async work API (escape hatch)
-
-    pub fn createAsyncWork(
+    fn createAsyncWork(
         self: Env,
         name: [*:0]const u8,
         execute: c.napi_async_execute_callback,
@@ -265,11 +263,11 @@ pub const Env = struct {
         return work;
     }
 
-    pub fn queueAsyncWork(self: Env, work: c.napi_async_work) !void {
+    fn queueAsyncWork(self: Env, work: c.napi_async_work) !void {
         try check(c.napi_queue_async_work(self.raw, work));
     }
 
-    pub fn deleteAsyncWork(self: Env, work: c.napi_async_work) !void {
+    fn deleteAsyncWork(self: Env, work: c.napi_async_work) !void {
         try check(c.napi_delete_async_work(self.raw, work));
     }
 
@@ -316,12 +314,13 @@ fn WorkerState(comptime T: type) type {
                 return;
             } else raw;
 
-            if (Payload == void) {
-                const undef = env.createUndefined() catch return;
-                state.deferred.resolve(env, undef) catch {};
-            } else {
-                state.deferred.resolve(env, value) catch {};
-            }
+            const js_val = if (Payload == Val)
+                value
+            else if (Payload == void)
+                env.createUndefined() catch return
+            else
+                convert.toJs(Payload, env, value) catch return;
+            state.deferred.resolve(env, js_val) catch {};
         }
     };
 }

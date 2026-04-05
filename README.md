@@ -155,7 +155,7 @@ const age = try val.to(env, ?i32);
 const items = try val.to(env, []f64);
 
 const obj_val = try env.createObject();
-try obj_val.setNamedProperty(env, "key", "value");
+try obj_val.setNamedProperty(env, "key", try env.toJs("value"));
 const prop = try obj_val.getNamedProperty(env, "key");
 
 const vtype = try val.typeOf(env); // .string, .number, .object, ...
@@ -196,7 +196,7 @@ A handle for resolving or rejecting a JS Promise. Created via `env.createPromise
 ```zig
 pub fn fetchData(env: napi.Env) !napi.Val {
     const p = try env.createPromise();
-    try p.deferred.resolve(env, "done");
+    try p.deferred.resolve(env, try env.toJs("done"));
     return p.promise;
 }
 ```
@@ -329,7 +329,7 @@ For cases where you need a Promise without a background thread (e.g., resolving 
 ```zig
 pub fn fetchData(env: napi.Env) !napi.Val {
     const p = try env.createPromise();
-    try p.deferred.resolve(env, "done");
+    try p.deferred.resolve(env, try env.toJs("done"));
     return p.promise;
 }
 ```
