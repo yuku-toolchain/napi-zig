@@ -94,19 +94,19 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
     return switch (@typeInfo(T)) {
         .bool => {
             var result: bool = undefined;
-            try check(c.napi_get_value_bool(env.raw, value.raw, &result));
+            try expect(env, value, c.napi_get_value_bool(env.raw, value.raw, &result), "expected boolean");
             return result;
         },
         .int => |info| switch (info.signedness) {
             .signed => switch (info.bits) {
                 0...32 => {
                     var result: i32 = undefined;
-                    try check(c.napi_get_value_int32(env.raw, value.raw, &result));
+                    try expect(env, value, c.napi_get_value_int32(env.raw, value.raw, &result), "expected number");
                     return @intCast(result);
                 },
                 33...64 => {
                     var result: i64 = undefined;
-                    try check(c.napi_get_value_int64(env.raw, value.raw, &result));
+                    try expect(env, value, c.napi_get_value_int64(env.raw, value.raw, &result), "expected number");
                     return @intCast(result);
                 },
                 else => @compileError("napi-zig: integer too wide: " ++ @typeName(T)),
@@ -114,13 +114,13 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
             .unsigned => switch (info.bits) {
                 0...32 => {
                     var result: u32 = undefined;
-                    try check(c.napi_get_value_uint32(env.raw, value.raw, &result));
+                    try expect(env, value, c.napi_get_value_uint32(env.raw, value.raw, &result), "expected number");
                     return @intCast(result);
                 },
                 33...64 => {
                     var result: u64 = undefined;
                     var lossless: bool = undefined;
-                    try check(c.napi_get_value_bigint_uint64(env.raw, value.raw, &result, &lossless));
+                    try expect(env, value, c.napi_get_value_bigint_uint64(env.raw, value.raw, &result, &lossless), "expected bigint");
                     return @intCast(result);
                 },
                 else => @compileError("napi-zig: integer too wide: " ++ @typeName(T)),
@@ -128,7 +128,7 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
         },
         .float => {
             var result: f64 = undefined;
-            try check(c.napi_get_value_double(env.raw, value.raw, &result));
+            try expect(env, value, c.napi_get_value_double(env.raw, value.raw, &result), "expected number");
             return @floatCast(result);
         },
         .optional => |opt| {
@@ -139,7 +139,7 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
         .@"enum" => |info| {
             var buf: [256]u8 = undefined;
             var len: usize = 0;
-            try check(c.napi_get_value_string_utf8(env.raw, value.raw, &buf, buf.len, &len));
+            try expect(env, value, c.napi_get_value_string_utf8(env.raw, value.raw, &buf, buf.len, &len), "expected string");
             const str = buf[0..len];
             inline for (info.fields) |field| {
                 if (std.mem.eql(u8, str, comptime util.snakeToCamelSlice(field.name)) or
@@ -152,14 +152,15 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
             if (info.size == .slice and info.child == u8) {
                 const alloc = env.arena.allocator();
                 var slen: usize = 0;
-                try check(c.napi_get_value_string_utf8(env.raw, value.raw, null, 0, &slen));
+                try expect(env, value, c.napi_get_value_string_utf8(env.raw, value.raw, null, 0, &slen), "expected string");
                 const sbuf = try alloc.alloc(u8, slen + 1);
                 var written: usize = 0;
                 try check(c.napi_get_value_string_utf8(env.raw, value.raw, sbuf.ptr, sbuf.len, &written));
                 return sbuf[0..written];
             }
             if (info.size == .slice) {
-                const len = try value.getArrayLength(env);
+                var len: u32 = undefined;
+                try expect(env, value, c.napi_get_array_length(env.raw, value.raw, &len), "expected array");
                 const slice = try env.arena.allocator().alloc(info.child, len);
                 for (slice, 0..) |*item, i| {
                     item.* = try fromJs(info.child, env, try value.getElement(env, @intCast(i)));
@@ -173,7 +174,13 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
             if (T == JsFn) {
                 const vtype = try value.typeOf(env);
                 if (vtype != .function) {
-                    env.throwTypeError("expected a function");
+                    var buf: [128]u8 = undefined;
+                    const got = jsTypeName(env, value);
+                    if (std.fmt.bufPrintZ(&buf, "expected function, got {s}", .{got})) |msg| {
+                        env.throwTypeError(msg);
+                    } else |_| {
+                        env.throwTypeError("expected function");
+                    }
                     return error.napi_error;
                 }
                 return .{ .val = value };
@@ -199,5 +206,35 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
             return result;
         },
         else => @compileError("napi-zig: unsupported type for fromJs: " ++ @typeName(T)),
+    };
+}
+
+// checks a napi status and throws a TypeError with "expected X, got Y" on failure.
+fn expect(env: Env, value: Val, status: c.napi_status, comptime expected: [*:0]const u8) !void {
+    if (status == .ok) return;
+    var buf: [128]u8 = undefined;
+    const got = jsTypeName(env, value);
+    if (std.fmt.bufPrintZ(&buf, "{s}, got {s}", .{ expected, got })) |msg| {
+        env.throwTypeError(msg);
+    } else |_| {
+        env.throwTypeError(expected);
+    }
+    return error.napi_error;
+}
+
+fn jsTypeName(env: Env, value: Val) [*:0]const u8 {
+    var vtype: c.napi_valuetype = undefined;
+    if (c.napi_typeof(env.raw, value.raw, &vtype) != .ok) return "unknown";
+    return switch (vtype) {
+        .undefined => "undefined",
+        .null => "null",
+        .boolean => "boolean",
+        .number => "number",
+        .string => "string",
+        .symbol => "symbol",
+        .object => "object",
+        .function => "function",
+        .external => "external",
+        .bigint => "bigint",
     };
 }
