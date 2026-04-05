@@ -207,13 +207,6 @@ pub fn variadic(env: napi.Env, info: napi.CallInfo) !napi.Val {
 | any | `Val` (passthrough) |
 | any | Types with `pub fn fromJs` (custom, see below) |
 
-Type mismatches throw a descriptive `TypeError`:
-
-```
-TypeError: expected string, got number
-TypeError: invalid enum value: 'foo'
-```
-
 ### Custom conversion
 
 For types with no built-in conversion (like unions), add `toJs` and/or `fromJs` methods:
