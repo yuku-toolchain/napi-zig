@@ -7,7 +7,7 @@ Zig bindings for [Node-API](https://nodejs.org/api/n-api.html). Write native Nod
 **1. Add the dependency**
 
 ```sh
-zig fetch --save https://github.com/yuku-toolchain/napi-zig.git/#HEAD
+zig fetch --save https://github.com/aspect-build/napi-zig/archive/<commit>.tar.gz
 ```
 
 **2. Configure the build**
@@ -60,13 +60,15 @@ addon.add(1, 2)  // 3
 addon.version     // "1.0.0"
 ```
 
-`napi.module(@This())` exports every `pub fn` as a JS function and every `pub const` as a JS value. Snake_case names are converted to camelCase automatically.
+`napi.module(@This())` exports every `pub fn` as a JS function and every `pub const` with a JS-compatible value as a JS property. Snake_case names are converted to camelCase automatically.
+
+Note: only *values* are exported, not types. `pub const config = .{ .debug = true }` becomes a JS object. `pub const Config = struct { ... }` is a type and is skipped.
 
 ## Calling conventions
 
 ### Standard mode
 
-Write plain Zig functions. Arguments are converted from JS automatically, return values converted back. Errors become JS exceptions.
+Write plain Zig functions. Arguments are converted from JS, return values converted back. Errors become JS exceptions.
 
 ```zig
 pub fn add(a: i32, b: i32) i32 {
@@ -78,7 +80,7 @@ pub fn double(x: f64) f64 {
 }
 ```
 
-Add `Env` as the first parameter when you need the environment (arena allocator, manual JS value creation, callbacks). It is injected automatically and does not consume a JS argument.
+Add `Env` as the first parameter when you need the environment. It is injected automatically and does not consume a JS argument.
 
 ```zig
 pub fn process(env: napi.Env, data: []const u8) !napi.Val {
@@ -139,6 +141,11 @@ pub fn variadic(env: napi.Env, info: napi.CallInfo) !napi.Val {
 
 Type mismatches throw a descriptive `TypeError`:
 
+```
+TypeError: expected string, got number
+TypeError: invalid enum value: 'foo'
+```
+
 ## Core types
 
 ### `Val`
@@ -150,56 +157,52 @@ const name = try val.to(env, []const u8);
 const age = try val.to(env, ?i32);
 const items = try val.to(env, []f64);
 
-const obj_val = try env.createObject();
-try obj_val.setNamedProperty(env, "key", try env.toJs("value"));
-const prop = try obj_val.getNamedProperty(env, "key");
+const obj = try env.createObject();
+try obj.setNamedProperty(env, "key", try env.toJs("value"));
+const prop = try obj.getNamedProperty(env, "key");
 
 const vtype = try val.typeOf(env); // .string, .number, .object, ...
 ```
 
 ### `Env`
 
-The Node-API environment. Create JS values with `create*`, convert Zig values with `toJs`, throw exceptions, and access the per-call arena allocator.
+The Node-API environment handle. Create JS values with `create*`, convert Zig values with `toJs`, and throw exceptions.
 
 ```zig
-const js_str = try env.toJs("hello");        // inferred
-const js_num = try env.createInt32(42);       // explicit
+const js_str = try env.toJs("hello");
+const js_num = try env.createInt32(42);
 const obj = try env.createObject();
-
-const alloc = env.arena.allocator();          // freed on return
-const buf = try alloc.alloc(u8, 1024);
 
 env.throwTypeError("something went wrong");
 ```
 
+See [Memory model](#memory-model) for the per-call arena allocator.
+
 ### `JsFn`
 
-A handle to a JS function.
+A JS function handle. Validated on conversion, throws `TypeError` if the value is not a function.
 
 ```zig
-pub fn forEach(env: napi.Env, arr: []napi.Val, callback: napi.JsFn) !void {
-    for (arr) |item| _ = try callback.call(env, &.{item});
+pub fn map(env: napi.Env, arr: []napi.Val, callback: napi.JsFn) !napi.Val {
+    const result = try env.createArray();
+    for (arr, 0..) |item, i| {
+        try result.setElement(env, @intCast(i), try callback.call(env, &.{item}));
+    }
+    return result;
 }
-
-// callWith for a specific `this` binding
-const result = try callback.callWith(env, this_obj, &.{arg1, arg2});
 ```
 
-### `Deferred`
-
-A handle for resolving or rejecting a JS Promise. Created via `env.createPromise()`, which returns both the Promise value (to return to JS) and the Deferred handle (to settle it later).
+Use `callWith` for a specific `this` binding:
 
 ```zig
-const p = try env.createPromise();
-try p.deferred.resolve(env, try env.toJs(42)); // or p.deferred.reject(env, err_val)
-return p.promise;
+const result = try callback.callWith(env, this_obj, &.{arg});
 ```
 
 ### `ThreadsafeFn`
 
-A thread-safe wrapper for calling a JS function from any thread. Node.js is single-threaded, so you cannot call N-API from a spawned `std.Thread` directly. `ThreadsafeFn` queues calls back to the main thread safely.
+A thread-safe wrapper for calling a JS function from any thread. Node.js is single-threaded, so you cannot call N-API from a spawned thread directly. `ThreadsafeFn` queues calls back to the main thread safely.
 
-Created from a `JsFn` via `.threadsafe(env, name)`. Must be released when no longer needed.
+Created from a `JsFn` via `.threadsafe(env, name)`. Must be released when done.
 
 ```zig
 pub fn startWork(env: napi.Env, on_done: napi.JsFn) !void {
@@ -227,7 +230,7 @@ startWork(() => console.log("done!"))
 
 ### `Ref`
 
-A strong reference to a JS value, preventing garbage collection. Created via `env.createReference()`.
+A strong reference to a JS value, preventing garbage collection.
 
 ```zig
 const ref = try env.createReference(some_val);
@@ -237,18 +240,21 @@ const val = try ref.value(env);
 
 ## Memory model
 
-Every function call gets a per-call `ArenaAllocator` on `env.arena`. All string and slice conversions (`[]const u8`, `[]T`) allocate from this arena. It is freed automatically when the function returns. No manual cleanup needed.
+Each function call receives an `Env` with a per-call `ArenaAllocator`, similar to how [Zig's new main](https://github.com/ziglang/zig/pull/21592) receives an arena from the runtime. Use `env.arena.allocator()` for any temporary allocations. All JS-to-Zig conversions that produce slices (`[]const u8`, `[]T`) also allocate on this arena. Everything is freed automatically when the function returns.
 
 ```zig
 pub fn process(env: napi.Env, input: []const u8) ![]const u8 {
-    // `input` was converted from a JS string, lives on the arena
+    // `input` lives on env.arena (converted from JS string)
+    // use the same arena for your own allocations
     const alloc = env.arena.allocator();
     return try std.fmt.allocPrint(alloc, "processed: {s}", .{input});
-    // everything freed when this function returns
+    // arena freed on return, no manual cleanup
 }
 ```
 
-Arena data is only valid for the duration of the call. Do not store arena pointers in worker contexts or pass them to background threads. Copy to a long-lived allocator first if needed.
+For allocations that must outlive the function call (e.g., data passed to a background thread), use `std.heap.c_allocator` and manage the lifetime yourself. See [Workers](#workers) for an example.
+
+**Important:** arena data is only valid for the duration of the call. If you pass data to a worker or background thread, copy it to a long-lived allocator first (see [Workers](#workers)).
 
 ## Error handling
 
@@ -265,8 +271,8 @@ pub fn divide(a: f64, b: f64) !f64 {
 ```
 
 ```js
-divide(1, 0) // Error: DivisionByZero
-divide("x", 1) // TypeError: expected number, got string
+divide(1, 0)    // Error: DivisionByZero
+divide("x", 1)  // TypeError: expected number, got string
 ```
 
 ## Async patterns
@@ -277,6 +283,8 @@ divide("x", 1) // TypeError: expected number, got string
 
 - `compute(*Self) void` runs on a worker thread (no env, no JS calls)
 - `resolve(*Self, Env) !T` runs on the main thread, return value becomes the promise result
+
+The struct is heap-allocated and lives across both phases. You can allocate data in `compute` and clean it up in `resolve`.
 
 ```zig
 const FibWork = struct {
@@ -308,16 +316,48 @@ const result = await asyncFib(10) // 55
 
 If `resolve` returns an error, the promise is rejected with the error name.
 
+**Memory in workers:** the worker context is copied to the heap before the function returns, so arena-allocated data (like `[]const u8` from JS strings) will be dangling by the time `compute` runs. Copy what you need to `std.heap.c_allocator` first:
+
+```zig
+const ParseWork = struct {
+    source: []const u8,        // owned copy, not arena
+    result: []const u8 = &.{},
+
+    pub fn compute(self: *ParseWork) void {
+        // safe to read self.source here
+    }
+
+    pub fn resolve(self: *ParseWork, env: napi.Env) !napi.Val {
+        defer std.heap.c_allocator.free(self.source);
+        return env.toJs(self.result);
+    }
+};
+
+pub fn asyncParse(env: napi.Env, source: []const u8) !napi.Val {
+    // copy arena string to long-lived allocator
+    const owned = try std.heap.c_allocator.dupe(u8, source);
+    return env.runWorker("parse", ParseWork{ .source = owned });
+}
+```
+
+### Workers vs ThreadsafeFn
+
+| | `env.runWorker` | `ThreadsafeFn` |
+|---|---|---|
+| **Purpose** | One-shot: offload CPU work, get result back | Ongoing: call into JS repeatedly from any thread |
+| **Thread** | Managed (uses libuv's thread pool) | You manage your own `std.Thread` |
+| **Result** | Promise (single resolve/reject) | Calls a JS callback each time |
+| **Use when** | Computing a value in the background | Streaming results, progress updates, event listeners |
+
 ### Promises
 
 For cases where you need a Promise without a background thread, use `env.createPromise()` directly:
 
 ```zig
-pub fn delayed(env: napi.Env, callback: napi.JsFn) !napi.Val {
+pub fn delayed(env: napi.Env) !napi.Val {
     const p = try env.createPromise();
-    // pass deferred to a callback, timer, or event handler
-    // that will call p.deferred.resolve(env, val) later
-    try p.deferred.resolve(env, try env.toJs("done"));
+    // resolve immediately (in practice, resolve later from a callback or timer)
+    try p.deferred.resolve(env, try env.toJs(42));
     return p.promise;
 }
 ```
@@ -345,7 +385,7 @@ compile({ filePath: "main.zig", lineCount: 100 })
 
 ## Enum mapping
 
-Zig enums map to JS strings. Both camelCase and snake_case are accepted on input.
+Zig enums map to JS strings. Both camelCase and snake_case are accepted on input. Invalid values throw a `TypeError`.
 
 ```zig
 const Level = enum { debug, info, warning, error_level };
@@ -358,6 +398,56 @@ pub fn log(level: Level, msg: []const u8) void {
 ```js
 log("warning", "disk almost full")
 log("errorLevel", "out of memory")  // camelCase also works
+log("invalid", "...")               // TypeError: invalid enum value: 'invalid'
+```
+
+## Build options
+
+### Single platform (development)
+
+```zig
+const lib = napi_zig.addLib(b, napi_dep, .{
+    .name = "my-addon",
+    .root = b.path("src/main.zig"),
+    .target = target,
+    .optimize = optimize,
+    .imports = &.{
+        .{ .name = "my_lib", .module = my_module },
+    },
+});
+```
+
+The `.imports` field lets you pass additional Zig modules to the napi build, so your entry point can `@import("my_lib")`.
+
+### Cross-platform (production)
+
+```zig
+napi_zig.addPack(b, napi_dep, .{
+    .output = "npm",
+    .entries = &.{
+        .{
+            .name = "my-addon",
+            .scope = "@my-scope",
+            .version = "1.0.0",
+            .root = b.path("src/main.zig"),
+        },
+    },
+});
+```
+
+Builds for all supported platforms (macOS arm64/x64, Linux x64 gnu/musl, Windows x64) and generates npm packages with a runtime loader that selects the correct binary.
+
+## Escape hatches
+
+For advanced Node-API features not covered by the high-level API, the raw C bindings are available via `napi.c`:
+
+```zig
+const napi = @import("napi-zig");
+const c = napi.c;
+
+// direct N-API calls using env.raw and val.raw
+var result: c.napi_value = undefined;
+_ = c.napi_create_object(env.raw, &result);
 ```
 
 ## License
