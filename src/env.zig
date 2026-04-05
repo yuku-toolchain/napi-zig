@@ -210,12 +210,16 @@ pub const Env = struct {
         return .{ .raw = result };
     }
 
-    const Promise = struct {
+    /// Returned by `createPromise`. Contains the JS Promise to return
+    /// to the caller, and the Deferred handle to resolve or reject it.
+    pub const Promise = struct {
+        /// The JS Promise value. Return this to the caller.
         promise: Val,
+        /// The handle to resolve or reject the promise.
         deferred: Deferred,
     };
 
-    /// Creates a Promise + Deferred pair. Use `deferred.resolve`/`reject`.
+    /// Creates a JS Promise and its Deferred handle.
     pub fn createPromise(self: Env) !Promise {
         var deferred: c.napi_deferred = undefined;
         var promise: c.napi_value = undefined;
@@ -223,8 +227,30 @@ pub const Env = struct {
         return .{ .promise = .{ .raw = promise }, .deferred = .{ .raw = deferred } };
     }
 
-    /// Creates an async work item. Runs `execute` on a worker thread,
-    /// then `complete` on the main JS thread.
+    /// Runs a worker on a background thread and returns a Promise.
+    ///
+    /// The context must be a struct with two methods:
+    ///   - `pub fn compute(self: *T) void` runs on a worker thread (no env access)
+    ///   - `pub fn resolve(self: *T, env: Env) !ReturnType` runs on the main thread
+    ///
+    /// The return value of `resolve` becomes the promise value (auto-converted to JS).
+    /// If `resolve` returns an error, the promise is rejected.
+    pub fn runWorker(self: Env, comptime name: [*:0]const u8, context: anytype) !Val {
+        const T = @TypeOf(context);
+        const S = WorkerState(T);
+
+        const p = try self.createPromise();
+        const state = try std.heap.c_allocator.create(S);
+        state.* = .{ .ctx = context, .deferred = p.deferred };
+
+        state.work = try self.createAsyncWork(name, &S.execute, &S.complete, state);
+        try self.queueAsyncWork(state.work);
+
+        return p.promise;
+    }
+
+    // low-level async work API (escape hatch)
+
     pub fn createAsyncWork(
         self: Env,
         name: [*:0]const u8,
@@ -239,12 +265,10 @@ pub const Env = struct {
         return work;
     }
 
-    /// Queues an async work item for execution.
     pub fn queueAsyncWork(self: Env, work: c.napi_async_work) !void {
         try check(c.napi_queue_async_work(self.raw, work));
     }
 
-    /// Frees an async work item. Call after the work completes.
     pub fn deleteAsyncWork(self: Env, work: c.napi_async_work) !void {
         try check(c.napi_delete_async_work(self.raw, work));
     }
@@ -256,3 +280,48 @@ pub const Env = struct {
         return result;
     }
 };
+
+// generates the execute/complete C callbacks for runWorker.
+fn WorkerState(comptime T: type) type {
+    const resolve_fn = @typeInfo(@TypeOf(@field(T, "resolve"))).@"fn";
+    const ResolveReturn = resolve_fn.return_type.?;
+    const is_error_union = @typeInfo(ResolveReturn) == .error_union;
+    const Payload = if (is_error_union) @typeInfo(ResolveReturn).error_union.payload else ResolveReturn;
+
+    return struct {
+        ctx: T,
+        deferred: val_mod.Deferred,
+        work: c.napi_async_work = undefined,
+
+        fn execute(_: c.napi_env, data: ?*anyopaque) callconv(.c) void {
+            const state: *@This() = @ptrCast(@alignCast(data));
+            state.ctx.compute();
+        }
+
+        fn complete(raw_env: c.napi_env, _: c.napi_status, data: ?*anyopaque) callconv(.c) void {
+            const state: *@This() = @ptrCast(@alignCast(data));
+            defer std.heap.c_allocator.destroy(state);
+
+            var arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
+            defer arena.deinit();
+            const env: Env = .{ .raw = raw_env, .arena = &arena };
+
+            env.deleteAsyncWork(state.work) catch {};
+
+            const raw = state.ctx.resolve(env);
+            const value = if (is_error_union) raw catch |err| {
+                env.throwError(@errorName(err));
+                const undef = env.createUndefined() catch return;
+                state.deferred.reject(env, undef) catch {};
+                return;
+            } else raw;
+
+            if (Payload == void) {
+                const undef = env.createUndefined() catch return;
+                state.deferred.resolve(env, undef) catch {};
+            } else {
+                state.deferred.resolve(env, value) catch {};
+            }
+        }
+    };
+}

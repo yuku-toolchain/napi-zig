@@ -189,37 +189,45 @@ pub fn forEach(env: napi.Env, arr: []napi.Val, callback: napi.JsFn) !void {
 const result = try callback.callWith(env, this_obj, &.{arg1, arg2});
 ```
 
-### `ThreadsafeFn`
-
-A thread-safe wrapper for calling a JS function from any thread. Created from a `JsFn`.
-
-```zig
-pub fn startWork(env: napi.Env, on_progress: napi.JsFn) !void {
-    const tsfn = try on_progress.threadsafe(env, "worker");
-
-    const thread = try std.Thread.spawn(.{}, struct {
-        fn run(ts: napi.ThreadsafeFn) void {
-            defer ts.release() catch {};
-            // do work...
-            ts.call(null, .non_blocking) catch {};
-        }
-    }.run, .{tsfn});
-    
-    thread.detach();
-}
-```
-
 ### `Deferred`
 
-A handle for resolving or rejecting a Promise. Created via `env.createPromise()`.
+A handle for resolving or rejecting a JS Promise. Created via `env.createPromise()`, which returns both the Promise value (to return to JS) and the Deferred handle (to settle it later).
 
 ```zig
 pub fn fetchData(env: napi.Env) !napi.Val {
     const p = try env.createPromise();
-    // later, from the main thread:
     try p.deferred.resolve(env, "done");
     return p.promise;
 }
+```
+
+### `ThreadsafeFn`
+
+A thread-safe wrapper for calling a JS function from any thread. Node.js is single-threaded, so you cannot call N-API from a spawned `std.Thread` directly. `ThreadsafeFn` queues calls back to the main thread safely.
+
+Created from a `JsFn` via `.threadsafe(env, name)`. Must be released when no longer needed.
+
+```zig
+pub fn startWork(env: napi.Env, on_done: napi.JsFn) !void {
+    const tsfn = try on_done.threadsafe(env, "worker");
+
+    const thread = try std.Thread.spawn(.{}, struct {
+        fn run(ts: napi.ThreadsafeFn) void {
+            defer ts.release() catch {};
+
+            // do expensive work on this thread...
+
+            // notify JS when done (queues the JS callback on the main thread)
+            ts.call(null, .non_blocking) catch {};
+        }
+    }.run, .{tsfn});
+
+    thread.detach();
+}
+```
+
+```js
+startWork(() => console.log("done!"))
 ```
 
 ### `Ref`
@@ -234,18 +242,18 @@ const val = try ref.value(env);
 
 ## Memory model
 
-Every function call gets a per-call `ArenaAllocator` on `env.arena`. All string and slice conversions allocate from this arena. It is freed automatically when the function returns.
+Every function call gets a per-call `ArenaAllocator` on `env.arena`. All string and slice conversions (`[]const u8`, `[]T`) allocate from this arena. It is freed automatically when the function returns. No manual cleanup needed.
 
 ```zig
 pub fn process(env: napi.Env, input: []const u8) ![]const u8 {
-    // `input` is arena-allocated from the JS string
-    // any allocations via env.arena.allocator() are also freed on return
+    // `input` was converted from a JS string, lives on the arena
     const alloc = env.arena.allocator();
     return try std.fmt.allocPrint(alloc, "processed: {s}", .{input});
+    // everything freed when this function returns
 }
 ```
 
-For allocations that must outlive the function call (e.g., data passed to a background thread), use `std.heap.c_allocator` or another long-lived allocator.
+Arena data is only valid for the duration of the call. Do not store arena pointers in worker contexts or pass them to background threads. Copy to a long-lived allocator first if needed.
 
 ## Error handling
 
@@ -264,6 +272,66 @@ pub fn divide(a: f64, b: f64) !f64 {
 ```js
 divide(1, 0) // Error: DivisionByZero
 divide("x", 1) // TypeError: expected number, got string
+```
+
+## Async patterns
+
+### Workers
+
+`env.runWorker` offloads CPU work to a background thread and returns a Promise. Define a struct with two methods:
+
+- `compute(*Self) void` runs on a worker thread (no env, no JS calls)
+- `resolve(*Self, Env) !T` runs on the main thread, return value becomes the promise result
+
+```zig
+const FibWork = struct {
+    n: i32,
+    result: i32 = 0,
+
+    pub fn compute(self: *FibWork) void {
+        self.result = fib(self.n);
+    }
+
+    pub fn resolve(self: *FibWork, env: napi.Env) !napi.Val {
+        return env.toJs(self.result);
+    }
+
+    fn fib(n: i32) i32 {
+        if (n <= 1) return n;
+        return fib(n - 1) + fib(n - 2);
+    }
+};
+
+pub fn asyncFib(env: napi.Env, n: i32) !napi.Val {
+    return env.runWorker("fib", FibWork{ .n = n });
+}
+```
+
+```js
+const result = await asyncFib(10) // 55
+```
+
+If `resolve` returns an error, the promise is rejected with the error name.
+
+### Workers vs ThreadsafeFn
+
+| | `env.runWorker` | `ThreadsafeFn` |
+|---|---|---|
+| **Purpose** | One-shot: offload CPU work, get result back | Ongoing: call into JS repeatedly from any thread |
+| **Thread** | Managed (uses libuv's thread pool) | You manage your own `std.Thread` |
+| **Result** | Promise (single resolve/reject) | Calls a JS callback each time |
+| **Use when** | Computing a value in the background | Streaming results, progress updates, event listeners |
+
+### Promises
+
+For cases where you need a Promise without a background thread (e.g., resolving from a callback), use `env.createPromise()` directly:
+
+```zig
+pub fn fetchData(env: napi.Env) !napi.Val {
+    const p = try env.createPromise();
+    try p.deferred.resolve(env, "done");
+    return p.promise;
+}
 ```
 
 ## Struct mapping
