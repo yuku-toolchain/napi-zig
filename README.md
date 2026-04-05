@@ -62,7 +62,8 @@ addon.version     // "1.0.0"
 
 `napi.module(@This())` exports every `pub fn` as a JS function and every `pub const` with a JS-compatible value as a JS property. Snake_case names are converted to camelCase automatically.
 
-Note: only *values* are exported, not types. `pub const config = .{ .debug = true }` becomes a JS object. `pub const Config = struct { ... }` is a type and is skipped.
+> [!NOTE]
+> Only *values* are exported, not types. `pub const config = .{ .debug = true }` becomes a JS object. `pub const Config = struct { ... }` is a type and is skipped.
 
 ## Calling conventions
 
@@ -138,13 +139,6 @@ pub fn variadic(env: napi.Env, info: napi.CallInfo) !napi.Val {
 | Function | `JsFn` (validated) |
 | any | `Val` (passthrough) |
 | null/undefined | `?T` returns `null` |
-
-Type mismatches throw a descriptive `TypeError`:
-
-```
-TypeError: expected string, got number
-TypeError: invalid enum value: 'foo'
-```
 
 ## Core types
 
@@ -240,7 +234,7 @@ const val = try ref.value(env);
 
 ## Memory model
 
-Each function call receives an `Env` with a per-call `ArenaAllocator`, similar to how [Zig's new main](https://github.com/ziglang/zig/pull/21592) receives an arena from the runtime. Use `env.arena.allocator()` for any temporary allocations. All JS-to-Zig conversions that produce slices (`[]const u8`, `[]T`) also allocate on this arena. Everything is freed automatically when the function returns.
+Each function call receives an `Env` with a per-call `ArenaAllocator`, similar to how [Zig's juicy main](https://github.com/ziglang/zig/issues/24510) receives an arena from the runtime. Use `env.arena.allocator()` for any temporary allocations. All JS-to-Zig conversions that produce slices (`[]const u8`, `[]T`) also allocate on this arena. Everything is freed automatically when the function returns.
 
 ```zig
 pub fn process(env: napi.Env, input: []const u8) ![]const u8 {
@@ -252,9 +246,8 @@ pub fn process(env: napi.Env, input: []const u8) ![]const u8 {
 }
 ```
 
-For allocations that must outlive the function call (e.g., data passed to a background thread), use `std.heap.c_allocator` and manage the lifetime yourself. See [Workers](#workers) for an example.
-
-**Important:** arena data is only valid for the duration of the call. If you pass data to a worker or background thread, copy it to a long-lived allocator first (see [Workers](#workers)).
+> [!IMPORTANT]
+> Arena data is only valid for the duration of the call. If you need allocations that outlive the function (e.g., data passed to a background thread), use `std.heap.c_allocator` and manage the lifetime yourself. See [Workers](#workers) for an example.
 
 ## Error handling
 
@@ -340,15 +333,6 @@ pub fn asyncParse(env: napi.Env, source: []const u8) !napi.Val {
 }
 ```
 
-### Workers vs ThreadsafeFn
-
-| | `env.runWorker` | `ThreadsafeFn` |
-|---|---|---|
-| **Purpose** | One-shot: offload CPU work, get result back | Ongoing: call into JS repeatedly from any thread |
-| **Thread** | Managed (uses libuv's thread pool) | You manage your own `std.Thread` |
-| **Result** | Promise (single resolve/reject) | Calls a JS callback each time |
-| **Use when** | Computing a value in the background | Streaming results, progress updates, event listeners |
-
 ### Promises
 
 For cases where you need a Promise without a background thread, use `env.createPromise()` directly:
@@ -399,55 +383,6 @@ pub fn log(level: Level, msg: []const u8) void {
 log("warning", "disk almost full")
 log("errorLevel", "out of memory")  // camelCase also works
 log("invalid", "...")               // TypeError: invalid enum value: 'invalid'
-```
-
-## Build options
-
-### Single platform (development)
-
-```zig
-const lib = napi_zig.addLib(b, napi_dep, .{
-    .name = "my-addon",
-    .root = b.path("src/main.zig"),
-    .target = target,
-    .optimize = optimize,
-    .imports = &.{
-        .{ .name = "my_lib", .module = my_module },
-    },
-});
-```
-
-The `.imports` field lets you pass additional Zig modules to the napi build, so your entry point can `@import("my_lib")`.
-
-### Cross-platform (production)
-
-```zig
-napi_zig.addPack(b, napi_dep, .{
-    .output = "npm",
-    .entries = &.{
-        .{
-            .name = "my-addon",
-            .scope = "@my-scope",
-            .version = "1.0.0",
-            .root = b.path("src/main.zig"),
-        },
-    },
-});
-```
-
-Builds for all supported platforms (macOS arm64/x64, Linux x64 gnu/musl, Windows x64) and generates npm packages with a runtime loader that selects the correct binary.
-
-## Escape hatches
-
-For advanced Node-API features not covered by the high-level API, the raw C bindings are available via `napi.c`:
-
-```zig
-const napi = @import("napi-zig");
-const c = napi.c;
-
-// direct N-API calls using env.raw and val.raw
-var result: c.napi_value = undefined;
-_ = c.napi_create_object(env.raw, &result);
 ```
 
 ## License
