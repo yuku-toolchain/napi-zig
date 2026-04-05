@@ -146,7 +146,13 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
                     std.mem.eql(u8, str, field.name))
                     return @enumFromInt(field.value);
             }
-            return @enumFromInt(info.fields[0].value);
+            var errbuf: [256]u8 = undefined;
+            if (std.fmt.bufPrintZ(&errbuf, "invalid enum value: '{s}'", .{str})) |msg| {
+                env.throwTypeError(msg);
+            } else |_| {
+                env.throwTypeError("invalid enum value");
+            }
+            return error.napi_error;
         },
         .pointer => |info| {
             if (info.size == .slice and info.child == u8) {

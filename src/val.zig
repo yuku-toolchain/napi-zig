@@ -3,6 +3,7 @@ const convert = @import("convert.zig");
 const Env = @import("env.zig").Env;
 const std = @import("std");
 
+
 /// A JavaScript value handle, wrapping a raw `napi_value`.
 ///
 /// Convert to Zig types with `to(env, T)`. Access properties with
@@ -68,14 +69,14 @@ pub const Val = struct {
         return .{ .raw = result };
     }
 
-    /// Sets an object property by dynamic key.
-    pub fn setProperty(self: Val, env: Env, key: Val, value: Val) !void {
-        try check(c.napi_set_property(env.raw, self.raw, key.raw, value.raw));
+    /// Sets an object property by dynamic key. Value auto-converted to JS.
+    pub fn setProperty(self: Val, env: Env, key: Val, value: anytype) !void {
+        try check(c.napi_set_property(env.raw, self.raw, key.raw, try toRaw(env, value)));
     }
 
-    /// Sets an object property by compile-time string key.
-    pub fn setNamedProperty(self: Val, env: Env, key: [:0]const u8, value: Val) !void {
-        try check(c.napi_set_named_property(env.raw, self.raw, key, value.raw));
+    /// Sets an object property by compile-time string key. Value auto-converted to JS.
+    pub fn setNamedProperty(self: Val, env: Env, key: [:0]const u8, value: anytype) !void {
+        try check(c.napi_set_named_property(env.raw, self.raw, key, try toRaw(env, value)));
     }
 
     /// Returns `true` if the object has a property with the given key.
@@ -92,9 +93,9 @@ pub const Val = struct {
         return .{ .raw = result };
     }
 
-    /// Sets an array element by index.
-    pub fn setElement(self: Val, env: Env, index: u32, value: Val) !void {
-        try check(c.napi_set_element(env.raw, self.raw, index, value.raw));
+    /// Sets an array element by index. Value auto-converted to JS.
+    pub fn setElement(self: Val, env: Env, index: u32, value: anytype) !void {
+        try check(c.napi_set_element(env.raw, self.raw, index, try toRaw(env, value)));
     }
 
     /// Returns the length of a JS Array.
@@ -238,14 +239,14 @@ pub const Ref = struct {
 pub const Deferred = struct {
     raw: c.napi_deferred,
 
-    /// Resolves the promise with the given value.
-    pub fn resolve(self: Deferred, env: Env, val: Val) !void {
-        try check(c.napi_resolve_deferred(env.raw, self.raw, val.raw));
+    /// Resolves the promise. Value auto-converted to JS.
+    pub fn resolve(self: Deferred, env: Env, value: anytype) !void {
+        try check(c.napi_resolve_deferred(env.raw, self.raw, try toRaw(env, value)));
     }
 
-    /// Rejects the promise with the given value.
-    pub fn reject(self: Deferred, env: Env, val: Val) !void {
-        try check(c.napi_reject_deferred(env.raw, self.raw, val.raw));
+    /// Rejects the promise. Value auto-converted to JS.
+    pub fn reject(self: Deferred, env: Env, value: anytype) !void {
+        try check(c.napi_reject_deferred(env.raw, self.raw, try toRaw(env, value)));
     }
 };
 
@@ -285,6 +286,13 @@ pub const CallInfo = struct {
         return .{ .raw = result };
     }
 };
+
+// converts a Zig value or Val to a raw napi_value.
+fn toRaw(env: Env, value: anytype) !c.napi_value {
+    const T = @TypeOf(value);
+    if (T == Val) return value.raw;
+    return (try convert.toJs(T, env, value)).raw;
+}
 
 pub const NapiError = error{napi_error};
 

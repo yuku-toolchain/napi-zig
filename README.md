@@ -155,7 +155,7 @@ const age = try val.to(env, ?i32);
 const items = try val.to(env, []f64);
 
 const obj_val = try env.createObject();
-try obj_val.setNamedProperty(env, "key", try env.toJs("value"));
+try obj_val.setNamedProperty(env, "key", "value");
 const prop = try obj_val.getNamedProperty(env, "key");
 
 const vtype = try val.typeOf(env); // .string, .number, .object, ...
@@ -204,6 +204,7 @@ pub fn startWork(env: napi.Env, on_progress: napi.JsFn) !void {
             ts.call(null, .non_blocking) catch {};
         }
     }.run, .{tsfn});
+    
     thread.detach();
 }
 ```
@@ -216,7 +217,7 @@ A handle for resolving or rejecting a Promise. Created via `env.createPromise()`
 pub fn fetchData(env: napi.Env) !napi.Val {
     const p = try env.createPromise();
     // later, from the main thread:
-    try p.deferred.resolve(env, try env.toJs("done"));
+    try p.deferred.resolve(env, "done");
     return p.promise;
 }
 ```

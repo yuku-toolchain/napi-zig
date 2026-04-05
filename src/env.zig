@@ -210,8 +210,13 @@ pub const Env = struct {
         return .{ .raw = result };
     }
 
+    const Promise = struct {
+        promise: Val,
+        deferred: Deferred,
+    };
+
     /// Creates a Promise + Deferred pair. Use `deferred.resolve`/`reject`.
-    pub fn createPromise(self: Env) !struct { promise: Val, deferred: Deferred } {
+    pub fn createPromise(self: Env) !Promise {
         var deferred: c.napi_deferred = undefined;
         var promise: c.napi_value = undefined;
         try check(c.napi_create_promise(self.raw, &deferred, &promise));
