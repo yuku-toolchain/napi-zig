@@ -1,4 +1,5 @@
 const c = @import("c.zig");
+const convert = @import("convert.zig");
 const Val = @import("val.zig").Val;
 const check = @import("val.zig").check;
 
@@ -300,5 +301,15 @@ pub const Env = struct {
     /// Must be called after the work has completed or been cancelled.
     pub fn deleteAsyncWork(self: Env, work: c.napi_async_work) !void {
         try check(c.napi_delete_async_work(self.raw, work));
+    }
+
+    /// Converts a Zig value to a JavaScript value.
+    pub fn toJs(self: Env, value: anytype) !Val {
+        return convert.toJs(@TypeOf(value), self, value);
+    }
+
+    /// Converts a JavaScript value to a Zig type.
+    pub fn fromJs(self: Env, comptime T: type, value: Val) !T {
+        return convert.fromJs(T, self, value);
     }
 };
