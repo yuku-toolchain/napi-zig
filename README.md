@@ -194,11 +194,9 @@ const result = try callback.callWith(env, this_obj, &.{arg1, arg2});
 A handle for resolving or rejecting a JS Promise. Created via `env.createPromise()`, which returns both the Promise value (to return to JS) and the Deferred handle (to settle it later).
 
 ```zig
-pub fn fetchData(env: napi.Env) !napi.Val {
-    const p = try env.createPromise();
-    try p.deferred.resolve(env, try env.toJs("done"));
-    return p.promise;
-}
+const p = try env.createPromise();
+try p.deferred.resolve(env, try env.toJs(42)); // or p.deferred.reject(env, err_val)
+return p.promise;
 ```
 
 ### `ThreadsafeFn`
@@ -217,7 +215,8 @@ pub fn startWork(env: napi.Env, on_done: napi.JsFn) !void {
 
             // do expensive work on this thread...
 
-            // notify JS when done (queues the JS callback on the main thread)
+            // queue the JS callback on the main thread
+            // null = no data (for custom call_js, see napi.c)
             ts.call(null, .non_blocking) catch {};
         }
     }.run, .{tsfn});
@@ -313,22 +312,15 @@ const result = await asyncFib(10) // 55
 
 If `resolve` returns an error, the promise is rejected with the error name.
 
-### Workers vs ThreadsafeFn
-
-| | `env.runWorker` | `ThreadsafeFn` |
-|---|---|---|
-| **Purpose** | One-shot: offload CPU work, get result back | Ongoing: call into JS repeatedly from any thread |
-| **Thread** | Managed (uses libuv's thread pool) | You manage your own `std.Thread` |
-| **Result** | Promise (single resolve/reject) | Calls a JS callback each time |
-| **Use when** | Computing a value in the background | Streaming results, progress updates, event listeners |
-
 ### Promises
 
-For cases where you need a Promise without a background thread (e.g., resolving from a callback), use `env.createPromise()` directly:
+For cases where you need a Promise without a background thread, use `env.createPromise()` directly:
 
 ```zig
-pub fn fetchData(env: napi.Env) !napi.Val {
+pub fn delayed(env: napi.Env, callback: napi.JsFn) !napi.Val {
     const p = try env.createPromise();
+    // pass deferred to a callback, timer, or event handler
+    // that will call p.deferred.resolve(env, val) later
     try p.deferred.resolve(env, try env.toJs("done"));
     return p.promise;
 }
@@ -407,19 +399,6 @@ napi_zig.addPack(b, napi_dep, .{
 ```
 
 Builds for all supported platforms (macOS arm64/x64, Linux x64 gnu/musl, Windows x64) and generates npm packages with a runtime loader that selects the correct binary.
-
-## Escape hatches
-
-For advanced Node-API features not covered by the high-level API, the raw C bindings are available via `napi.c`:
-
-```zig
-const napi = @import("napi-zig");
-const c = napi.c;
-
-// direct N-API calls using env.raw and val.raw
-var result: c.napi_value = undefined;
-_ = c.napi_create_object(env.raw, &result);
-```
 
 ## License
 

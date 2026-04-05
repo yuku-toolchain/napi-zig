@@ -307,6 +307,7 @@ fn WorkerState(comptime T: type) type {
             env.deleteAsyncWork(state.work) catch {};
 
             const raw = state.ctx.resolve(env);
+
             const value = if (is_error_union) raw catch |err| {
                 env.throwError(@errorName(err));
                 const undef = env.createUndefined() catch return;

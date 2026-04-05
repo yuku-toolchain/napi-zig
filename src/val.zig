@@ -3,7 +3,6 @@ const convert = @import("convert.zig");
 const Env = @import("env.zig").Env;
 const std = @import("std");
 
-
 /// A JavaScript value handle, wrapping a raw `napi_value`.
 ///
 /// Convert to Zig types with `to(env, T)`. Access properties with
