@@ -53,6 +53,6 @@ jobs:
       - name: Update npm
         run: npm install -g npm@latest
 
-      - name: Publish packages to npm
+      - name: Publish CLI to npm
         run: |
              (cd cli/ && bun pm pack && npm publish ./*.tgz --access public)
