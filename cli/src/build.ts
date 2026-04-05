@@ -3,8 +3,8 @@ import { existsSync, readdirSync, statSync, mkdirSync, copyFileSync, writeFileSy
 import { join } from "node:path"
 import ora from "ora"
 
-export function buildDev(optimize: string) {
-  const optFlag = ` --release=${optimize}`
+export function buildDev(optimize: string | undefined) {
+  const optFlag = optimize ? ` --release=${optimize}` : ""
 
   const spinner = ora("Building for current platform...").start()
   run(`zig build${optFlag}`)

@@ -9,12 +9,12 @@ const cli = cac("napi-zig")
 cli
   .command("build", "Build for current platform")
   .option("--release", "Cross-compile all platforms and sync npm folder")
-  .option("--optimize <mode>", "Optimization: debug, safe, fast, small (default: debug, fast with --release)")
+  .option("--optimize <mode>", "Optimization: safe, fast, small (default: fast with --release)")
   .action((options: { release?: boolean; optimize?: string }) => {
     if (options.release) {
       buildRelease(options.optimize ?? "fast")
     } else {
-      buildDev(options.optimize ?? "debug")
+      buildDev(options.optimize)
     }
   })
 
