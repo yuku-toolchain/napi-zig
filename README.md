@@ -1,6 +1,6 @@
 # napi-zig
 
-Zig bindings for [Node-API](https://nodejs.org/api/n-api.html). Write native Node.js addons in Zig with automatic type conversion, per-call arena allocation, and zero-overhead function bridging.
+Write [Node.js native addons](https://nodejs.org/api/n-api.html) in Zig. Cross-compile for all platforms and publish to npm.
 
 ## Quick start
 
