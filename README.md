@@ -121,7 +121,9 @@ pub fn variadic(env: napi.Env, info: napi.CallInfo) !napi.Val {
 | `?T` | T or `null` |
 | `enum` | String (tag name) |
 | `[]const u8` | String |
+| `[N]T` | Array (fixed-size) |
 | `[]T` | Array |
+| `struct { S, T }` | Array (tuple) |
 | `struct` | Object (snake_case to camelCase) |
 | `void` | `undefined` |
 
@@ -134,11 +136,46 @@ pub fn variadic(env: napi.Env, info: napi.CallInfo) !napi.Val {
 | BigInt | `u33`..`u64` |
 | String | `[]const u8` (arena-allocated) |
 | String | `enum` (camelCase or snake_case) |
+| Array | `[N]T` (fixed-size) |
 | Array | `[]T` (arena-allocated) |
+| Array | `struct { S, T }` (tuple, by index) |
 | Object | `struct` (camelCase field matching) |
 | Function | `JsFn` (validated) |
 | any | `Val` (passthrough) |
 | null/undefined | `?T` returns `null` |
+
+### Custom conversion
+
+For types with no built-in conversion (like unions), add `toJs` and/or `fromJs` methods:
+
+```zig
+const Color = union(enum) {
+    rgb: struct { r: u8, g: u8, b: u8 },
+    hex: []const u8,
+
+    pub fn toJs(self: Color, env: napi.Env) !napi.Val {
+        return switch (self) {
+            .rgb => |rgb| {
+                const obj = try env.createObject();
+                try obj.setNamedProperty(env, "r", try env.toJs(rgb.r));
+                try obj.setNamedProperty(env, "g", try env.toJs(rgb.g));
+                try obj.setNamedProperty(env, "b", try env.toJs(rgb.b));
+                return obj;
+            },
+            .hex => |h| env.toJs(h),
+        };
+    }
+
+    pub fn fromJs(env: napi.Env, val: napi.Val) !Color {
+        if ((try val.typeOf(env)) == .string) {
+            return .{ .hex = try val.to(env, []const u8) };
+        }
+        return .{ .rgb = try val.to(env, struct { r: u8, g: u8, b: u8 }) };
+    }
+};
+```
+
+Works for structs too. If a struct has a `toJs` or `fromJs` method, it takes priority over the default field-by-field conversion.
 
 ## Core types
 

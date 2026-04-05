@@ -18,8 +18,10 @@ const util = @import("util.zig");
 // - enums           -> String (tag name)
 // - *const [N:0]u8  -> String (string literals)
 // - []const u8      -> String (UTF-8)
-// - []T             -> Array
-// - structs         -> Object (field names converted to camelCase)
+// - [N]T            -> Array (fixed-size)
+// - []T             -> Array (slice)
+// - tuples          -> Array
+// - structs         -> Object (camelCase) or custom via toJs method
 // - Val             -> passthrough
 // - void            -> undefined
 pub fn toJs(comptime T: type, env: Env, value: T) !Val {
@@ -65,13 +67,32 @@ pub fn toJs(comptime T: type, env: Env, value: T) !Val {
             }
             @compileError("napi-zig: unsupported pointer type: " ++ @typeName(T));
         },
+        .array => |info| {
+            const arr = try env.createArrayWithLength(@intCast(info.len));
+            for (0..info.len) |i| {
+                try arr.setElement(env, @intCast(i), try toJs(info.child, env, value[i]));
+            }
+            return arr;
+        },
         .@"struct" => |info| {
             if (T == Val) return value;
+            if (@hasDecl(T, "toJs")) return value.toJs(env);
+            if (info.is_tuple) {
+                const arr = try env.createArrayWithLength(@intCast(info.fields.len));
+                inline for (info.fields, 0..) |field, i| {
+                    try arr.setElement(env, @intCast(i), try toJs(field.type, env, @field(value, field.name)));
+                }
+                return arr;
+            }
             const obj = try env.createObject();
             inline for (info.fields) |field| {
                 try obj.setNamedProperty(env, comptime util.snakeToCamel(field.name), try toJs(field.type, env, @field(value, field.name)));
             }
             return obj;
+        },
+        .@"union" => {
+            if (@hasDecl(T, "toJs")) return value.toJs(env);
+            @compileError("napi-zig: union requires a toJs method: " ++ @typeName(T));
         },
         .void => env.createUndefined(),
         else => @compileError("napi-zig: unsupported type for toJs: " ++ @typeName(T)),
@@ -86,8 +107,10 @@ pub fn toJs(comptime T: type, env: Env, value: T) !Val {
 // - ?T          <- null/undefined -> null, otherwise inner type
 // - enums       <- String (accepts camelCase or exact Zig field name)
 // - []const u8  <- String (allocated on env.arena)
-// - []T         <- Array  (allocated on env.arena)
-// - structs     <- Object (camelCase field matching, defaults respected)
+// - [N]T        <- Array (fixed-size)
+// - []T         <- Array (allocated on env.arena)
+// - tuples      <- Array (by index)
+// - structs     <- Object (camelCase, defaults respected) or custom via fromJs method
 // - JsFn        <- Function (validated, wrapped)
 // - Val         <- passthrough
 pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
@@ -175,6 +198,13 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
             }
             @compileError("napi-zig: unsupported pointer type for fromJs: " ++ @typeName(T));
         },
+        .array => |info| {
+            var result: T = undefined;
+            for (0..info.len) |i| {
+                result[i] = try fromJs(info.child, env, try value.getElement(env, @intCast(i)));
+            }
+            return result;
+        },
         .@"struct" => |info| {
             if (T == Val) return value;
             if (T == JsFn) {
@@ -190,6 +220,14 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
                     return error.napi_error;
                 }
                 return .{ .val = value };
+            }
+            if (@hasDecl(T, "fromJs")) return T.fromJs(env, value);
+            if (info.is_tuple) {
+                var result: T = undefined;
+                inline for (info.fields, 0..) |field, i| {
+                    @field(result, field.name) = try fromJs(field.type, env, try value.getElement(env, @intCast(i)));
+                }
+                return result;
             }
             var result: T = undefined;
             inline for (info.fields) |field| {
@@ -210,6 +248,10 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
                 }
             }
             return result;
+        },
+        .@"union" => {
+            if (@hasDecl(T, "fromJs")) return T.fromJs(env, value);
+            @compileError("napi-zig: union requires a fromJs method: " ++ @typeName(T));
         },
         else => @compileError("napi-zig: unsupported type for fromJs: " ++ @typeName(T)),
     };
