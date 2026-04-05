@@ -244,33 +244,145 @@ Works for structs too. If a struct has a `toJs` or `fromJs` method, it takes pri
 
 ### `Val`
 
-A JS value handle. Convert to Zig types with `to`, access properties with `get*`/`set*`, inspect with `typeOf`/`is*`.
+A JS value handle.
+
+**Conversion:**
 
 ```zig
 const name = try val.to(env, []const u8);
-const age = try val.to(env, ?i32);
-const items = try val.to(env, []f64);
+const opts = try val.to(env, MyStruct);
+```
 
+**Property and element access:**
+
+```zig
 const obj = try env.createObject();
 try obj.setNamedProperty(env, "key", try env.toJs("value"));
 const prop = try obj.getNamedProperty(env, "key");
+const has = try obj.hasNamedProperty(env, "key");
 
-const vtype = try val.typeOf(env); // .string, .number, .object, ...
+// dynamic keys
+try obj.setProperty(env, key_val, value_val);
+const val = try obj.getProperty(env, key_val);
+
+// array elements
+try arr.setElement(env, 0, try env.toJs(42));
+const item = try arr.getElement(env, 0);
+const len = try arr.getArrayLength(env);
+```
+
+**Type inspection:**
+
+```zig
+const vtype = try val.typeOf(env); // .string, .number, .object, .function, ...
+const is_arr = try val.isArray(env);
+const is_buf = try val.isBuffer(env);
+const is_ab = try val.isArrayBuffer(env);
+const is_ta = try val.isTypedArray(env);
+```
+
+**Buffer data access:**
+
+```zig
+const ab_bytes = try val.getArrayBufferData(env);  // []u8 into ArrayBuffer
+const buf_bytes = try val.getBufferData(env);       // []u8 into Node.js Buffer
 ```
 
 ### `Env`
 
-The Node-API environment handle. Create JS values with `create*`, convert Zig values with `toJs`, and throw exceptions.
+The Node-API environment handle. Provides the per-call arena (see [Memory model](#memory-model)), value creation, and exception throwing.
+
+**Conversion (inferred):**
 
 ```zig
-const js_str = try env.toJs("hello");
-const js_num = try env.createInt32(42);
-const obj = try env.createObject();
-
-env.throwTypeError("something went wrong");
+const js_val = try env.toJs("hello");    // any supported Zig type
+const js_num = try env.toJs(42);
+const js_arr = try env.toJs(&[_]i32{ 1, 2, 3 });
 ```
 
-See [Memory model](#memory-model) for the per-call arena allocator.
+**Explicit creation:**
+
+```zig
+const obj = try env.createObject();
+const arr = try env.createArray();
+const arr2 = try env.createArrayWithLength(10);
+const str = try env.createString("hello");
+const num = try env.createInt32(42);
+const big = try env.createBigintUint64(999);
+const b = try env.createBoolean(true);
+const n = try env.createNull();
+const u = try env.createUndefined();
+const g = try env.getGlobal();
+```
+
+**Buffers and TypedArrays:**
+
+```zig
+// ArrayBuffer with writable Zig slice
+const ab = try env.createArrayBuffer(1024);
+ab.data[0] = 0xff;  // write directly
+
+// Node.js Buffer
+const buf = try env.createBuffer(256);
+
+// TypedArray view over an ArrayBuffer
+const typed = try env.createTypedArray(.uint8_array, 1024, ab.val, 0);
+
+// ArrayBuffer backed by external memory
+const ext = try env.createExternalArrayBuffer(ptr, len, finalize_cb, hint);
+```
+
+**Exceptions:**
+
+```zig
+env.throwError("something failed");
+env.throwTypeError("expected string");
+env.throwRangeError("out of bounds");
+try env.throwValue(js_error_val);  // throw an existing JS value
+const pending = env.isExceptionPending();
+```
+
+**References and Promises:**
+
+```zig
+const ref = try env.createReference(val);   // prevent GC
+const p = try env.createPromise();          // Promise + Deferred
+const version = try env.getVersion();       // Node-API version
+```
+
+### Returning values
+
+Standard mode auto-converts return values via `env.toJs`. For types that need manual construction (buffers, objects with dynamic keys, etc.), return `!napi.Val` and build the value yourself:
+
+```zig
+// return a Buffer with raw bytes
+pub fn makeBuffer(env: napi.Env, size: u32) !napi.Val {
+    const buf = try env.createBuffer(size);
+    @memset(buf.data, 0xff);
+    return buf.val;
+}
+
+// return an ArrayBuffer, write into it, return
+pub fn makeArrayBuffer(env: napi.Env, size: u32) !napi.Val {
+    const ab = try env.createArrayBuffer(size);
+    for (ab.data, 0..) |*byte, i| byte.* = @intCast(i % 256);
+    return ab.val;
+}
+
+// return a hand-built object
+pub fn getInfo(env: napi.Env) !napi.Val {
+    const obj = try env.createObject();
+    try obj.setNamedProperty(env, "name", try env.toJs("napi-zig"));
+    try obj.setNamedProperty(env, "version", try env.toJs(1));
+    return obj;
+}
+```
+
+```js
+makeBuffer(4)        // <Buffer ff ff ff ff>
+makeArrayBuffer(4)   // ArrayBuffer { [Uint8Contents]: <00 01 02 03> }
+getInfo()            // { name: "napi-zig", version: 1 }
+```
 
 ### `JsFn`
 
