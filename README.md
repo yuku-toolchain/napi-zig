@@ -92,6 +92,23 @@ pub fn process(env: napi.Env, data: []const u8) !napi.Val {
 }
 ```
 
+For types that need manual construction (buffers, objects with dynamic keys), return `!napi.Val` and build the value yourself:
+
+```zig
+pub fn makeBuffer(env: napi.Env, size: u32) !napi.Val {
+    const buf = try env.createBuffer(size);
+    @memset(buf.data, 0xff);
+    return buf.val;
+}
+
+pub fn getInfo(env: napi.Env) !napi.Val {
+    const obj = try env.createObject();
+    try obj.setNamedProperty(env, "name", try env.toJs("napi-zig"));
+    try obj.setNamedProperty(env, "version", try env.toJs(1));
+    return obj;
+}
+```
+
 ### Raw mode
 
 For full manual control, take `(Env, CallInfo)` as the first two parameters. You extract arguments yourself and return a `Val` directly.
@@ -158,7 +175,7 @@ pub fn variadic(env: napi.Env, info: napi.CallInfo) !napi.Val {
 | Zig type | JS result |
 |---|---|
 | `Val` | Passthrough |
-| Types with `pub fn toJs` | Custom (see below) |
+| Types with `pub fn toJs` | Custom (see [Custom conversion](#custom-conversion)) |
 
 ### JS to Zig (`val.to(env, T)`)
 
@@ -183,7 +200,7 @@ pub fn variadic(env: napi.Env, info: napi.CallInfo) !napi.Val {
 | JS type | Zig type | Notes |
 |---|---|---|
 | String | `[]const u8` | Arena-allocated |
-| String | `enum` | Accepts camelCase or snake_case |
+| String | `enum` | Accepts camelCase or snake_case, invalid values throw TypeError |
 
 **Arrays:**
 
@@ -206,6 +223,40 @@ pub fn variadic(env: napi.Env, info: napi.CallInfo) !napi.Val {
 |---|---|
 | any | `Val` (passthrough) |
 | any | Types with `pub fn fromJs` (custom, see below) |
+
+Type mismatches throw a descriptive `TypeError`:
+
+```
+TypeError: expected string, got number
+TypeError: invalid enum value: 'foo'
+```
+
+### Struct and enum mapping
+
+Struct fields are matched by camelCase name. Default values are respected for missing properties:
+
+```zig
+const Options = struct {
+    file_path: []const u8,
+    line_count: i32,
+    verbose: bool = false,
+};
+
+pub fn compile(opts: Options) ![]const u8 { ... }
+```
+
+```js
+compile({ filePath: "main.zig", lineCount: 100 })
+// verbose defaults to false
+```
+
+Enums map to/from strings. Both camelCase and snake_case accepted on input:
+
+```js
+log("warning", "disk almost full")
+log("errorLevel", "out of memory")  // camelCase also works
+log("invalid", "...")               // TypeError: invalid enum value: 'invalid'
+```
 
 ### Custom conversion
 
@@ -240,153 +291,54 @@ const Color = union(enum) {
 
 Works for structs too. If a struct has a `toJs` or `fromJs` method, it takes priority over the default field-by-field conversion.
 
-## Core types
+## API reference
 
 ### `Val`
 
-A JS value handle.
+A JS value handle. One method per concern:
 
-**Conversion:**
-
-```zig
-const name = try val.to(env, []const u8);
-const opts = try val.to(env, MyStruct);
-```
-
-**Property and element access:**
-
-```zig
-const obj = try env.createObject();
-try obj.setNamedProperty(env, "key", try env.toJs("value"));
-const prop = try obj.getNamedProperty(env, "key");
-const has = try obj.hasNamedProperty(env, "key");
-
-// dynamic keys
-try obj.setProperty(env, key_val, value_val);
-const val = try obj.getProperty(env, key_val);
-
-// array elements
-try arr.setElement(env, 0, try env.toJs(42));
-const item = try arr.getElement(env, 0);
-const len = try arr.getArrayLength(env);
-```
-
-**Type inspection:**
-
-```zig
-const vtype = try val.typeOf(env); // .string, .number, .object, .function, ...
-const is_arr = try val.isArray(env);
-const is_buf = try val.isBuffer(env);
-const is_ab = try val.isArrayBuffer(env);
-const is_ta = try val.isTypedArray(env);
-```
-
-**Buffer data access:**
-
-```zig
-const ab_bytes = try val.getArrayBufferData(env);  // []u8 into ArrayBuffer
-const buf_bytes = try val.getBufferData(env);       // []u8 into Node.js Buffer
-```
+| Method | Purpose |
+|---|---|
+| `to(env, T)` | Convert to any supported Zig type |
+| `typeOf(env)` | Returns `.string`, `.number`, `.object`, `.function`, etc. |
+| `isArray(env)`, `isBuffer(env)`, `isArrayBuffer(env)`, `isTypedArray(env)` | Type checks |
+| `getProperty(env, key)`, `setProperty(env, key, val)` | Dynamic key access |
+| `getNamedProperty(env, key)`, `setNamedProperty(env, key, val)` | Compile-time string key access |
+| `hasNamedProperty(env, key)` | Property existence check |
+| `getElement(env, i)`, `setElement(env, i, val)` | Array index access |
+| `getArrayLength(env)` | Array length |
+| `getArrayBufferData(env)` | `[]u8` into an ArrayBuffer's backing memory |
+| `getBufferData(env)` | `[]u8` into a Node.js Buffer's backing memory |
 
 ### `Env`
 
-The Node-API environment handle. Provides the per-call arena (see [Memory model](#memory-model)), value creation, and exception throwing.
+The Node-API environment. Provides value creation, the per-call arena, and exception handling.
 
-**Conversion (inferred):**
-
-```zig
-const js_val = try env.toJs("hello");    // any supported Zig type
-const js_num = try env.toJs(42);
-const js_arr = try env.toJs(&[_]i32{ 1, 2, 3 });
-```
-
-**Explicit creation:**
-
-```zig
-const obj = try env.createObject();
-const arr = try env.createArray();
-const arr2 = try env.createArrayWithLength(10);
-const str = try env.createString("hello");
-const num = try env.createInt32(42);
-const big = try env.createBigintUint64(999);
-const b = try env.createBoolean(true);
-const n = try env.createNull();
-const u = try env.createUndefined();
-const g = try env.getGlobal();
-```
-
-**Buffers and TypedArrays:**
-
-```zig
-// ArrayBuffer with writable Zig slice
-const ab = try env.createArrayBuffer(1024);
-ab.data[0] = 0xff;  // write directly
-
-// Node.js Buffer
-const buf = try env.createBuffer(256);
-
-// TypedArray view over an ArrayBuffer
-const typed = try env.createTypedArray(.uint8_array, 1024, ab.val, 0);
-
-// ArrayBuffer backed by external memory
-const ext = try env.createExternalArrayBuffer(ptr, len, finalize_cb, hint);
-```
-
-**Exceptions:**
-
-```zig
-env.throwError("something failed");
-env.throwTypeError("expected string");
-env.throwRangeError("out of bounds");
-try env.throwValue(js_error_val);  // throw an existing JS value
-const pending = env.isExceptionPending();
-```
-
-**References and Promises:**
-
-```zig
-const ref = try env.createReference(val);   // prevent GC
-const p = try env.createPromise();          // Promise + Deferred
-const version = try env.getVersion();       // Node-API version
-```
-
-### Returning values
-
-Standard mode auto-converts return values via `env.toJs`. For types that need manual construction (buffers, objects with dynamic keys, etc.), return `!napi.Val` and build the value yourself:
-
-```zig
-// return a Buffer with raw bytes
-pub fn makeBuffer(env: napi.Env, size: u32) !napi.Val {
-    const buf = try env.createBuffer(size);
-    @memset(buf.data, 0xff);
-    return buf.val;
-}
-
-// return an ArrayBuffer, write into it, return
-pub fn makeArrayBuffer(env: napi.Env, size: u32) !napi.Val {
-    const ab = try env.createArrayBuffer(size);
-    for (ab.data, 0..) |*byte, i| byte.* = @intCast(i % 256);
-    return ab.val;
-}
-
-// return a hand-built object
-pub fn getInfo(env: napi.Env) !napi.Val {
-    const obj = try env.createObject();
-    try obj.setNamedProperty(env, "name", try env.toJs("napi-zig"));
-    try obj.setNamedProperty(env, "version", try env.toJs(1));
-    return obj;
-}
-```
-
-```js
-makeBuffer(4)        // <Buffer ff ff ff ff>
-makeArrayBuffer(4)   // ArrayBuffer { [Uint8Contents]: <00 01 02 03> }
-getInfo()            // { name: "napi-zig", version: 1 }
-```
+| Method | Purpose |
+|---|---|
+| `toJs(value)` | Convert any Zig type to JS (inferred) |
+| `createBoolean`, `createInt32`, `createUint32`, `createInt64`, `createFloat64` | Primitives |
+| `createBigintInt64`, `createBigintUint64` | BigInt |
+| `createString([]const u8)`, `createStringZ([*:0]const u8)` | Strings |
+| `createNull`, `createUndefined`, `getGlobal` | Singletons |
+| `createObject`, `createArray`, `createArrayWithLength` | Containers |
+| `createArrayBuffer(len)` | Returns `{ .val, .data }` (JS value + writable `[]u8`) |
+| `createBuffer(len)` | Node.js Buffer, returns `{ .val, .data }` |
+| `createTypedArray(type, len, arraybuffer, offset)` | TypedArray view |
+| `createExternalArrayBuffer(ptr, len, finalize_cb, hint)` | Externally-owned memory |
+| `createFunction(name, callback)` | Native-backed JS function |
+| `createReference(val)` | Strong GC reference, returns `Ref` |
+| `createPromise()` | Returns `{ .promise, .deferred }` |
+| `runWorker(name, context)` | Background work, returns Promise |
+| `throwError`, `throwTypeError`, `throwRangeError` | Throw exceptions |
+| `throwValue(val)` | Throw an existing JS value |
+| `isExceptionPending()` | Check for pending exception |
+| `getVersion()` | Node-API version |
+| `arena` | Per-call `*ArenaAllocator`, see [Memory model](#memory-model) |
 
 ### `JsFn`
 
-A JS function handle. Validated on conversion, throws `TypeError` if the value is not a function.
+A validated JS function handle. Throws `TypeError` if the value is not a function.
 
 ```zig
 pub fn map(env: napi.Env, arr: []napi.Val, callback: napi.JsFn) !napi.Val {
@@ -398,61 +350,15 @@ pub fn map(env: napi.Env, arr: []napi.Val, callback: napi.JsFn) !napi.Val {
 }
 ```
 
-Use `callWith` for a specific `this` binding:
-
-```zig
-const result = try callback.callWith(env, this_obj, &.{arg});
-```
-
-### `ThreadsafeFn`
-
-A thread-safe wrapper for calling a JS function from any thread. Node.js is single-threaded, so you cannot call N-API from a spawned thread directly. `ThreadsafeFn` queues calls back to the main thread safely.
-
-Parameterized by the data type passed to the callback. Created from a `JsFn` via `.threadsafe(env, name, T)`. Must be released when done.
-
-```zig
-pub fn startWorkers(env: napi.Env, callback: napi.JsFn) !void {
-    const tsfn = try callback.threadsafe(env, "workers", u32);
-
-    for (0..4) |i| {
-        try tsfn.acquire();
-        
-        const thread = try std.Thread.spawn(.{}, struct {
-            fn run(ts: napi.ThreadsafeFn(u32), id: u32) void {
-                defer ts.release() catch {};
-                ts.call(id, .blocking) catch {};
-            }
-        }.run, .{ tsfn, @as(u32, @intCast(i)) });
-        
-        thread.detach();
-    }
-    
-    try tsfn.release(); // release initial ref, threads hold theirs
-}
-```
-
-```js
-startWorkers((id) => console.log("worker", id, "done"))
-// worker 0 done
-// worker 2 done
-// worker 1 done
-// worker 3 done  (order varies)
-```
-
-Use `void` as the type for signal-only callbacks with no data:
-
-```zig
-const tsfn = try callback.threadsafe(env, "signal", void);
-// from another thread:
-tsfn.call({}, .blocking) catch {};
-```
-
-> [!TIP]
-> Use `ThreadsafeFn` when you need to call into JS **multiple times** from a background thread (progress, events, streaming). For one-shot background work that returns a single result, use `env.runWorker` instead.
+| Method | Purpose |
+|---|---|
+| `call(env, args)` | Call with `undefined` as `this` |
+| `callWith(env, this, args)` | Call with specific `this` binding |
+| `threadsafe(env, name, T)` | Create a `ThreadsafeFn(T)` for cross-thread calls |
 
 ### `Ref`
 
-A strong reference to a JS value, preventing garbage collection.
+A strong reference preventing garbage collection.
 
 ```zig
 const ref = try env.createReference(some_val);
@@ -466,11 +372,8 @@ Each function call receives an `Env` with a per-call `ArenaAllocator`, similar t
 
 ```zig
 pub fn process(env: napi.Env, input: []const u8) ![]const u8 {
-    // `input` lives on env.arena (converted from JS string)
-    // use the same arena for your own allocations
     const alloc = env.arena.allocator();
     return try std.fmt.allocPrint(alloc, "processed: {s}", .{input});
-    // arena freed on return, no manual cleanup
 }
 ```
 
@@ -496,7 +399,7 @@ divide(1, 0)    // Error: DivisionByZero
 divide("x", 1)  // TypeError: expected number, got string
 ```
 
-## Async patterns
+## Async
 
 ### Workers
 
@@ -504,8 +407,6 @@ divide("x", 1)  // TypeError: expected number, got string
 
 - `compute(*Self) void` runs on a worker thread (no env, no JS calls)
 - `resolve(*Self, Env) !T` runs on the main thread, return value becomes the promise result
-
-The struct is heap-allocated and lives across both phases. You can allocate data in `compute` and clean it up in `resolve`.
 
 ```zig
 const FibWork = struct {
@@ -537,29 +438,57 @@ const result = await asyncFib(10) // 55
 
 If `resolve` returns an error, the promise is rejected with the error name.
 
-**Memory in workers:** the worker context is copied to the heap before the function returns, so arena-allocated data (like `[]const u8` from JS strings) will be dangling by the time `compute` runs. Copy what you need to `std.heap.c_allocator` first:
+**Memory in workers:** the worker context is copied to the heap before the function returns, so arena-allocated data (like `[]const u8` from JS strings) will be dangling by the time `compute` runs. Copy what you need first:
 
 ```zig
-const ParseWork = struct {
-    source: []const u8,        // owned copy, not arena
-    result: []const u8 = &.{},
-
-    pub fn compute(self: *ParseWork) void {
-        // safe to read self.source here
-    }
-
-    pub fn resolve(self: *ParseWork, env: napi.Env) !napi.Val {
-        defer std.heap.c_allocator.free(self.source);
-        return env.toJs(self.result);
-    }
-};
-
 pub fn asyncParse(env: napi.Env, source: []const u8) !napi.Val {
-    // copy arena string to long-lived allocator
     const owned = try std.heap.c_allocator.dupe(u8, source);
     return env.runWorker("parse", ParseWork{ .source = owned });
 }
 ```
+
+### ThreadsafeFn
+
+`ThreadsafeFn(T)` calls a JS function from any thread, passing a typed value. Node.js is single-threaded, so you cannot call N-API from a spawned thread directly. ThreadsafeFn queues calls back to the main thread safely.
+
+```zig
+pub fn startWorkers(env: napi.Env, callback: napi.JsFn) !void {
+    const tsfn = try callback.threadsafe(env, "workers", u32);
+
+    for (0..4) |i| {
+        try tsfn.acquire();
+        const thread = try std.Thread.spawn(.{}, struct {
+            fn run(ts: napi.ThreadsafeFn(u32), id: u32) void {
+                defer ts.release() catch {};
+                ts.call(id, .blocking) catch {};
+            }
+        }.run, .{ tsfn, @as(u32, @intCast(i)) });
+        thread.detach();
+    }
+    try tsfn.release();
+}
+```
+
+```js
+startWorkers((id) => console.log("worker", id, "done"))
+// worker 0 done
+// worker 2 done
+// worker 1 done
+// worker 3 done  (order varies)
+```
+
+Use `void` for signal-only callbacks with no data: `callback.threadsafe(env, "signal", void)`.
+
+| Method | Purpose |
+|---|---|
+| `call(value, mode)` | Queue a call from any thread (`.blocking` or `.non_blocking`) |
+| `release()` | Release this thread's reference |
+| `abort()` | Release and reject pending calls |
+| `acquire()` | Register an additional thread |
+| `ref(env)` / `unref(env)` | Control whether the event loop stays alive |
+
+> [!TIP]
+> Use `ThreadsafeFn` when you need to call into JS **multiple times** from a background thread (progress, events, streaming). For one-shot background work that returns a single result, use `env.runWorker` instead.
 
 ### Promises
 
@@ -568,50 +497,12 @@ For cases where you need a Promise without a background thread, use `env.createP
 ```zig
 pub fn delayed(env: napi.Env) !napi.Val {
     const p = try env.createPromise();
-    // resolve immediately (in practice, resolve later from a callback or timer)
     try p.deferred.resolve(env, try env.toJs(42));
     return p.promise;
 }
 ```
 
-## Struct mapping
-
-Zig structs map to JS objects with camelCase field names. Default field values are respected for missing properties.
-
-```zig
-const Options = struct {
-    file_path: []const u8,
-    line_count: i32,
-    verbose: bool = false,
-};
-
-pub fn compile(opts: Options) ![]const u8 {
-    // opts.file_path, opts.line_count, opts.verbose
-}
-```
-
-```js
-compile({ filePath: "main.zig", lineCount: 100 })
-// verbose defaults to false
-```
-
-## Enum mapping
-
-Zig enums map to JS strings. Both camelCase and snake_case are accepted on input. Invalid values throw a `TypeError`.
-
-```zig
-const Level = enum { debug, info, warning, error_level };
-
-pub fn log(level: Level, msg: []const u8) void {
-    // ...
-}
-```
-
-```js
-log("warning", "disk almost full")
-log("errorLevel", "out of memory")  // camelCase also works
-log("invalid", "...")               // TypeError: invalid enum value: 'invalid'
-```
+`Deferred` has two methods: `resolve(env, val)` and `reject(env, val)`. Both consume the handle.
 
 ## License
 
