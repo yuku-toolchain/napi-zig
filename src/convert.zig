@@ -3,7 +3,7 @@ const c = @import("c.zig");
 const Env = @import("env.zig").Env;
 const val_mod = @import("val.zig");
 const Val = val_mod.Val;
-const JsFn = val_mod.JsFn;
+const Callback = val_mod.Callback;
 const check = val_mod.check;
 const util = @import("util.zig");
 
@@ -111,7 +111,7 @@ pub fn toJs(comptime T: type, env: Env, value: T) !Val {
 // - []T         <- Array (allocated on env.arena)
 // - tuples      <- Array (by index)
 // - structs     <- Object (camelCase, defaults respected) or custom via fromJs method
-// - JsFn        <- Function (validated, wrapped)
+// - Callback        <- Function (validated, wrapped)
 // - Val         <- passthrough
 pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
     return switch (@typeInfo(T)) {
@@ -207,7 +207,7 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
         },
         .@"struct" => |info| {
             if (T == Val) return value;
-            if (T == JsFn) {
+            if (T == Callback) {
                 const vtype = try value.typeOf(env);
                 if (vtype != .function) {
                     var buf: [128]u8 = undefined;

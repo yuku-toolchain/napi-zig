@@ -215,7 +215,7 @@ pub fn variadic(env: napi.Env, info: napi.CallInfo) !napi.Val {
 | JS type | Zig type | Notes |
 |---|---|---|
 | Object | `struct` | camelCase field matching, defaults respected |
-| Function | `JsFn` | Validated, throws TypeError if not a function |
+| Function | `Callback` | Validated, throws TypeError if not a function |
 
 **Special:**
 
@@ -336,26 +336,6 @@ The Node-API environment. Provides value creation, the per-call arena, and excep
 | `getVersion()` | Node-API version |
 | `arena` | Per-call `*ArenaAllocator`, see [Memory model](#memory-model) |
 
-### `JsFn`
-
-A validated JS function handle. Throws `TypeError` if the value is not a function.
-
-```zig
-pub fn map(env: napi.Env, arr: []napi.Val, callback: napi.JsFn) !napi.Val {
-    const result = try env.createArray();
-    for (arr, 0..) |item, i| {
-        try result.setElement(env, @intCast(i), try callback.call(env, &.{item}));
-    }
-    return result;
-}
-```
-
-| Method | Purpose |
-|---|---|
-| `call(env, args)` | Call with `undefined` as `this` |
-| `callWith(env, this, args)` | Call with specific `this` binding |
-| `threadsafe(env, name, T)` | Create a `ThreadsafeFn(T)` for cross-thread calls |
-
 ### `Ref`
 
 A strong reference preventing garbage collection.
@@ -365,6 +345,39 @@ const ref = try env.createReference(some_val);
 defer ref.delete(env) catch {};
 const val = try ref.value(env);
 ```
+
+## Callbacks
+
+Accept a JS function as a parameter by using `napi.Callback`. It is validated on conversion, if the JS value is not a function, a `TypeError` is thrown.
+
+```zig
+pub fn forEach(env: napi.Env, arr: []napi.Val, callback: napi.Callback) !void {
+    for (arr) |item| {
+        _ = try callback.call(env, &.{item});
+    }
+}
+```
+
+```js
+forEach([1, 2, 3], (item) => console.log(item))
+// 1
+// 2
+// 3
+```
+
+Use `callWith` when you need a specific `this` binding:
+
+```zig
+const result = try callback.callWith(env, this_obj, &.{arg1, arg2});
+```
+
+To call a callback from a background thread, convert it to a `ThreadsafeFn` first (see [ThreadsafeFn](#threadsafefn)).
+
+| Method | Purpose |
+|---|---|
+| `call(env, args)` | Call with `undefined` as `this` |
+| `callWith(env, this, args)` | Call with specific `this` binding |
+| `threadsafe(env, name, T)` | Create a `ThreadsafeFn(T)` for cross-thread calls |
 
 ## Memory model
 
@@ -452,7 +465,7 @@ pub fn asyncParse(env: napi.Env, source: []const u8) !napi.Val {
 `ThreadsafeFn(T)` calls a JS function from any thread, passing a typed value. Node.js is single-threaded, so you cannot call N-API from a spawned thread directly. ThreadsafeFn queues calls back to the main thread safely.
 
 ```zig
-pub fn startWorkers(env: napi.Env, callback: napi.JsFn) !void {
+pub fn startWorkers(env: napi.Env, callback: napi.Callback) !void {
     const tsfn = try callback.threadsafe(env, "workers", u32);
 
     for (0..4) |i| {

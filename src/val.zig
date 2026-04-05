@@ -13,7 +13,7 @@ pub const Val = struct {
     /// Converts this JS value to any supported Zig type.
     ///
     /// Supports bool, integers, floats, optionals, enums, `[]const u8`,
-    /// `[]T`, structs, `JsFn`, and `Val` (passthrough). Slices and
+    /// `[]T`, structs, `Callback`, and `Val` (passthrough). Slices and
     /// strings are allocated on `env.arena`.
     pub fn to(self: Val, env: Env, comptime T: type) !T {
         return convert.fromJs(T, env, self);
@@ -121,25 +121,26 @@ pub const Val = struct {
     }
 };
 
-/// A handle to a JS function value.
+/// A JS callback function handle.
 ///
-/// Wraps a `Val` verified as a function. Use `call` to invoke with
-/// `undefined` as `this`, or `callWith` for a specific `this` binding.
-pub const JsFn = struct {
+/// Validated on conversion from JS, throws TypeError if the value is
+/// not a function. Use `call` to invoke, `callWith` for a specific
+/// `this` binding, or `threadsafe` to call from background threads.
+pub const Callback = struct {
     val: Val,
 
     /// Calls the function with `undefined` as `this`.
-    pub fn call(self: JsFn, env: Env, args: []const Val) !Val {
+    pub fn call(self: Callback, env: Env, args: []const Val) !Val {
         const undef = try env.createUndefined();
         return self.invoke(env, undef, args);
     }
 
     /// Calls the function with a specific `this` binding.
-    pub fn callWith(self: JsFn, env: Env, this: Val, args: []const Val) !Val {
+    pub fn callWith(self: Callback, env: Env, this: Val, args: []const Val) !Val {
         return self.invoke(env, this, args);
     }
 
-    fn invoke(self: JsFn, env: Env, this: Val, args: []const Val) !Val {
+    fn invoke(self: Callback, env: Env, this: Val, args: []const Val) !Val {
         var result: c.napi_value = undefined;
         try check(c.napi_call_function(
             env.raw,
@@ -155,7 +156,7 @@ pub const JsFn = struct {
     /// Creates a threadsafe version of this function that can be called
     /// from any thread. Pass the data type the callback will receive,
     /// or `void` for no data. Call `release()` when done.
-    pub fn threadsafe(self: JsFn, env: Env, comptime name: [*:0]const u8, comptime T: type) !ThreadsafeFn(T) {
+    pub fn threadsafe(self: Callback, env: Env, comptime name: [*:0]const u8, comptime T: type) !ThreadsafeFn(T) {
         var name_val: c.napi_value = undefined;
         try check(c.napi_create_string_utf8(env.raw, name, c.NAPI_AUTO_LENGTH, &name_val));
         var result: c.napi_threadsafe_function = undefined;
@@ -179,7 +180,7 @@ pub const JsFn = struct {
 /// A thread-safe wrapper around a JS function, parameterized by the
 /// data type passed to the callback. Use `void` for no data.
 ///
-/// Created via `JsFn.threadsafe(env, name, T)`. Must be released when done.
+/// Created via `Callback.threadsafe(env, name, T)`. Must be released when done.
 pub fn ThreadsafeFn(comptime T: type) type {
     return struct {
         raw: c.napi_threadsafe_function,

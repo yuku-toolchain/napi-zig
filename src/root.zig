@@ -4,7 +4,7 @@ pub const Env = @import("env.zig").Env;
 
 const val_mod = @import("val.zig");
 pub const Val = val_mod.Val;
-pub const JsFn = val_mod.JsFn;
+pub const Callback = val_mod.Callback;
 pub const ThreadsafeFn = val_mod.ThreadsafeFn;
 pub const CallInfo = val_mod.CallInfo;
 pub const Ref = val_mod.Ref;
@@ -20,7 +20,7 @@ pub const Deferred = val_mod.Deferred;
 ///
 /// Standard mode with `Env` for callbacks, allocations, or manual JS creation:
 ///
-///     pub fn greet(env: napi.Env, callback: napi.JsFn, name: []const u8) !napi.Val {
+///     pub fn greet(env: napi.Env, callback: napi.Callback, name: []const u8) !napi.Val {
 ///         return callback.call(env, &.{try env.toJs(name)});
 ///     }
 ///
