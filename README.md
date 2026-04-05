@@ -7,7 +7,7 @@ Write [Node.js native addons](https://nodejs.org/api/n-api.html) in Zig. Cross-c
 **1. Add the dependency**
 
 ```sh
-zig fetch --save https://github.com/aspect-build/napi-zig/archive/<commit>.tar.gz
+zig fetch --save git+https://github.com/yuku-toolchain/napi-zig.git/#HEAD
 ```
 
 **2. Configure the build**
@@ -199,18 +199,16 @@ A thread-safe wrapper for calling a JS function from any thread. Node.js is sing
 Created from a `JsFn` via `.threadsafe(env, name)`. Must be released when done.
 
 ```zig
-pub fn startWork(env: napi.Env, on_done: napi.JsFn) !void {
-    const tsfn = try on_done.threadsafe(env, "worker");
+pub fn withProgress(env: napi.Env, on_tick: napi.JsFn) !void {
+    const tsfn = try on_tick.threadsafe(env, "progress");
 
     const thread = try std.Thread.spawn(.{}, struct {
         fn run(ts: napi.ThreadsafeFn) void {
             defer ts.release() catch {};
-
-            // do expensive work on this thread...
-
-            // queue the JS callback on the main thread
-            // null = no data (for custom call_js, see napi.c)
-            ts.call(null, .non_blocking) catch {};
+            for (0..10) |_| {
+                std.time.sleep(100 * std.time.ns_per_ms);
+                ts.call(null, .blocking) catch break;
+            }
         }
     }.run, .{tsfn});
 
@@ -219,8 +217,12 @@ pub fn startWork(env: napi.Env, on_done: napi.JsFn) !void {
 ```
 
 ```js
-startWork(() => console.log("done!"))
+withProgress(() => console.log("tick"))
+// prints "tick" 10 times, ~100ms apart
 ```
+
+> [!TIP]
+> Use `ThreadsafeFn` when you need to call into JS **multiple times** from a background thread (progress, events, streaming). For one-shot background work that returns a single result, use `env.runWorker` instead.
 
 ### `Ref`
 
