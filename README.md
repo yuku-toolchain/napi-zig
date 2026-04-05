@@ -110,39 +110,109 @@ pub fn variadic(env: napi.Env, info: napi.CallInfo) !napi.Val {
 
 ### Zig to JS (`env.toJs`)
 
+**Constants:**
+
 | Zig type | JS result |
 |---|---|
 | `bool` | Boolean |
-| `i8`..`i32`, `u8`..`u32` | Number |
-| `i33`..`i53`, `u33`..`u53` | Number (f64) |
-| `i54`..`i64` | BigInt |
-| `u54`..`u64` | BigInt |
-| `f16`, `f32`, `f64` | Number |
-| `?T` | T or `null` |
-| `enum` | String (tag name) |
-| `[]const u8` | String |
-| `[N]T` | Array (fixed-size) |
-| `[]T` | Array |
-| `struct { S, T }` | Array (tuple) |
-| `struct` | Object (snake_case to camelCase) |
 | `void` | `undefined` |
+| `?T` | inner value or `null` |
+
+**Numbers:**
+
+| Zig type | JS result | Notes |
+|---|---|---|
+| `comptime_int` | Number | Compiler-checked to fit f64 |
+| `comptime_float` | Number | |
+| `i1`..`i32` | Number | |
+| `u1`..`u32` | Number | |
+| `i33`..`i53`, `u33`..`u53` | Number | Via f64, within safe integer range |
+| `i54`..`i64` | BigInt | |
+| `u54`..`u64` | BigInt | |
+| `f16`, `f32`, `f64` | Number | Cast to f64 |
+
+**Strings:**
+
+| Zig type | JS result |
+|---|---|
+| `[]const u8`, `[:0]const u8` | String |
+| `*const [N:0]u8` | String (string literals) |
+
+**Arrays:**
+
+| Zig type | JS result |
+|---|---|
+| `[N]T` | Array (fixed-size) |
+| `[]T`, `[]const T` | Array (slice) |
+| `struct { S, T }` | Array (tuple) |
+
+**Objects:**
+
+| Zig type | JS result |
+|---|---|
+| `enum` | String (tag name) |
+| `struct { foo: S, bar: T }` | Object (field names snake_case to camelCase) |
+
+**Special:**
+
+| Zig type | JS result |
+|---|---|
+| `Val` | Passthrough |
+| Types with `pub fn toJs` | Custom (see below) |
 
 ### JS to Zig (`val.to(env, T)`)
+
+**Constants:**
 
 | JS type | Zig type |
 |---|---|
 | Boolean | `bool` |
-| Number | `i8`..`i64`, `u8`..`u32`, `f16`..`f64` |
-| BigInt | `u33`..`u64` |
-| String | `[]const u8` (arena-allocated) |
-| String | `enum` (camelCase or snake_case) |
-| Array | `[N]T` (fixed-size) |
-| Array | `[]T` (arena-allocated) |
-| Array | `struct { S, T }` (tuple, by index) |
-| Object | `struct` (camelCase field matching) |
-| Function | `JsFn` (validated) |
+| null, undefined | `?T` returns `null` |
+
+**Numbers:**
+
+| JS type | Zig type | Notes |
+|---|---|---|
+| Number | `i1`..`i32`, `u1`..`u32` | Validated by N-API |
+| Number | `i33`..`i53`, `u33`..`u53` | Via i64/f64 |
+| Number | `f16`, `f32`, `f64` | Cast from f64 |
+| BigInt | `i54`..`i64`, `u54`..`u64` | |
+
+**Strings:**
+
+| JS type | Zig type | Notes |
+|---|---|---|
+| String | `[]const u8` | Arena-allocated |
+| String | `enum` | Accepts camelCase or snake_case |
+
+**Arrays:**
+
+| JS type | Zig type | Notes |
+|---|---|---|
+| Array | `[N]T` | Fixed-size, elements converted by index |
+| Array | `[]T` | Arena-allocated |
+| Array | `struct { S, T }` | Tuple, elements converted by index |
+
+**Objects:**
+
+| JS type | Zig type | Notes |
+|---|---|---|
+| Object | `struct` | camelCase field matching, defaults respected |
+| Function | `JsFn` | Validated, throws TypeError if not a function |
+
+**Special:**
+
+| JS type | Zig type |
+|---|---|
 | any | `Val` (passthrough) |
-| null/undefined | `?T` returns `null` |
+| any | Types with `pub fn fromJs` (custom, see below) |
+
+Type mismatches throw a descriptive `TypeError`:
+
+```
+TypeError: expected string, got number
+TypeError: invalid enum value: 'foo'
+```
 
 ### Custom conversion
 
