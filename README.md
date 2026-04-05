@@ -139,10 +139,6 @@ pub fn variadic(env: napi.Env, info: napi.CallInfo) !napi.Val {
 
 Type mismatches throw a descriptive `TypeError`:
 
-```
-TypeError: expected string, got number
-```
-
 ## Core types
 
 ### `Val`
@@ -178,7 +174,7 @@ env.throwTypeError("something went wrong");
 
 ### `JsFn`
 
-A handle to a JS function. Validated on conversion (throws `TypeError` if the value is not a function).
+A handle to a JS function.
 
 ```zig
 pub fn forEach(env: napi.Env, arr: []napi.Val, callback: napi.JsFn) !void {
@@ -363,42 +359,6 @@ pub fn log(level: Level, msg: []const u8) void {
 log("warning", "disk almost full")
 log("errorLevel", "out of memory")  // camelCase also works
 ```
-
-## Build options
-
-### Single platform (development)
-
-```zig
-const lib = napi_zig.addLib(b, napi_dep, .{
-    .name = "my-addon",
-    .root = b.path("src/main.zig"),
-    .target = target,
-    .optimize = optimize,
-    .imports = &.{
-        .{ .name = "my_lib", .module = my_module },
-    },
-});
-```
-
-The `.imports` field lets you pass additional Zig modules to the napi build, so your napi entry point can `@import("my_lib")`.
-
-### Cross-platform (production)
-
-```zig
-napi_zig.addPack(b, napi_dep, .{
-    .output = "npm",
-    .entries = &.{
-        .{
-            .name = "my-addon",
-            .scope = "@my-scope",
-            .version = "1.0.0",
-            .root = b.path("src/main.zig"),
-        },
-    },
-});
-```
-
-Builds for all supported platforms (macOS arm64/x64, Linux x64 gnu/musl, Windows x64) and generates npm packages with a runtime loader that selects the correct binary.
 
 ## License
 
