@@ -12,10 +12,12 @@
   "scripts": {
     "build": "bunup",
     "dev": "bunup --watch",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "publish": "bumpp -r --commit 'npm %s' --push --tag --yes --release 'patch'"
   },
   "devDependencies": {
     "@types/bun": "^1.3.11",
+    "bumpp": "^11.0.1",
     "bunup": "^0.16.31",
     "typescript": "^6.0.2"
   },
