@@ -153,8 +153,9 @@ pub const JsFn = struct {
     }
 
     /// Creates a threadsafe version of this function that can be called
-    /// from any thread. Call `release()` when done.
-    pub fn threadsafe(self: JsFn, env: Env, name: [*:0]const u8) !ThreadsafeFn {
+    /// from any thread. Pass the data type the callback will receive,
+    /// or `void` for no data. Call `release()` when done.
+    pub fn threadsafe(self: JsFn, env: Env, comptime name: [*:0]const u8, comptime T: type) !ThreadsafeFn(T) {
         var name_val: c.napi_value = undefined;
         try check(c.napi_create_string_utf8(env.raw, name, c.NAPI_AUTO_LENGTH, &name_val));
         var result: c.napi_threadsafe_function = undefined;
@@ -168,52 +169,80 @@ pub const JsFn = struct {
             null,
             null,
             null,
-            null,
+            if (T == void) null else &ThreadsafeFn(T).callJs,
             &result,
         ));
         return .{ .raw = result };
     }
 };
 
-/// A thread-safe wrapper around a JS function.
+/// A thread-safe wrapper around a JS function, parameterized by the
+/// data type passed to the callback. Use `void` for no data.
 ///
-/// Can be called from any thread to queue a call back to the main JS thread.
-/// Created via `JsFn.threadsafe`. Must be released when no longer needed.
-pub const ThreadsafeFn = struct {
-    raw: c.napi_threadsafe_function,
+/// Created via `JsFn.threadsafe(env, name, T)`. Must be released when done.
+pub fn ThreadsafeFn(comptime T: type) type {
+    return struct {
+        raw: c.napi_threadsafe_function,
 
-    /// Queues a call to the JS function from any thread.
-    pub fn call(self: ThreadsafeFn, data: ?*anyopaque, mode: CallMode) !void {
-        try check(c.napi_call_threadsafe_function(self.raw, data, mode));
-    }
+        const Self = @This();
+        pub const CallMode = c.napi_threadsafe_function_call_mode;
 
-    /// Releases the function. Must be called when done.
-    pub fn release(self: ThreadsafeFn) !void {
-        try check(c.napi_release_threadsafe_function(self.raw, .release));
-    }
+        /// Queues a call to the JS function from any thread.
+        /// The value is converted to JS and passed as the callback argument.
+        pub fn call(self: Self, value: T, mode: CallMode) !void {
+            if (T == void) {
+                try check(c.napi_call_threadsafe_function(self.raw, null, mode));
+            } else {
+                const ptr = try std.heap.c_allocator.create(T);
+                ptr.* = value;
+                if (c.napi_call_threadsafe_function(self.raw, ptr, mode) != .ok) {
+                    std.heap.c_allocator.destroy(ptr);
+                    return error.napi_error;
+                }
+            }
+        }
 
-    /// Aborts the function, rejecting any pending calls.
-    pub fn abort(self: ThreadsafeFn) !void {
-        try check(c.napi_release_threadsafe_function(self.raw, .abort));
-    }
+        /// Releases the function. Must be called when done.
+        pub fn release(self: Self) !void {
+            try check(c.napi_release_threadsafe_function(self.raw, .release));
+        }
 
-    /// Indicates a new thread will use this function.
-    pub fn acquire(self: ThreadsafeFn) !void {
-        try check(c.napi_acquire_threadsafe_function(self.raw));
-    }
+        /// Aborts the function, rejecting any pending calls.
+        pub fn abort(self: Self) !void {
+            try check(c.napi_release_threadsafe_function(self.raw, .abort));
+        }
 
-    /// Prevents this function from keeping the event loop alive.
-    pub fn unref(self: ThreadsafeFn, env: Env) !void {
-        try check(c.napi_unref_threadsafe_function(env.raw, self.raw));
-    }
+        /// Indicates a new thread will use this function.
+        pub fn acquire(self: Self) !void {
+            try check(c.napi_acquire_threadsafe_function(self.raw));
+        }
 
-    /// Allows this function to keep the event loop alive (default).
-    pub fn ref(self: ThreadsafeFn, env: Env) !void {
-        try check(c.napi_ref_threadsafe_function(env.raw, self.raw));
-    }
+        /// Prevents this function from keeping the event loop alive.
+        pub fn unref(self: Self, env: Env) !void {
+            try check(c.napi_unref_threadsafe_function(env.raw, self.raw));
+        }
 
-    pub const CallMode = c.napi_threadsafe_function_call_mode;
-};
+        /// Allows this function to keep the event loop alive (default).
+        pub fn ref(self: Self, env: Env) !void {
+            try check(c.napi_ref_threadsafe_function(env.raw, self.raw));
+        }
+
+        // called on the main thread by Node.js to convert data and invoke the JS callback.
+        fn callJs(raw_env: c.napi_env, js_callback: c.napi_value, _: ?*anyopaque, data: ?*anyopaque) callconv(.c) void {
+            const typed: *T = @ptrCast(@alignCast(data orelse return));
+            defer std.heap.c_allocator.destroy(typed);
+
+            var arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
+            defer arena.deinit();
+            const env: Env = .{ .raw = raw_env, .arena = &arena };
+
+            const js_val = convert.toJs(T, env, typed.*) catch return;
+            const undef = env.createUndefined() catch return;
+            var result: c.napi_value = undefined;
+            _ = c.napi_call_function(raw_env, undef.raw, js_callback, 1, @ptrCast(&js_val.raw), &result);
+        }
+    };
+}
 
 /// A strong reference to a JS value, preventing garbage collection.
 /// Created via `Env.createReference`.

@@ -196,29 +196,43 @@ const result = try callback.callWith(env, this_obj, &.{arg});
 
 A thread-safe wrapper for calling a JS function from any thread. Node.js is single-threaded, so you cannot call N-API from a spawned thread directly. `ThreadsafeFn` queues calls back to the main thread safely.
 
-Created from a `JsFn` via `.threadsafe(env, name)`. Must be released when done.
+Parameterized by the data type passed to the callback. Created from a `JsFn` via `.threadsafe(env, name, T)`. Must be released when done.
 
 ```zig
-pub fn withProgress(env: napi.Env, on_tick: napi.JsFn) !void {
-    const tsfn = try on_tick.threadsafe(env, "progress");
+pub fn startWorkers(env: napi.Env, callback: napi.JsFn) !void {
+    const tsfn = try callback.threadsafe(env, "workers", u32);
 
-    const thread = try std.Thread.spawn(.{}, struct {
-        fn run(ts: napi.ThreadsafeFn) void {
-            defer ts.release() catch {};
-            for (0..10) |_| {
-                std.time.sleep(100 * std.time.ns_per_ms);
-                ts.call(null, .blocking) catch break;
+    for (0..4) |i| {
+        try tsfn.acquire();
+        
+        const thread = try std.Thread.spawn(.{}, struct {
+            fn run(ts: napi.ThreadsafeFn(u32), id: u32) void {
+                defer ts.release() catch {};
+                ts.call(id, .blocking) catch {};
             }
-        }
-    }.run, .{tsfn});
-
-    thread.detach();
+        }.run, .{ tsfn, @as(u32, @intCast(i)) });
+        
+        thread.detach();
+    }
+    
+    try tsfn.release(); // release initial ref, threads hold theirs
 }
 ```
 
 ```js
-withProgress(() => console.log("tick"))
-// prints "tick" 10 times, ~100ms apart
+startWorkers((id) => console.log("worker", id, "done"))
+// worker 0 done
+// worker 2 done
+// worker 1 done
+// worker 3 done  (order varies)
+```
+
+Use `void` as the type for signal-only callbacks with no data:
+
+```zig
+const tsfn = try callback.threadsafe(env, "signal", void);
+// from another thread:
+tsfn.call({}, .blocking) catch {};
 ```
 
 > [!TIP]
