@@ -36,13 +36,13 @@ jobs:
           bun-version: latest
 
       - name: Install dependencies
-        run: cd npm/ && bun install --frozen-lockfile
+        run: cd cli/ && bun install --frozen-lockfile
 
       - name: Build check
         run: zig build check
 
       - name: Build
-        run: cd npm/ && bun run build
+        run: cd cli/ && bun run build
 
       - name: Generate changelog
         run: bunx changelogithub
@@ -55,4 +55,4 @@ jobs:
 
       - name: Publish packages to npm
         run: |
-             (cd npm/ && bun pm pack && npm publish ./*.tgz --access public)
+             (cd cli/ && bun pm pack && npm publish ./*.tgz --access public)
