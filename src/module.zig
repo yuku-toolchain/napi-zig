@@ -21,7 +21,9 @@ fn ModuleInit(comptime Module: type) type {
 
     return struct {
         fn init(raw_env: c.napi_env, exports: c.napi_value) callconv(.c) ?c.napi_value {
-            const env: Env = .{ .raw = raw_env };
+            var arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
+            defer arena.deinit();
+            const env: Env = .{ .raw = raw_env, .arena = &arena };
             register(env, .{ .raw = exports }) catch {
                 if (!env.isExceptionPending()) {
                     env.throwError("napi-zig: module init failed");
@@ -42,7 +44,9 @@ fn ModuleInit(comptime Module: type) type {
                         if (comptime isRawFn(T)) {
                             const S = struct {
                                 fn wrapper(raw_env: c.napi_env, info: c.napi_callback_info) callconv(.c) ?c.napi_value {
-                                    const e: Env = .{ .raw = raw_env };
+                                    var a = std.heap.ArenaAllocator.init(std.heap.c_allocator);
+                                    defer a.deinit();
+                                    const e: Env = .{ .raw = raw_env, .arena = &a };
                                     const result = @field(Module, name)(e, CallInfo{ .raw = info }) catch |err| {
                                         if (!e.isExceptionPending()) e.throwError(@errorName(err));
                                         return null;
@@ -70,11 +74,9 @@ fn ModuleInit(comptime Module: type) type {
     };
 }
 
-/// bridges a single Zig function to a C-callable Node-API callback.
-///
-/// extracts JS arguments via `CallInfo.getArgs`, converts them to zig types
-/// with `convert.fromJs`, calls the user function, and converts the return
-/// value back with `convert.toJs`. errors become js exceptions.
+// bridges a single zig function to a C-callable Node-API callback.
+// extracts JS arguments, converts them to zig types, calls the function,
+// and converts the return value back. errors become JS exceptions.
 fn FnBridge(comptime Module: type, comptime name: []const u8) type {
     const func = @field(Module, name);
     const FnType = @TypeOf(func);
@@ -86,11 +88,12 @@ fn FnBridge(comptime Module: type, comptime name: []const u8) type {
         .error_union => |eu| eu.payload,
         else => ReturnType,
     };
-    const buf_len = if (param_count == 0) 1 else param_count;
 
     return struct {
         fn call(raw_env: c.napi_env, raw_info: c.napi_callback_info) callconv(.c) ?c.napi_value {
-            const env: Env = .{ .raw = raw_env };
+            var arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
+            defer arena.deinit();
+            const env: Env = .{ .raw = raw_env, .arena = &arena };
             const result = invoke(env, .{ .raw = raw_info }) catch {
                 if (!env.isExceptionPending()) {
                     env.throwError("napi-zig: call to '" ++ name ++ "' failed");
@@ -103,14 +106,7 @@ fn FnBridge(comptime Module: type, comptime name: []const u8) type {
         fn invoke(env: Env, info: CallInfo) !Val {
             const arg_count = try info.getArgCount(env);
             const arg_values = try info.getArgs(env, param_count);
-
-            var string_allocs: [buf_len]?StringAlloc = .{null} ** buf_len;
-
-            defer for (&string_allocs) |*sa| {
-                if (sa.*) |s| s.deinit();
-            };
-
-            const args = try convertArgs(env, arg_values, &string_allocs, arg_count);
+            const args = try convertArgs(env, arg_values, arg_count);
 
             const result = @call(.auto, func, args);
 
@@ -125,7 +121,7 @@ fn FnBridge(comptime Module: type, comptime name: []const u8) type {
             return convert.toJs(Payload, env, value);
         }
 
-        fn convertArgs(env: Env, argv: [param_count]Val, string_allocs: []?StringAlloc, argc: usize) !std.meta.ArgsTuple(FnType) {
+        fn convertArgs(env: Env, argv: [param_count]Val, argc: usize) !std.meta.ArgsTuple(FnType) {
             var args: std.meta.ArgsTuple(FnType) = undefined;
             inline for (0..param_count) |i| {
                 const T = params[i].type.?;
@@ -138,10 +134,6 @@ fn FnBridge(comptime Module: type, comptime name: []const u8) type {
                         env.throwTypeError("expected " ++ std.fmt.comptimePrint("{d}", .{param_count}) ++ " arguments");
                         return error.napi_error;
                     }
-                } else if (T == []const u8 or T == []u8) {
-                    const str = try argv[i].allocString(env, std.heap.c_allocator);
-                    string_allocs[i] = .{ .bytes = str, .allocator = std.heap.c_allocator };
-                    args[i] = str;
                 } else {
                     args[i] = try convert.fromJs(T, env, argv[i]);
                 }
@@ -151,20 +143,10 @@ fn FnBridge(comptime Module: type, comptime name: []const u8) type {
     };
 }
 
-// owns a heap-allocated string buffer extracted from a JS value.
-const StringAlloc = struct {
-    bytes: []const u8,
-    allocator: std.mem.Allocator,
-
-    fn deinit(self: StringAlloc) void {
-        self.allocator.free(self.bytes);
-    }
-};
-
-/// how a public declaration is exported to js.
+// how a public declaration is exported to js.
 const DeclKind = enum { func, constant, skip };
 
-/// classifies a declaration type for export.
+// classifies a declaration type for export.
 fn classifyDecl(comptime T: type) DeclKind {
     return switch (@typeInfo(T)) {
         .@"fn" => .func,
@@ -185,7 +167,7 @@ fn classifyDecl(comptime T: type) DeclKind {
     };
 }
 
-/// collects the names of all exportable public declarations in `Module`.
+// collects the names of all exportable public declarations.
 fn exportableNames(comptime Module: type) []const []const u8 {
     const decls = @typeInfo(Module).@"struct".decls;
     var names: []const []const u8 = &.{};
@@ -198,8 +180,7 @@ fn exportableNames(comptime Module: type) []const []const u8 {
     return names;
 }
 
-/// returns `true` if `Fn` is a function whose first parameter is `Env`,
-/// indicating it uses the raw-mode calling convention `(Env, CallInfo)`.
+// returns true if the function's first parameter is Env (raw-mode calling convention).
 fn isRawFn(comptime Fn: type) bool {
     const info = @typeInfo(Fn);
     if (info != .@"fn") return false;
@@ -208,8 +189,7 @@ fn isRawFn(comptime Fn: type) bool {
     return if (params[0].type) |T| T == Env else false;
 }
 
-/// returns `true` if every field of struct `T` has a default value,
-/// meaning a zero-argument initializer `.{}` is valid.
+// returns true if every field of the struct has a default value.
 fn isAllDefaults(comptime T: type) bool {
     const info = @typeInfo(T);
     if (info != .@"struct") return false;

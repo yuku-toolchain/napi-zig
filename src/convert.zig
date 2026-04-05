@@ -3,22 +3,21 @@ const Env = @import("env.zig").Env;
 const Val = @import("val.zig").Val;
 const util = @import("util.zig");
 
-/// Converts a Zig value to a JavaScript value.
-///
-/// Supported types:
-/// - `bool`            -> JS `Boolean`
-/// - `comptime_int`    -> JS `Number` (f64)
-/// - integers          -> JS `Number` (up to 53 bits) or `BigInt` (54-64 bits)
-/// - `comptime_float`  -> JS `Number` (f64)
-/// - floats            -> JS `Number`
-/// - `?T`              -> the inner value, or JS `null`
-/// - enums             -> JS `String` (the tag name)
-/// - `*const [N:0]u8`  -> JS `String` (string literals)
-/// - `[]const u8`      -> JS `String` (UTF-8)
-/// - `[]T`             -> JS `Array`
-/// - structs           -> JS `Object` (field names converted to camelCase)
-/// - `Val`             -> passed through as-is
-/// - `void`            -> JS `undefined`
+// converts a Zig value to a JS value.
+//
+// - bool            -> Boolean
+// - comptime_int    -> Number (f64)
+// - integers        -> Number (up to 53 bits) or BigInt (54-64 bits)
+// - comptime_float  -> Number (f64)
+// - floats          -> Number
+// - ?T              -> inner value or null
+// - enums           -> String (tag name)
+// - *const [N:0]u8  -> String (string literals)
+// - []const u8      -> String (UTF-8)
+// - []T             -> Array
+// - structs         -> Object (field names converted to camelCase)
+// - Val             -> passthrough
+// - void            -> undefined
 pub fn toJs(comptime T: type, env: Env, value: T) !Val {
     return switch (@typeInfo(T)) {
         .comptime_int => env.createFloat64(@floatFromInt(value)),
@@ -45,9 +44,7 @@ pub fn toJs(comptime T: type, env: Env, value: T) !Val {
         .optional => if (value) |v| toJs(@typeInfo(T).optional.child, env, v) else env.createNull(),
         .@"enum" => env.createString(@tagName(value)),
         .pointer => |info| {
-            // String slices: []const u8
             if (info.size == .slice and info.child == u8) return env.createString(value);
-            // Generic slices: []T -> JS Array
             if (info.size == .slice) {
                 const arr = try env.createArrayWithLength(@intCast(value.len));
                 for (value, 0..) |item, i| {
@@ -55,7 +52,6 @@ pub fn toJs(comptime T: type, env: Env, value: T) !Val {
                 }
                 return arr;
             }
-            // String literal pointers: *const [N:0]u8, *const [N]u8
             if (info.size == .one) {
                 const child = @typeInfo(info.child);
                 if (child == .array and child.array.child == u8) {
@@ -78,33 +74,33 @@ pub fn toJs(comptime T: type, env: Env, value: T) !Val {
     };
 }
 
-/// Converts a JavaScript value to a Zig type.
-///
-/// Supported types:
-/// - `bool`        <- JS `Boolean`
-/// - integers      <- JS `Number` (up to 32 bits) or `BigInt` (33-64 unsigned)
-/// - floats        <- JS `Number`
-/// - `?T`          <- JS `null`/`undefined` -> Zig `null`, otherwise inner type
-/// - enums         <- JS `String` (accepts camelCase or exact Zig field name)
-/// - structs       <- JS `Object` (field names matched as camelCase, missing
-///                    fields use defaults or produce a `TypeError`)
-/// - `Val`         <- passed through as-is
+// converts a JS value to a Zig type. called by Val.to(env, T).
+//
+// - bool        <- Boolean
+// - integers    <- Number (up to 32 bits) or BigInt (33-64 unsigned)
+// - floats      <- Number
+// - ?T          <- null/undefined -> null, otherwise inner type
+// - enums       <- String (accepts camelCase or exact Zig field name)
+// - []const u8  <- String (allocated on env.arena)
+// - []T         <- Array  (allocated on env.arena)
+// - structs     <- Object (camelCase field matching, defaults respected)
+// - Val         <- passthrough
 pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
     return switch (@typeInfo(T)) {
-        .bool => value.getBoolean(env),
+        .bool => value.toBool(env),
         .int => |info| switch (info.signedness) {
             .signed => switch (info.bits) {
-                0...32 => @intCast(try value.getInt32(env)),
-                33...64 => @intCast(try value.getInt64(env)),
+                0...32 => @intCast(try value.toInt32(env)),
+                33...64 => @intCast(try value.toInt64(env)),
                 else => @compileError("napi-zig: integer too wide: " ++ @typeName(T)),
             },
             .unsigned => switch (info.bits) {
-                0...32 => @intCast(try value.getUint32(env)),
-                33...64 => @intCast(try value.getBigintUint64(env)),
+                0...32 => @intCast(try value.toUint32(env)),
+                33...64 => @intCast(try value.toBigintUint64(env)),
                 else => @compileError("napi-zig: integer too wide: " ++ @typeName(T)),
             },
         },
-        .float => @floatCast(try value.getFloat64(env)),
+        .float => @floatCast(try value.toFloat64(env)),
         .optional => |info| {
             const vtype = try value.typeOf(env);
             if (vtype == .null or vtype == .undefined) return null;
@@ -112,9 +108,8 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
         },
         .@"enum" => |info| {
             var buf: [256]u8 = undefined;
-            const str = try value.getStringIntoBuf(env, &buf);
+            const str = try value.toStringBuf(env, &buf);
             inline for (info.fields) |field| {
-                // accept camelCase (JS convention) or exact zig name
                 if (std.mem.eql(u8, str, comptime util.snakeToCamelSlice(field.name)) or
                     std.mem.eql(u8, str, field.name))
                     return @enumFromInt(field.value);
@@ -122,8 +117,15 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
             return @enumFromInt(info.fields[0].value);
         },
         .pointer => |info| {
-            if (info.size == .slice and info.child == u8) {
-                @compileError("napi-zig: cannot convert JS string to []const u8 without allocator. Use raw mode.");
+            if (info.size == .slice and info.child == u8)
+                return value.toStringAlloc(env, env.arena.allocator());
+            if (info.size == .slice) {
+                const len = try value.getArrayLength(env);
+                const slice = try env.arena.allocator().alloc(info.child, len);
+                for (slice, 0..) |*item, i| {
+                    item.* = try fromJs(info.child, env, try value.getElement(env, @intCast(i)));
+                }
+                return slice;
             }
             @compileError("napi-zig: unsupported pointer type for fromJs: " ++ @typeName(T));
         },

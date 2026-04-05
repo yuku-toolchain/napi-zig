@@ -66,7 +66,7 @@ pub const napi_typedarray_type = enum(c_int) {
     biguint64_array = 10,
 };
 
-/// sentinel value meaning "compute the length automatically from the null terminator".
+// sentinel value meaning "compute the length automatically from the null terminator".
 pub const NAPI_AUTO_LENGTH: usize = @as(usize, @bitCast(@as(isize, -1)));
 
 pub extern fn napi_get_cb_info(env: napi_env, cbinfo: napi_callback_info, argc: *usize, argv: ?[*]napi_value, this_arg: ?*napi_value, data: ?*?*anyopaque) napi_status;
