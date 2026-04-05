@@ -5,98 +5,18 @@ const std = @import("std");
 
 /// A JavaScript value handle, wrapping a raw `napi_value`.
 ///
-/// Use `to*` methods to convert JS values into Zig types,
-/// `get*`/`set*` for property and element access,
-/// and `typeOf`/`is*` for introspection.
+/// Convert to Zig types with `to(env, T)`. Access properties with
+/// `get*`/`set*`. Inspect with `typeOf`/`is*`.
 pub const Val = struct {
     raw: c.napi_value,
 
-    /// Converts this JS value to a Zig type.
+    /// Converts this JS value to any supported Zig type.
     ///
     /// Supports bool, integers, floats, optionals, enums, `[]const u8`,
-    /// `[]T`, structs, and `Val` (passthrough). Slices and strings are
-    /// allocated on `env.arena`.
+    /// `[]T`, structs, `JsFn`, and `Val` (passthrough). Slices and
+    /// strings are allocated on `env.arena`.
     pub fn to(self: Val, env: Env, comptime T: type) !T {
         return convert.fromJs(T, env, self);
-    }
-
-    /// JS Boolean -> `bool`.
-    pub fn toBool(self: Val, env: Env) !bool {
-        var result: bool = undefined;
-        try check(c.napi_get_value_bool(env.raw, self.raw, &result));
-        return result;
-    }
-
-    /// JS Number -> `i32`.
-    pub fn toInt32(self: Val, env: Env) !i32 {
-        var result: i32 = undefined;
-        try check(c.napi_get_value_int32(env.raw, self.raw, &result));
-        return result;
-    }
-
-    /// JS Number -> `u32`.
-    pub fn toUint32(self: Val, env: Env) !u32 {
-        var result: u32 = undefined;
-        try check(c.napi_get_value_uint32(env.raw, self.raw, &result));
-        return result;
-    }
-
-    /// JS Number -> `i64`.
-    pub fn toInt64(self: Val, env: Env) !i64 {
-        var result: i64 = undefined;
-        try check(c.napi_get_value_int64(env.raw, self.raw, &result));
-        return result;
-    }
-
-    /// JS Number -> `f64`.
-    pub fn toFloat64(self: Val, env: Env) !f64 {
-        var result: f64 = undefined;
-        try check(c.napi_get_value_double(env.raw, self.raw, &result));
-        return result;
-    }
-
-    /// JS BigInt -> `i64`.
-    pub fn toBigintInt64(self: Val, env: Env) !i64 {
-        var result: i64 = undefined;
-        var lossless: bool = undefined;
-        try check(c.napi_get_value_bigint_int64(env.raw, self.raw, &result, &lossless));
-        return result;
-    }
-
-    /// JS BigInt -> `u64`.
-    pub fn toBigintUint64(self: Val, env: Env) !u64 {
-        var result: u64 = undefined;
-        var lossless: bool = undefined;
-        try check(c.napi_get_value_bigint_uint64(env.raw, self.raw, &result, &lossless));
-        return result;
-    }
-
-    /// Returns the UTF-8 byte length of a JS String (excluding null terminator).
-    pub fn getStringLength(self: Val, env: Env) !usize {
-        var len: usize = 0;
-        try check(c.napi_get_value_string_utf8(env.raw, self.raw, null, 0, &len));
-        return len;
-    }
-
-    /// JS String -> caller-provided buffer as UTF-8.
-    ///
-    /// Returns the written sub-slice. Truncates if buffer is too small.
-    pub fn toStringBuf(self: Val, env: Env, buf: []u8) ![]const u8 {
-        var len: usize = 0;
-        try check(c.napi_get_value_string_utf8(env.raw, self.raw, buf.ptr, buf.len, &len));
-        return buf[0..len];
-    }
-
-    /// JS String -> heap-allocated UTF-8 buffer.
-    ///
-    /// Caller owns the memory. For arena-managed strings,
-    /// use `val.to(env, []const u8)` instead.
-    pub fn toStringAlloc(self: Val, env: Env, allocator: std.mem.Allocator) ![]u8 {
-        const len = try self.getStringLength(env);
-        const buf = try allocator.alloc(u8, len + 1);
-        var written: usize = 0;
-        try check(c.napi_get_value_string_utf8(env.raw, self.raw, buf.ptr, buf.len, &written));
-        return buf[0..written];
     }
 
     /// Returns the JS type of this value.
@@ -199,20 +119,100 @@ pub const Val = struct {
         try check(c.napi_get_buffer_info(env.raw, self.raw, &data, &len));
         return if (data) |ptr| @as([*]u8, @ptrCast(ptr))[0..len] else &.{};
     }
+};
 
-    /// Calls this value as a JS function.
-    pub fn callFunction(self: Val, env: Env, this: Val, args: []const Val) !Val {
+/// A handle to a JS function value.
+///
+/// Wraps a `Val` verified as a function. Use `call` to invoke with
+/// `undefined` as `this`, or `callWith` for a specific `this` binding.
+pub const JsFn = struct {
+    val: Val,
+
+    /// Calls the function with `undefined` as `this`.
+    pub fn call(self: JsFn, env: Env, args: []const Val) !Val {
+        const undef = try env.createUndefined();
+        return self.invoke(env, undef, args);
+    }
+
+    /// Calls the function with a specific `this` binding.
+    pub fn callWith(self: JsFn, env: Env, this: Val, args: []const Val) !Val {
+        return self.invoke(env, this, args);
+    }
+
+    fn invoke(self: JsFn, env: Env, this: Val, args: []const Val) !Val {
         var result: c.napi_value = undefined;
         try check(c.napi_call_function(
             env.raw,
             this.raw,
-            self.raw,
+            self.val.raw,
             args.len,
             if (args.len > 0) @ptrCast(args.ptr) else null,
             &result,
         ));
         return .{ .raw = result };
     }
+
+    /// Creates a threadsafe version of this function that can be called
+    /// from any thread. Call `release()` when done.
+    pub fn threadsafe(self: JsFn, env: Env, name: [*:0]const u8) !ThreadsafeFn {
+        var name_val: c.napi_value = undefined;
+        try check(c.napi_create_string_utf8(env.raw, name, c.NAPI_AUTO_LENGTH, &name_val));
+        var result: c.napi_threadsafe_function = undefined;
+        try check(c.napi_create_threadsafe_function(
+            env.raw,
+            self.val.raw,
+            null,
+            name_val,
+            0,
+            1,
+            null,
+            null,
+            null,
+            null,
+            &result,
+        ));
+        return .{ .raw = result };
+    }
+};
+
+/// A thread-safe wrapper around a JS function.
+///
+/// Can be called from any thread to queue a call back to the main JS thread.
+/// Created via `JsFn.threadsafe`. Must be released when no longer needed.
+pub const ThreadsafeFn = struct {
+    raw: c.napi_threadsafe_function,
+
+    /// Queues a call to the JS function from any thread.
+    pub fn call(self: ThreadsafeFn, data: ?*anyopaque, mode: CallMode) !void {
+        try check(c.napi_call_threadsafe_function(self.raw, data, mode));
+    }
+
+    /// Releases the function. Must be called when done.
+    pub fn release(self: ThreadsafeFn) !void {
+        try check(c.napi_release_threadsafe_function(self.raw, .release));
+    }
+
+    /// Aborts the function, rejecting any pending calls.
+    pub fn abort(self: ThreadsafeFn) !void {
+        try check(c.napi_release_threadsafe_function(self.raw, .abort));
+    }
+
+    /// Indicates a new thread will use this function.
+    pub fn acquire(self: ThreadsafeFn) !void {
+        try check(c.napi_acquire_threadsafe_function(self.raw));
+    }
+
+    /// Prevents this function from keeping the event loop alive.
+    pub fn unref(self: ThreadsafeFn, env: Env) !void {
+        try check(c.napi_unref_threadsafe_function(env.raw, self.raw));
+    }
+
+    /// Allows this function to keep the event loop alive (default).
+    pub fn ref(self: ThreadsafeFn, env: Env) !void {
+        try check(c.napi_ref_threadsafe_function(env.raw, self.raw));
+    }
+
+    pub const CallMode = c.napi_threadsafe_function_call_mode;
 };
 
 /// A strong reference to a JS value, preventing garbage collection.

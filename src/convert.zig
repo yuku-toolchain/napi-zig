@@ -1,6 +1,10 @@
 const std = @import("std");
+const c = @import("c.zig");
 const Env = @import("env.zig").Env;
-const Val = @import("val.zig").Val;
+const val_mod = @import("val.zig");
+const Val = val_mod.Val;
+const JsFn = val_mod.JsFn;
+const check = val_mod.check;
 const util = @import("util.zig");
 
 // converts a Zig value to a JS value.
@@ -84,31 +88,59 @@ pub fn toJs(comptime T: type, env: Env, value: T) !Val {
 // - []const u8  <- String (allocated on env.arena)
 // - []T         <- Array  (allocated on env.arena)
 // - structs     <- Object (camelCase field matching, defaults respected)
+// - JsFn        <- Function (validated, wrapped)
 // - Val         <- passthrough
 pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
     return switch (@typeInfo(T)) {
-        .bool => value.toBool(env),
+        .bool => {
+            var result: bool = undefined;
+            try check(c.napi_get_value_bool(env.raw, value.raw, &result));
+            return result;
+        },
         .int => |info| switch (info.signedness) {
             .signed => switch (info.bits) {
-                0...32 => @intCast(try value.toInt32(env)),
-                33...64 => @intCast(try value.toInt64(env)),
+                0...32 => {
+                    var result: i32 = undefined;
+                    try check(c.napi_get_value_int32(env.raw, value.raw, &result));
+                    return @intCast(result);
+                },
+                33...64 => {
+                    var result: i64 = undefined;
+                    try check(c.napi_get_value_int64(env.raw, value.raw, &result));
+                    return @intCast(result);
+                },
                 else => @compileError("napi-zig: integer too wide: " ++ @typeName(T)),
             },
             .unsigned => switch (info.bits) {
-                0...32 => @intCast(try value.toUint32(env)),
-                33...64 => @intCast(try value.toBigintUint64(env)),
+                0...32 => {
+                    var result: u32 = undefined;
+                    try check(c.napi_get_value_uint32(env.raw, value.raw, &result));
+                    return @intCast(result);
+                },
+                33...64 => {
+                    var result: u64 = undefined;
+                    var lossless: bool = undefined;
+                    try check(c.napi_get_value_bigint_uint64(env.raw, value.raw, &result, &lossless));
+                    return @intCast(result);
+                },
                 else => @compileError("napi-zig: integer too wide: " ++ @typeName(T)),
             },
         },
-        .float => @floatCast(try value.toFloat64(env)),
-        .optional => |info| {
+        .float => {
+            var result: f64 = undefined;
+            try check(c.napi_get_value_double(env.raw, value.raw, &result));
+            return @floatCast(result);
+        },
+        .optional => |opt| {
             const vtype = try value.typeOf(env);
             if (vtype == .null or vtype == .undefined) return null;
-            return try fromJs(info.child, env, value);
+            return try fromJs(opt.child, env, value);
         },
         .@"enum" => |info| {
             var buf: [256]u8 = undefined;
-            const str = try value.toStringBuf(env, &buf);
+            var len: usize = 0;
+            try check(c.napi_get_value_string_utf8(env.raw, value.raw, &buf, buf.len, &len));
+            const str = buf[0..len];
             inline for (info.fields) |field| {
                 if (std.mem.eql(u8, str, comptime util.snakeToCamelSlice(field.name)) or
                     std.mem.eql(u8, str, field.name))
@@ -117,8 +149,15 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
             return @enumFromInt(info.fields[0].value);
         },
         .pointer => |info| {
-            if (info.size == .slice and info.child == u8)
-                return value.toStringAlloc(env, env.arena.allocator());
+            if (info.size == .slice and info.child == u8) {
+                const alloc = env.arena.allocator();
+                var slen: usize = 0;
+                try check(c.napi_get_value_string_utf8(env.raw, value.raw, null, 0, &slen));
+                const sbuf = try alloc.alloc(u8, slen + 1);
+                var written: usize = 0;
+                try check(c.napi_get_value_string_utf8(env.raw, value.raw, sbuf.ptr, sbuf.len, &written));
+                return sbuf[0..written];
+            }
             if (info.size == .slice) {
                 const len = try value.getArrayLength(env);
                 const slice = try env.arena.allocator().alloc(info.child, len);
@@ -131,6 +170,14 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
         },
         .@"struct" => |info| {
             if (T == Val) return value;
+            if (T == JsFn) {
+                const vtype = try value.typeOf(env);
+                if (vtype != .function) {
+                    env.throwTypeError("expected a function");
+                    return error.napi_error;
+                }
+                return .{ .val = value };
+            }
             var result: T = undefined;
             inline for (info.fields) |field| {
                 const js_key = comptime util.snakeToCamel(field.name);

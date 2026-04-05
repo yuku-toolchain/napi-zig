@@ -6,7 +6,7 @@ const convert = @import("convert.zig");
 const util = @import("util.zig");
 const CallInfo = @import("val.zig").CallInfo;
 
-pub const napi_module_version: u32 = 1;
+pub const napi_module_version: u32 = 4;
 
 // emits the napi module registration symbols so that Node.js can load the addon.
 pub fn registerModule(comptime Module: type) void {
@@ -74,15 +74,19 @@ fn ModuleInit(comptime Module: type) type {
     };
 }
 
-// bridges a single zig function to a C-callable Node-API callback.
-// extracts JS arguments, converts them to zig types, calls the function,
-// and converts the return value back. errors become JS exceptions.
+// bridges a standard-mode zig function to a C-callable Node-API callback.
+// if the first parameter is Env, it is injected automatically.
+// remaining parameters are converted from JS arguments, return value
+// converted back. errors become JS exceptions.
 fn FnBridge(comptime Module: type, comptime name: []const u8) type {
     const func = @field(Module, name);
     const FnType = @TypeOf(func);
     const fn_info = @typeInfo(FnType).@"fn";
     const params = fn_info.params;
     const param_count = params.len;
+    const inject_env = param_count > 0 and params[0].type.? == Env;
+    const js_start: usize = if (inject_env) 1 else 0;
+    const js_count = param_count - js_start;
     const ReturnType = fn_info.return_type orelse void;
     const Payload = switch (@typeInfo(ReturnType)) {
         .error_union => |eu| eu.payload,
@@ -105,7 +109,7 @@ fn FnBridge(comptime Module: type, comptime name: []const u8) type {
 
         fn invoke(env: Env, info: CallInfo) !Val {
             const arg_count = try info.getArgCount(env);
-            const arg_values = try info.getArgs(env, param_count);
+            const arg_values = try info.getArgs(env, js_count);
             const args = try convertArgs(env, arg_values, arg_count);
 
             const result = @call(.auto, func, args);
@@ -121,21 +125,23 @@ fn FnBridge(comptime Module: type, comptime name: []const u8) type {
             return convert.toJs(Payload, env, value);
         }
 
-        fn convertArgs(env: Env, argv: [param_count]Val, argc: usize) !std.meta.ArgsTuple(FnType) {
+        fn convertArgs(env: Env, argv: [js_count]Val, argc: usize) !std.meta.ArgsTuple(FnType) {
             var args: std.meta.ArgsTuple(FnType) = undefined;
-            inline for (0..param_count) |i| {
+            if (inject_env) args[0] = env;
+            inline for (js_start..param_count) |i| {
+                const js_i = i - js_start;
                 const T = params[i].type.?;
-                if (i >= argc) {
+                if (js_i >= argc) {
                     if (@typeInfo(T) == .optional) {
                         args[i] = null;
                     } else if (@typeInfo(T) == .@"struct" and comptime isAllDefaults(T)) {
                         args[i] = .{};
                     } else {
-                        env.throwTypeError("expected " ++ std.fmt.comptimePrint("{d}", .{param_count}) ++ " arguments");
+                        env.throwTypeError("expected " ++ std.fmt.comptimePrint("{d}", .{js_count}) ++ " arguments");
                         return error.napi_error;
                     }
                 } else {
-                    args[i] = try convert.fromJs(T, env, argv[i]);
+                    args[i] = try convert.fromJs(T, env, argv[js_i]);
                 }
             }
             return args;
@@ -180,13 +186,15 @@ fn exportableNames(comptime Module: type) []const []const u8 {
     return names;
 }
 
-// returns true if the function's first parameter is Env (raw-mode calling convention).
+// returns true for raw-mode functions: (Env, CallInfo) -> !Val.
 fn isRawFn(comptime Fn: type) bool {
     const info = @typeInfo(Fn);
     if (info != .@"fn") return false;
     const params = info.@"fn".params;
-    if (params.len == 0) return false;
-    return if (params[0].type) |T| T == Env else false;
+    if (params.len < 2) return false;
+    const first = if (params[0].type) |T| T == Env else false;
+    const second = if (params[1].type) |T| T == CallInfo else false;
+    return first and second;
 }
 
 // returns true if every field of the struct has a default value.

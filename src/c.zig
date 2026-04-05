@@ -163,3 +163,25 @@ pub const napi_async_complete_callback = *const fn (napi_env, napi_status, ?*any
 pub extern fn napi_create_async_work(env: napi_env, async_resource: ?napi_value, async_resource_name: napi_value, execute: napi_async_execute_callback, complete: napi_async_complete_callback, data: ?*anyopaque, result: *napi_async_work) napi_status;
 pub extern fn napi_delete_async_work(env: napi_env, work: napi_async_work) napi_status;
 pub extern fn napi_queue_async_work(env: napi_env, work: napi_async_work) napi_status;
+
+
+pub const napi_threadsafe_function = *opaque {};
+
+pub const napi_threadsafe_function_release_mode = enum(c_int) {
+    release = 0,
+    abort = 1,
+};
+
+pub const napi_threadsafe_function_call_mode = enum(c_int) {
+    non_blocking = 0,
+    blocking = 1,
+};
+
+pub const napi_threadsafe_function_call_js = *const fn (napi_env, napi_value, ?*anyopaque, ?*anyopaque) callconv(.c) void;
+
+pub extern fn napi_create_threadsafe_function(env: napi_env, func: ?napi_value, async_resource: ?napi_value, async_resource_name: napi_value, max_queue_size: usize, initial_thread_count: usize, thread_finalize_data: ?*anyopaque, thread_finalize_cb: ?napi_finalize, context: ?*anyopaque, call_js_cb: ?napi_threadsafe_function_call_js, result: *napi_threadsafe_function) napi_status;
+pub extern fn napi_call_threadsafe_function(func: napi_threadsafe_function, data: ?*anyopaque, is_blocking: napi_threadsafe_function_call_mode) napi_status;
+pub extern fn napi_release_threadsafe_function(func: napi_threadsafe_function, mode: napi_threadsafe_function_release_mode) napi_status;
+pub extern fn napi_acquire_threadsafe_function(func: napi_threadsafe_function) napi_status;
+pub extern fn napi_ref_threadsafe_function(env: napi_env, func: napi_threadsafe_function) napi_status;
+pub extern fn napi_unref_threadsafe_function(env: napi_env, func: napi_threadsafe_function) napi_status;
