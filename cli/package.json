@@ -11,7 +11,7 @@
   },
   "funding": "https://github.com/sponsors/arshad-yaseen",
   "bin": {
-    "napi": "dist/index.js"
+    "napi": "dist/cli/index.js"
   },
   "files": [
     "dist"
