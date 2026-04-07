@@ -18,7 +18,7 @@
   ],
   "type": "module",
   "scripts": {
-    "build": "tsgo",
+    "build": "bunup",
     "type-check": "tsgo --noEmit"
   },
   "dependencies": {
@@ -30,6 +30,7 @@
   "devDependencies": {
     "@types/bun": "^1.3.11",
     "@typescript/native-preview": "^7.0.0-dev.20260407.1",
+    "bunup": "^0.16.31",
     "typescript": "^6.0.2"
   },
   "peerDependenciesMeta": {
