@@ -10,6 +10,7 @@ pub const Import = struct {
 
 pub const NpmConfig = struct {
     scope: []const u8,
+    repository: []const u8,
     description: []const u8 = "",
     license: []const u8 = "MIT",
     dts: ?std.Build.LazyPath = null,
@@ -260,11 +261,16 @@ fn rootPackageJson(alloc: std.mem.Allocator, name: []const u8, npm: NpmConfig) [
     else
         "";
 
+    const repo_line = if (npm.repository.len > 0)
+        std.fmt.allocPrint(alloc, "  \"repository\": {{ \"type\": \"git\", \"url\": \"{s}\" }},\n", .{npm.repository}) catch ""
+    else
+        "";
+
     return std.fmt.allocPrint(alloc,
         \\{{
         \\  "name": "{s}",
         \\  "version": "0.0.0",
-        \\{s}  "license": "{s}",
+        \\{s}{s}  "license": "{s}",
         \\  "type": "module",
         \\  "main": "index.js",
         \\  "types": "index.d.ts",
@@ -280,6 +286,7 @@ fn rootPackageJson(alloc: std.mem.Allocator, name: []const u8, npm: NpmConfig) [
     , .{
         name,
         desc_line,
+        repo_line,
         npm.license,
         deps,
     }) catch "";
@@ -291,11 +298,16 @@ fn platformPackageJson(alloc: std.mem.Allocator, name: []const u8, npm: NpmConfi
     else
         "";
 
+    const repo_line = if (npm.repository.len > 0)
+        std.fmt.allocPrint(alloc, "  \"repository\": {{ \"type\": \"git\", \"url\": \"{s}\" }},\n", .{npm.repository}) catch ""
+    else
+        "";
+
     return std.fmt.allocPrint(alloc,
         \\{{
         \\  "name": "{s}/binding-{s}",
         \\  "version": "0.0.0",
-        \\  "os": ["{s}"],
+        \\{s}  "os": ["{s}"],
         \\  "cpu": ["{s}"],
         \\{s}  "main": "{s}.node",
         \\  "files": [
@@ -306,6 +318,7 @@ fn platformPackageJson(alloc: std.mem.Allocator, name: []const u8, npm: NpmConfi
     , .{
         npm.scope,
         platform.suffix(),
+        repo_line,
         platform.npmOs(),
         platform.npmCpu(),
         libc_line,
