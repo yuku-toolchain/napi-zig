@@ -1,9 +1,9 @@
 import { execSync } from "node:child_process"
-import { existsSync, readdirSync, statSync, mkdirSync, copyFileSync, writeFileSync } from "node:fs"
+import { existsSync, readdirSync, statSync, mkdirSync, copyFileSync, writeFileSync, rmSync } from "node:fs"
 import { join } from "node:path"
 import ora from "ora"
 
-export function buildDev(optimize: string | undefined) {
+export function buildDev(optimize: string | undefined): void {
   const optFlag = optimize ? ` --release=${optimize}` : ""
 
   const spinner = ora("Building for current platform...").start()
@@ -32,7 +32,7 @@ export function buildDev(optimize: string | undefined) {
   }
 }
 
-export function buildRelease(optimize: string) {
+export function buildRelease(optimize: string): void {
   const optFlag = ` --release=${optimize}`
 
   const spinner = ora("Cross-compiling for all platforms...").start()
@@ -60,6 +60,7 @@ export function buildRelease(optimize: string) {
       syncSpinner.text = `Created npm/${pkgName}/`
     } else {
       syncBuildOutputs(srcPkg, destPkg)
+      removeStaleBindings(srcPkg, destPkg)
       const srcBinding = join(srcPkg, "binding.js")
       const destBinding = join(destPkg, "binding.js")
       if (existsSync(srcBinding)) {
@@ -78,10 +79,34 @@ function syncBuildOutputs(src: string, dest: string) {
     const destPath = join(dest, entry.name)
 
     if (entry.isDirectory()) {
-      if (!existsSync(destPath)) mkdirSync(destPath, { recursive: true })
-      syncBuildOutputs(srcPath, destPath)
+      if (!existsSync(destPath)) {
+        copyDir(srcPath, destPath)
+      } else {
+        syncBuildOutputs(srcPath, destPath)
+      }
     } else if (entry.name.endsWith(".node") || entry.name.endsWith(".d.ts")) {
       copyFileSync(srcPath, destPath)
+    }
+  }
+}
+
+function removeStaleBindings(src: string, dest: string) {
+  for (const entry of readdirSync(dest, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !entry.name.startsWith("@")) continue
+
+    const srcScope = join(src, entry.name)
+    const destScope = join(dest, entry.name)
+
+    if (!existsSync(srcScope)) {
+      rmSync(destScope, { recursive: true })
+      continue
+    }
+
+    for (const bindEntry of readdirSync(destScope, { withFileTypes: true })) {
+      if (!bindEntry.isDirectory() || !bindEntry.name.startsWith("binding-")) continue
+      if (!existsSync(join(srcScope, bindEntry.name))) {
+        rmSync(join(destScope, bindEntry.name), { recursive: true })
+      }
     }
   }
 }
