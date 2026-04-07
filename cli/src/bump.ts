@@ -238,13 +238,19 @@ export async function bump(options: BumpOptions): Promise<void> {
     ora().succeed(`Committed: ${commitMsg}`);
 
     if (doTag) {
-      execFileSync("git", ["tag", `v${newVersion}`], { stdio: "pipe" });
-      ora().succeed(`Tagged: v${newVersion}`);
+      const tagName = `v${newVersion}`;
+      execFileSync("git", ["tag", "--annotate", "--message", commitMsg, tagName], {
+        stdio: "pipe",
+      });
+      ora().succeed(`Tagged: ${tagName}`);
     }
 
     if (doPush) {
       const pushSpinner = ora("Pushing to remote...").start();
-      await runArgs("git", ["push", ...(doTag ? ["--follow-tags"] : [])]);
+      await runArgs("git", ["push"]);
+      if (doTag) {
+        await runArgs("git", ["push", "--tags"]);
+      }
       pushSpinner.succeed("Pushed");
     }
   } catch (e) {
