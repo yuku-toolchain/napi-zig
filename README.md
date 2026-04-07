@@ -10,56 +10,6 @@ Write [Node.js native addons](https://nodejs.org/api/n-api.html) in Zig. Cross-c
 zig fetch --save git+https://github.com/yuku-toolchain/napi-zig.git/#HEAD
 ```
 
-**2. Configure the build**
-
-```zig
-// build.zig
-const napi_zig = @import("napi_zig");
-
-pub fn build(b: *std.Build) void {
-    const napi_dep = b.dependency("napi_zig", .{});
-    const target = b.standardTargetOptions(.{});
-    const optimize = b.standardOptimizeOption(.{});
-
-    const lib = napi_zig.addLib(b, napi_dep, .{
-        .name = "my-addon",
-        .root = b.path("src/napi_entry.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
-    const step = b.step("napi", "Build .node for current platform");
-    step.dependOn(lib.step);
-}
-```
-
-**3. Write the module**
-
-```zig
-// src/napi_entry.zig
-const napi = @import("napi-zig");
-
-pub fn add(a: i32, b: i32) i32 {
-    return a + b;
-}
-
-pub const version = "1.0.0";
-
-comptime { napi.module(@This()); }
-```
-
-**4. Build and use**
-
-```sh
-zig build napi
-```
-
-```js
-const addon = require("./zig-out/lib/my-addon.node");
-addon.add(1, 2); // 3
-addon.version; // "1.0.0"
-```
-
 `napi.module(@This())` exports every `pub fn` as a JS function and every `pub const` with a JS-compatible value as a JS property. Snake_case names are converted to camelCase automatically.
 
 > [!NOTE]
