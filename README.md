@@ -2,18 +2,276 @@
 
 Write [Node.js native addons](https://nodejs.org/api/n-api.html) in Zig. Cross-compile for all platforms and publish to npm.
 
-## Quick start
+## Table of contents
 
-**1. Add the dependency**
+- [Getting started](#getting-started)
+- [Project setup](#project-setup)
+- [Release build](#release-build)
+- [Publishing to npm](#publishing-to-npm)
+- [CLI reference](#cli-reference)
+- [Calling conventions](#calling-conventions)
+- [Type conversion](#type-conversion)
+- [TypeScript declarations](#typescript-declarations)
+- [Memory model](#memory-model)
+- [Error handling](#error-handling)
+- [Callbacks](#callbacks)
+- [Async](#async)
+- [API reference](#api-reference)
+
+## Getting started
+
+### 1. Add napi-zig to your Zig project
 
 ```sh
 zig fetch --save git+https://github.com/yuku-toolchain/napi-zig.git/#HEAD
 ```
 
+### 2. Install the CLI
+
+```sh
+npm install -D napi-zig
+```
+
+### 3. Write your addon
+
+```zig
+// src/lib.zig
+const std = @import("std");
+const napi = @import("napi-zig");
+
+comptime {
+    napi.module(@This());
+}
+
+pub fn add(a: i32, b: i32) i32 {
+    return a + b;
+}
+
+pub fn greet(env: napi.Env, name: []const u8) ![]const u8 {
+    const alloc = env.arena.allocator();
+    return try std.fmt.allocPrint(alloc, "Hello, {s}!", .{name});
+}
+```
+
 `napi.module(@This())` exports every `pub fn` as a JS function and every `pub const` with a JS-compatible value as a JS property. Snake_case names are converted to camelCase automatically.
 
-> [!NOTE]
-> Only _values_ are exported, not types. `pub const config = .{ .debug = true }` becomes a JS object. `pub const Config = struct { ... }` is a type and is skipped.
+### 4. Configure build.zig
+
+```zig
+const std = @import("std");
+const napi_zig = @import("napi_zig");
+
+pub fn build(b: *std.Build) void {
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
+
+    const napi_dep = b.dependency("napi_zig", .{});
+
+    napi_zig.addLib(b, napi_dep, .{
+        .name = "my-addon",
+        .root = b.path("src/lib.zig"),
+        .target = target,
+        .optimize = optimize,
+        .npm = .{
+            .scope = "@myscope",
+            .repository = .{ .url = "https://github.com/myorg/myrepo" },
+            .description = "My native addon",
+        },
+    });
+}
+```
+
+### 5. Build and test
+
+```sh
+napi build
+```
+
+This compiles for your current platform and creates a `my-addon.js` loader so you can import the addon directly:
+
+```js
+import addon from "./my-addon.js";
+console.log(addon.add(2, 3)); // 5
+console.log(addon.greet("world")); // Hello, world!
+```
+
+That's it. You have a working native addon.
+
+## Project setup
+
+### `addLib` options
+
+| Option      | Required | Description                                                        |
+| ----------- | -------- | ------------------------------------------------------------------ |
+| `.name`     | Yes      | Package name (used for the `.node` binary and npm package)         |
+| `.root`     | Yes      | Path to the root Zig source file                                   |
+| `.target`   | Yes      | Build target (from `standardTargetOptions`)                        |
+| `.optimize` | Yes      | Optimization mode (from `standardOptimizeOption`)                  |
+| `.imports`  | No       | Additional Zig module imports (see below)                          |
+| `.npm`      | No       | npm package config (required for cross-compilation and publishing) |
+
+#### Importing other modules
+
+Use `.imports` to make other Zig modules available to your addon:
+
+```zig
+const parser_module = b.addModule("parser", .{
+    .root_source_file = b.path("src/parser/root.zig"),
+    .target = target,
+    .optimize = optimize,
+});
+
+napi_zig.addLib(b, napi_dep, .{
+    .name = "my-addon",
+    .root = b.path("src/napi/root.zig"),
+    .target = target,
+    .optimize = optimize,
+    .imports = &.{
+        .{ .name = "parser", .module = parser_module },
+    },
+    .npm = .{ ... },
+});
+```
+
+Then in your addon code: `const parser = @import("parser");`
+
+#### `.npm` options
+
+| Option         | Required | Default             | Description                                                                  |
+| -------------- | -------- | ------------------- | ---------------------------------------------------------------------------- |
+| `.scope`       | Yes      |                     | npm scope (e.g. `"@myscope"`)                                                |
+| `.repository`  | Yes      |                     | Repository for npm provenance (`.url` required, `.type` defaults to `"git"`) |
+| `.description` | No       | `""`                | Package description                                                          |
+| `.license`     | No       | `"MIT"`             | License identifier                                                           |
+| `.dts`         | No       | `null`              | Path to a TypeScript declaration file                                        |
+| `.platforms`   | No       | `Platform.defaults` | Target platforms for cross-compilation                                       |
+
+Default platforms: Linux (x64, arm64, arm with glibc and musl), macOS (x64, arm64), Windows (x64, arm64), FreeBSD (x64).
+
+## Release build
+
+Before publishing, cross-compile for all platforms:
+
+```sh
+napi build --release
+```
+
+This generates the npm package structure in `npm/my-addon/`:
+
+```
+npm/my-addon/
+  package.json              # main package with optionalDependencies
+  index.js                  # re-exports the native binding
+  binding.js                # platform detection and loading
+  @myscope/
+    binding-linux-x64-gnu/
+      package.json
+      my-addon.node
+    binding-darwin-arm64/
+      package.json
+      my-addon.node
+    binding-win32-x64/
+      ...
+```
+
+The main `index.js` re-exports the native binding. You can replace it with a custom wrapper in `npm/my-addon/`. The build system preserves existing files and only updates `.node` binaries on subsequent builds.
+
+## Publishing to npm
+
+### Prerequisites
+
+1. Create an npm organization at [npmjs.com/org/create](https://www.npmjs.com/org/create) matching your scope (e.g. `myscope` for `@myscope`)
+2. Log in: `npm login`
+3. Requires npm >= 11.10.0 (`npm install -g npm@latest`)
+
+### First-time setup
+
+After your first `napi build --release`, publish all packages and configure [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/) (OIDC) so GitHub Actions can publish future releases without tokens:
+
+```sh
+napi npm-init --repo myorg/myrepo --workflow publish.yml
+```
+
+This publishes the main package and all binding packages, then configures trusted publishing for each one. You only need to run this once (or again when adding new addons).
+
+### Release workflow
+
+**Bump, tag, and push:**
+
+```sh
+napi bump
+```
+
+Shows an interactive version picker (patch, minor, major, pre-release, custom). Updates every `package.json` (main + all bindings), creates an annotated git tag, and pushes. You can also pass the version directly:
+
+```sh
+napi bump patch
+napi bump 1.2.3
+napi bump --commit "release v%s" --preid alpha
+```
+
+**GitHub Actions picks up the tag and publishes:**
+
+Create `.github/workflows/publish.yml`:
+
+```yaml
+name: Publish
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: master
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - run: npm install
+      - run: npx napi-zig build --release
+      - run: npx napi-zig publish
+```
+
+No `NPM_TOKEN` needed. The `id-token: write` permission enables OIDC authentication with npm, which was configured during `napi npm-init`.
+
+## CLI reference
+
+| Command                                               | Description                                        |
+| ----------------------------------------------------- | -------------------------------------------------- |
+| `napi build`                                          | Build for current platform                         |
+| `napi build --release`                                | Cross-compile all platforms, generate npm packages |
+| `napi bump [version]`                                 | Bump version, commit, tag, push                    |
+| `napi publish`                                        | Publish all packages to npm (for CI)               |
+| `napi npm-init --repo <owner/repo> --workflow <file>` | First-time publish + configure trusted publishing  |
+
+**`napi bump` options:**
+
+| Option           | Default     | Description                                                 |
+| ---------------- | ----------- | ----------------------------------------------------------- |
+| `[version]`      | interactive | `patch`, `minor`, `major`, or an exact version like `1.2.3` |
+| `--preid <id>`   | `beta`      | Pre-release identifier                                      |
+| `--commit <msg>` | `%s`        | Commit message (`%s` is replaced with the version)          |
+| `--no-tag`       |             | Skip git tag                                                |
+| `--no-push`      |             | Skip git push                                               |
+
+**`napi publish` options:**
+
+| Option            | Default    | Description                     |
+| ----------------- | ---------- | ------------------------------- |
+| `--provenance`    | auto in CI | Generate provenance attestation |
+| `--no-provenance` |            | Skip provenance                 |
 
 ## Calling conventions
 
@@ -239,95 +497,28 @@ const Color = union(enum) {
 };
 ```
 
-Works for structs too. If a struct has a `toJs` or `fromJs` method, it takes priority over the default field-by-field conversion.
+If a struct has a `toJs` or `fromJs` method, it takes priority over the default field-by-field conversion.
 
-## API reference
+## TypeScript declarations
 
-### `Val`
+Create a `.d.ts` file and pass it via the `.dts` option:
 
-A JS value handle. One method per concern:
-
-| Method                                                                     | Purpose                                                    |
-| -------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `to(env, T)`                                                               | Convert to any supported Zig type                          |
-| `typeOf(env)`                                                              | Returns `.string`, `.number`, `.object`, `.function`, etc. |
-| `isArray(env)`, `isBuffer(env)`, `isArrayBuffer(env)`, `isTypedArray(env)` | Type checks                                                |
-| `getProperty(env, key)`, `setProperty(env, key, val)`                      | Dynamic key access                                         |
-| `getNamedProperty(env, key)`, `setNamedProperty(env, key, val)`            | Compile-time string key access                             |
-| `hasNamedProperty(env, key)`                                               | Property existence check                                   |
-| `getElement(env, i)`, `setElement(env, i, val)`                            | Array index access                                         |
-| `getArrayLength(env)`                                                      | Array length                                               |
-| `getArrayBufferData(env)`                                                  | `[]u8` into an ArrayBuffer's backing memory                |
-| `getBufferData(env)`                                                       | `[]u8` into a Node.js Buffer's backing memory              |
-
-### `Env`
-
-The Node-API environment. Provides value creation, the per-call arena, and exception handling.
-
-| Method                                                                         | Purpose                                                       |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------------- |
-| `toJs(value)`                                                                  | Convert any Zig type to JS (inferred)                         |
-| `createBoolean`, `createInt32`, `createUint32`, `createInt64`, `createFloat64` | Primitives                                                    |
-| `createBigintInt64`, `createBigintUint64`                                      | BigInt                                                        |
-| `createString([]const u8)`, `createStringZ([*:0]const u8)`                     | Strings                                                       |
-| `createNull`, `createUndefined`, `getGlobal`                                   | Singletons                                                    |
-| `createObject`, `createArray`, `createArrayWithLength`                         | Containers                                                    |
-| `createArrayBuffer(len)`                                                       | Returns `{ .val, .data }` (JS value + writable `[]u8`)        |
-| `createBuffer(len)`                                                            | Node.js Buffer, returns `{ .val, .data }`                     |
-| `createTypedArray(type, len, arraybuffer, offset)`                             | TypedArray view                                               |
-| `createExternalArrayBuffer(ptr, len, finalize_cb, hint)`                       | Externally-owned memory                                       |
-| `createFunction(name, callback)`                                               | Native-backed JS function                                     |
-| `createReference(val)`                                                         | Strong GC reference, returns `Ref`                            |
-| `createPromise()`                                                              | Returns `{ .promise, .deferred }`                             |
-| `runWorker(name, context)`                                                     | Background work, returns Promise                              |
-| `throwError`, `throwTypeError`, `throwRangeError`                              | Throw exceptions                                              |
-| `throwValue(val)`                                                              | Throw an existing JS value                                    |
-| `isExceptionPending()`                                                         | Check for pending exception                                   |
-| `getVersion()`                                                                 | Node-API version                                              |
-| `arena`                                                                        | Per-call `*ArenaAllocator`, see [Memory model](#memory-model) |
-
-### `Ref`
-
-A strong reference preventing garbage collection.
+```ts
+// src/index.d.ts
+export function add(a: number, b: number): number;
+export function greet(name: string): string;
+```
 
 ```zig
-const ref = try env.createReference(some_val);
-defer ref.delete(env) catch {};
-const val = try ref.value(env);
+// in build.zig
+.npm = .{
+    .scope = "@myscope",
+    .repository = .{ .url = "https://github.com/myorg/myrepo" },
+    .dts = b.path("src/index.d.ts"),
+},
 ```
 
-## Callbacks
-
-Accept a JS function as a parameter by using `napi.Callback`. It is validated on conversion, if the JS value is not a function, a `TypeError` is thrown.
-
-```zig
-pub fn forEach(env: napi.Env, arr: []napi.Val, callback: napi.Callback) !void {
-    for (arr) |item| {
-        _ = try callback.call(env, &.{item});
-    }
-}
-```
-
-```js
-forEach([1, 2, 3], (item) => console.log(item));
-// 1
-// 2
-// 3
-```
-
-Use `callWith` when you need a specific `this` binding:
-
-```zig
-const result = try callback.callWith(env, this_obj, &.{arg1, arg2});
-```
-
-To call a callback from a background thread, convert it to a `ThreadsafeFn` first (see [ThreadsafeFn](#threadsafefn)).
-
-| Method                      | Purpose                                           |
-| --------------------------- | ------------------------------------------------- |
-| `call(env, args)`           | Call with `undefined` as `this`                   |
-| `callWith(env, this, args)` | Call with specific `this` binding                 |
-| `threadsafe(env, name, T)`  | Create a `ThreadsafeFn(T)` for cross-thread calls |
+The file is copied into the npm package as `index.d.ts`. Users get type checking and editor autocompletion out of the box.
 
 ## Memory model
 
@@ -361,6 +552,39 @@ pub fn divide(a: f64, b: f64) !f64 {
 divide(1, 0); // Error: DivisionByZero
 divide("x", 1); // TypeError: expected number, got string
 ```
+
+## Callbacks
+
+Accept a JS function as a parameter by using `napi.Callback`. It is validated on conversion. If the JS value is not a function, a `TypeError` is thrown.
+
+```zig
+pub fn forEach(env: napi.Env, arr: []napi.Val, callback: napi.Callback) !void {
+    for (arr) |item| {
+        _ = try callback.call(env, &.{item});
+    }
+}
+```
+
+```js
+forEach([1, 2, 3], (item) => console.log(item));
+// 1
+// 2
+// 3
+```
+
+Use `callWith` when you need a specific `this` binding:
+
+```zig
+const result = try callback.callWith(env, this_obj, &.{arg1, arg2});
+```
+
+To call a callback from a background thread, convert it to a `ThreadsafeFn` first (see [ThreadsafeFn](#threadsafefn)).
+
+| Method                      | Purpose                                           |
+| --------------------------- | ------------------------------------------------- |
+| `call(env, args)`           | Call with `undefined` as `this`                   |
+| `callWith(env, this, args)` | Call with specific `this` binding                 |
+| `threadsafe(env, name, T)`  | Create a `ThreadsafeFn(T)` for cross-thread calls |
 
 ## Async
 
@@ -410,7 +634,6 @@ const ParseWork = struct {
     failed: bool = false,
 
     pub fn compute(self: *ParseWork) void {
-        // store failure state instead of panicking
         if (self.source.len == 0) {
             self.failed = true;
             return;
@@ -494,6 +717,61 @@ pub fn delayed(env: napi.Env) !napi.Val {
 ```
 
 `Deferred` has two methods: `resolve(env, val)` and `reject(env, val)`. Both consume the handle.
+
+## API reference
+
+### `Val`
+
+A JS value handle.
+
+| Method                                                                     | Purpose                                                    |
+| -------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `to(env, T)`                                                               | Convert to any supported Zig type                          |
+| `typeOf(env)`                                                              | Returns `.string`, `.number`, `.object`, `.function`, etc. |
+| `isArray(env)`, `isBuffer(env)`, `isArrayBuffer(env)`, `isTypedArray(env)` | Type checks                                                |
+| `getProperty(env, key)`, `setProperty(env, key, val)`                      | Dynamic key access                                         |
+| `getNamedProperty(env, key)`, `setNamedProperty(env, key, val)`            | Compile-time string key access                             |
+| `hasNamedProperty(env, key)`                                               | Property existence check                                   |
+| `getElement(env, i)`, `setElement(env, i, val)`                            | Array index access                                         |
+| `getArrayLength(env)`                                                      | Array length                                               |
+| `getArrayBufferData(env)`                                                  | `[]u8` into an ArrayBuffer's backing memory                |
+| `getBufferData(env)`                                                       | `[]u8` into a Node.js Buffer's backing memory              |
+
+### `Env`
+
+The Node-API environment. Provides value creation, the per-call arena, and exception handling.
+
+| Method                                                                         | Purpose                                                       |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------- |
+| `toJs(value)`                                                                  | Convert any Zig type to JS (inferred)                         |
+| `createBoolean`, `createInt32`, `createUint32`, `createInt64`, `createFloat64` | Primitives                                                    |
+| `createBigintInt64`, `createBigintUint64`                                      | BigInt                                                        |
+| `createString([]const u8)`, `createStringZ([*:0]const u8)`                     | Strings                                                       |
+| `createNull`, `createUndefined`, `getGlobal`                                   | Singletons                                                    |
+| `createObject`, `createArray`, `createArrayWithLength`                         | Containers                                                    |
+| `createArrayBuffer(len)`                                                       | Returns `{ .val, .data }` (JS value + writable `[]u8`)        |
+| `createBuffer(len)`                                                            | Node.js Buffer, returns `{ .val, .data }`                     |
+| `createTypedArray(type, len, arraybuffer, offset)`                             | TypedArray view                                               |
+| `createExternalArrayBuffer(ptr, len, finalize_cb, hint)`                       | Externally-owned memory                                       |
+| `createFunction(name, callback)`                                               | Native-backed JS function                                     |
+| `createReference(val)`                                                         | Strong GC reference, returns `Ref`                            |
+| `createPromise()`                                                              | Returns `{ .promise, .deferred }`                             |
+| `runWorker(name, context)`                                                     | Background work, returns Promise                              |
+| `throwError`, `throwTypeError`, `throwRangeError`                              | Throw exceptions                                              |
+| `throwValue(val)`                                                              | Throw an existing JS value                                    |
+| `isExceptionPending()`                                                         | Check for pending exception                                   |
+| `getVersion()`                                                                 | Node-API version                                              |
+| `arena`                                                                        | Per-call `*ArenaAllocator`, see [Memory model](#memory-model) |
+
+### `Ref`
+
+A strong reference preventing garbage collection.
+
+```zig
+const ref = try env.createReference(some_val);
+defer ref.delete(env) catch {};
+const val = try ref.value(env);
+```
 
 ## License
 

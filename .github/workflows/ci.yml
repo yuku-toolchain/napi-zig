@@ -38,8 +38,8 @@ jobs:
       - name: Lint
         run: bun run lint
 
-      - name: Zig build check
-        run: zig build check
+      - name: Tests
+        run: zig build test
 
       - name: Build CLI
         run: bun run build:cli

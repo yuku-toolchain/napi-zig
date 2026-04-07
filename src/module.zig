@@ -206,3 +206,95 @@ fn isAllDefaults(comptime T: type) bool {
     }
     return true;
 }
+
+const testing = @import("std").testing;
+
+test "classifyDecl identifies functions" {
+    try testing.expectEqual(DeclKind.func, classifyDecl(fn () void));
+    try testing.expectEqual(DeclKind.func, classifyDecl(fn (i32, i32) i32));
+}
+
+test "classifyDecl identifies types as skip" {
+    try testing.expectEqual(DeclKind.skip, classifyDecl(type));
+}
+
+test "classifyDecl identifies primitive constants" {
+    try testing.expectEqual(DeclKind.constant, classifyDecl(bool));
+    try testing.expectEqual(DeclKind.constant, classifyDecl(i32));
+    try testing.expectEqual(DeclKind.constant, classifyDecl(f64));
+}
+
+test "classifyDecl identifies enum and struct as constant" {
+    const E = enum { a, b };
+    const S = struct { x: i32 };
+    try testing.expectEqual(DeclKind.constant, classifyDecl(E));
+    try testing.expectEqual(DeclKind.constant, classifyDecl(S));
+}
+
+test "classifyDecl identifies optional as constant" {
+    try testing.expectEqual(DeclKind.constant, classifyDecl(?i32));
+}
+
+test "classifyDecl identifies string literal pointer as constant" {
+    try testing.expectEqual(DeclKind.constant, classifyDecl(*const [5:0]u8));
+    try testing.expectEqual(DeclKind.constant, classifyDecl(*const [3]u8));
+}
+
+test "classifyDecl identifies u8 slice as constant" {
+    try testing.expectEqual(DeclKind.constant, classifyDecl([]const u8));
+}
+
+test "classifyDecl skips non-u8 slices" {
+    try testing.expectEqual(DeclKind.skip, classifyDecl([]const i32));
+}
+
+test "classifyDecl skips non-u8 pointers" {
+    try testing.expectEqual(DeclKind.skip, classifyDecl(*const i32));
+}
+
+test "exportableNames collects pub fn and pub const" {
+    const M = struct {
+        pub fn add(_: i32, _: i32) i32 {
+            return 0;
+        }
+        pub const version: i32 = 1;
+        pub const Config = struct { x: i32 };
+    };
+    const names = comptime exportableNames(M);
+    // add and version are exportable, Config is a type (skipped)
+    try testing.expectEqual(@as(usize, 2), names.len);
+}
+
+test "exportableNames skips underscore prefixed declarations" {
+    const M = struct {
+        pub fn visible() void {}
+        pub fn _hidden() void {}
+    };
+    const names = comptime exportableNames(M);
+    try testing.expectEqual(@as(usize, 1), names.len);
+    try testing.expectEqualStrings("visible", names[0]);
+}
+
+test "isRawFn detects env and callinfo signature" {
+    try testing.expect(isRawFn(fn (Env, CallInfo) callconv(.c) ?Val));
+    try testing.expect(!isRawFn(fn (i32) void));
+    try testing.expect(!isRawFn(fn () void));
+}
+
+test "isRawFn rejects single parameter function" {
+    try testing.expect(!isRawFn(fn (Env) void));
+}
+
+test "isAllDefaults returns true when all fields have defaults" {
+    const S = struct { x: i32 = 0, y: bool = false };
+    try testing.expect(comptime isAllDefaults(S));
+}
+
+test "isAllDefaults returns false when some fields lack defaults" {
+    const S = struct { x: i32, y: bool = false };
+    try testing.expect(comptime !isAllDefaults(S));
+}
+
+test "isAllDefaults returns false for non struct types" {
+    try testing.expect(comptime !isAllDefaults(i32));
+}

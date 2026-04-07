@@ -321,3 +321,39 @@ pub const NapiError = error{napi_error};
 pub fn check(status: c.napi_status) NapiError!void {
     if (status != .ok) return error.napi_error;
 }
+
+const testing = @import("std").testing;
+
+test "check returns void on ok status" {
+    try check(.ok);
+}
+
+test "check returns error on invalid_arg" {
+    try testing.expectError(error.napi_error, check(.invalid_arg));
+}
+
+test "check returns error on pending_exception" {
+    try testing.expectError(error.napi_error, check(.pending_exception));
+}
+
+test "check returns error on generic_failure" {
+    try testing.expectError(error.napi_error, check(.generic_failure));
+}
+
+test "check returns error on all non ok statuses" {
+    const statuses = [_]c.napi_status{
+        .object_expected,
+        .string_expected,
+        .function_expected,
+        .number_expected,
+        .boolean_expected,
+        .array_expected,
+        .cancelled,
+        .queue_full,
+        .closing,
+        .would_deadlock,
+    };
+    for (statuses) |status| {
+        try testing.expectError(error.napi_error, check(status));
+    }
+}

@@ -185,3 +185,36 @@ pub extern fn napi_release_threadsafe_function(func: napi_threadsafe_function, m
 pub extern fn napi_acquire_threadsafe_function(func: napi_threadsafe_function) napi_status;
 pub extern fn napi_ref_threadsafe_function(env: napi_env, func: napi_threadsafe_function) napi_status;
 pub extern fn napi_unref_threadsafe_function(env: napi_env, func: napi_threadsafe_function) napi_status;
+
+const testing = @import("std").testing;
+
+test "napi_auto_length is max usize (bitcast of -1)" {
+    try testing.expectEqual(@as(usize, @bitCast(@as(isize, -1))), NAPI_AUTO_LENGTH);
+    try testing.expectEqual(~@as(usize, 0), NAPI_AUTO_LENGTH);
+}
+
+test "napi_status ok is zero" {
+    try testing.expectEqual(@as(c_int, 0), @intFromEnum(napi_status.ok));
+}
+
+test "napi_status values are sequential from 0 to 23" {
+    try testing.expectEqual(@as(c_int, 0), @intFromEnum(napi_status.ok));
+    try testing.expectEqual(@as(c_int, 9), @intFromEnum(napi_status.generic_failure));
+    try testing.expectEqual(@as(c_int, 23), @intFromEnum(napi_status.cannot_run_js));
+}
+
+test "napi_valuetype covers all js types" {
+    try testing.expectEqual(@as(c_int, 0), @intFromEnum(napi_valuetype.undefined));
+    try testing.expectEqual(@as(c_int, 1), @intFromEnum(napi_valuetype.null));
+    try testing.expectEqual(@as(c_int, 7), @intFromEnum(napi_valuetype.function));
+    try testing.expectEqual(@as(c_int, 9), @intFromEnum(napi_valuetype.bigint));
+}
+
+test "napi_typedarray_type values match js typed array indices" {
+    try testing.expectEqual(@as(c_int, 0), @intFromEnum(napi_typedarray_type.int8_array));
+    try testing.expectEqual(@as(c_int, 1), @intFromEnum(napi_typedarray_type.uint8_array));
+    try testing.expectEqual(@as(c_int, 7), @intFromEnum(napi_typedarray_type.float32_array));
+    try testing.expectEqual(@as(c_int, 8), @intFromEnum(napi_typedarray_type.float64_array));
+    try testing.expectEqual(@as(c_int, 9), @intFromEnum(napi_typedarray_type.bigint64_array));
+    try testing.expectEqual(@as(c_int, 10), @intFromEnum(napi_typedarray_type.biguint64_array));
+}
