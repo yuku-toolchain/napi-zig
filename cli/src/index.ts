@@ -5,7 +5,7 @@ import { buildDev, buildRelease } from "./build.js";
 import { bump } from "./bump.js";
 import { publish } from "./publish.js";
 import { npmInit } from "./init.js";
-import { version } from "../package.json";
+import pkg from "../package.json" with { type: "json" };
 
 const cli = cac("napi-zig");
 
@@ -58,7 +58,7 @@ cli
   });
 
 cli.help();
-cli.version(version);
+cli.version(pkg.version);
 cli.usage("Build native Node.js addons with Zig");
 
 cli.parse();
