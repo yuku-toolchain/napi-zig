@@ -219,7 +219,7 @@ fn configureLinkerFlags(b: *std.Build, lib: *std.Build.Step.Compile, target: std
         .macos => {
             lib.linker_allow_shlib_undefined = true;
         },
-        .linux => {
+        .linux, .freebsd => {
             lib.root_module.link_libc = true;
         },
         .windows => {
