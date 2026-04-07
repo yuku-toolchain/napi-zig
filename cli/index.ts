@@ -32,7 +32,7 @@ cli
       release: string | undefined,
       options: { preid?: string; commit?: string; tag?: boolean; push?: boolean },
     ) => {
-      bump({ release, ...options });
+      return bump({ release, ...options });
     },
   );
 

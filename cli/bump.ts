@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import prompts from "prompts";
 import { inc, valid, clean, parse } from "semver";
 import ora from "ora";
@@ -78,16 +78,19 @@ function allNextVersions(current: string, preid: string, commits: string[]): Nex
 
 function getRecentCommits(): string[] {
   try {
-    const lastTag = execSync("git describe --tags --abbrev=0 2>/dev/null", {
+    const lastTag = execFileSync("git", ["describe", "--tags", "--abbrev=0"], {
       encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
     }).trim();
-    return execSync(`git log ${lastTag}..HEAD --pretty=%s`, { encoding: "utf-8" })
+    return execFileSync("git", ["log", `${lastTag}..HEAD`, "--pretty=%s"], {
+      encoding: "utf-8",
+    })
       .trim()
       .split("\n")
       .filter(Boolean);
   } catch {
     try {
-      return execSync("git log --pretty=%s -20", { encoding: "utf-8" })
+      return execFileSync("git", ["log", "--pretty=%s", "-20"], { encoding: "utf-8" })
         .trim()
         .split("\n")
         .filter(Boolean);
@@ -233,18 +236,18 @@ export async function bump(options: BumpOptions): Promise<void> {
   const doPush = options.push !== false;
 
   try {
-    execSync("git add npm/", { stdio: "pipe" });
-    execSync(`git commit -m "${commitMsg}"`, { stdio: "pipe" });
+    execFileSync("git", ["add", "npm/"], { stdio: "pipe" });
+    execFileSync("git", ["commit", "-m", commitMsg], { stdio: "pipe" });
     ora().succeed(`Committed: ${commitMsg}`);
 
     if (doTag) {
-      execSync(`git tag v${newVersion}`, { stdio: "pipe" });
+      execFileSync("git", ["tag", `v${newVersion}`], { stdio: "pipe" });
       ora().succeed(`Tagged: v${newVersion}`);
     }
 
     if (doPush) {
       const pushSpinner = ora("Pushing to remote...").start();
-      execSync(doTag ? "git push --follow-tags" : "git push", { stdio: "pipe" });
+      execFileSync("git", ["push", ...(doTag ? ["--follow-tags"] : [])], { stdio: "pipe" });
       pushSpinner.succeed("Pushed");
     }
   } catch (e) {
