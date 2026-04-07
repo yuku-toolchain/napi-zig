@@ -1,28 +1,14 @@
 {
-  "name": "napi-zig",
-  "version": "0.1.17",
-  "description": "Build native Node.js addons with Zig",
-  "homepage": "https://napi-zig.dev",
-  "license": "MIT",
-  "author": "Arshad Yaseen <arshadpyaseen@gmail.com> (https://arshad.fyi)",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/yuku-toolchain/napi-zig.git"
-  },
-  "funding": "https://github.com/sponsors/arshad-yaseen",
-  "bin": {
-    "napi": "dist/index.js"
-  },
-  "files": [
-    "dist"
+  "name": "napi-zig-root",
+  "workspaces": [
+    "cli"
   ],
-  "type": "module",
   "scripts": {
-    "build": "tsgo",
-    "type-check": "tsgo --noEmit",
-    "release": "bumpp --commit 'npm %s' --push --tag --yes --release 'patch'",
+    "type-check": "tsgo --noEmit && bun --filter './cli' type-check",
+    "release": "bumpp -r --commit 'npm %s' --push --tag --yes --release 'patch'",
     "lint": "oxlint",
-    "format": "oxfmt"
+    "format": "oxfmt",
+    "build:cli": "bun --filter './cli' build"
   },
   "dependencies": {
     "cac": "^7.0.0",
@@ -38,10 +24,5 @@
     "bumpp": "^11.0.1",
     "oxfmt": "^0.44.0",
     "oxlint": "^1.59.0"
-  },
-  "peerDependenciesMeta": {
-    "typescript": {
-      "optional": true
-    }
   }
 }
