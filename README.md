@@ -6,7 +6,7 @@ Write [Node.js native addons](https://nodejs.org/api/n-api.html) in Zig. Cross-c
 
 - [Getting started](#getting-started)
 - [Project setup](#project-setup)
-- [Building](#building)
+- [Release build](#release-build)
 - [Publishing to npm](#publishing-to-npm)
 - [CLI reference](#cli-reference)
 - [Calling conventions](#calling-conventions)
@@ -163,23 +163,15 @@ Then in your addon code: `const parser = @import("parser");`
 
 Default platforms: Linux (x64, arm64, arm with glibc and musl), macOS (x64, arm64), Windows (x64, arm64), FreeBSD (x64).
 
-## Building
+## Release build
 
-### Development
-
-```sh
-napi build
-```
-
-Compiles for your current platform only. Output: `zig-out/lib/my-addon.node` with a loader `my-addon.js` so you can `import addon from "./my-addon.js"` directly.
-
-### Release
+Before publishing, cross-compile for all platforms:
 
 ```sh
 napi build --release
 ```
 
-Cross-compiles for all platforms and generates the npm package structure in `npm/my-addon/`:
+This generates the npm package structure in `npm/my-addon/`:
 
 ```
 npm/my-addon/
