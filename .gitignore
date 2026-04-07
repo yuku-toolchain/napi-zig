@@ -1,3 +1,7 @@
 .zig-cache
 zig-pkg
 zig-out
+bun.lock
+node_modules
+.DS_Store
+dist

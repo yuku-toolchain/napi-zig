@@ -33,7 +33,7 @@ jobs:
         run: zig build check
 
       - name: Install dependencies
-        run: cd cli && bun install --frozen-lockfile
+        run: bun install --frozen-lockfile
 
       - name: Build CLI
-        run: cd cli && bun run build
+        run: bun run build

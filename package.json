@@ -30,7 +30,7 @@
   "scripts": {
     "build": "tsgo",
     "type-check": "tsgo --noEmit",
-    "release": "bumpp -r --commit 'npm %s' --push --tag --yes --release 'patch'"
+    "release": "bumpp --commit 'npm %s' --push --tag --yes --release 'patch'"
   },
   "type": "module"
 }
