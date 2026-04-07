@@ -1,14 +1,13 @@
-import { execSync } from "node:child_process";
 import ora from "ora";
-import { discoverPackages } from "./npm.js";
-import { packageExistsOnNpm, requireNpmVersion } from "./utils.js";
+import { discoverPackages } from "./npm";
+import { packageExistsOnNpm, requireNpmVersion, run, runInherit, sleep } from "./utils";
 
 export interface NpmInitOptions {
   repo: string;
   workflow: string;
 }
 
-export function npmInit(options: NpmInitOptions): void {
+export async function npmInit(options: NpmInitOptions): Promise<void> {
   const packages = discoverPackages();
   const bindings = packages.filter((p) => !p.main);
   const main = packages.find((p) => p.main);
@@ -16,7 +15,8 @@ export function npmInit(options: NpmInitOptions): void {
 
   // check which packages are new
   const checkSpinner = ora("Checking which packages need publishing...").start();
-  const newPackages = ordered.filter((pkg) => !packageExistsOnNpm(pkg.name));
+  const existsResults = await Promise.all(ordered.map((pkg) => packageExistsOnNpm(pkg.name)));
+  const newPackages = ordered.filter((_, i) => !existsResults[i]);
   const existingCount = ordered.length - newPackages.length;
   checkSpinner.succeed(
     newPackages.length === 0
@@ -31,7 +31,7 @@ export function npmInit(options: NpmInitOptions): void {
     for (const pkg of newPackages) {
       ora().info(`Publishing ${pkg.name}@${pkg.version}...`);
       try {
-        execSync("npm publish --access public", { cwd: pkg.dir, stdio: "inherit" });
+        await runInherit("npm publish --access public", { cwd: pkg.dir });
       } catch {}
       console.log();
     }
@@ -47,19 +47,18 @@ export function npmInit(options: NpmInitOptions): void {
       const spinner = ora(`[${i + 1}/${newPackages.length}] ${pkg.name}...`).start();
 
       try {
-        execSync(
+        await run(
           `npm trust github "${pkg.name}" --file "${options.workflow}" --repo "${options.repo}" --yes`,
-          { stdio: "pipe" },
         );
         spinner.succeed(`[${i + 1}/${newPackages.length}] ${pkg.name}`);
       } catch (error: unknown) {
-        const stderr = String((error as { stderr?: Buffer }).stderr ?? "");
+        const stderr = String((error as { stderr?: string }).stderr ?? "");
         spinner.fail(`[${i + 1}/${newPackages.length}] ${pkg.name}: ${stderr.split("\n")[0]}`);
       }
 
       // rate-limit: 2s between calls to avoid npm throttling
       if (i < newPackages.length - 1) {
-        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2000);
+        await sleep(2000);
       }
     }
   }

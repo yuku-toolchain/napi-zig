@@ -2,7 +2,8 @@ import { execFileSync } from "node:child_process";
 import prompts from "prompts";
 import { inc, valid, clean, parse } from "semver";
 import ora from "ora";
-import { discoverPackages, updateVersions } from "./npm.js";
+import { discoverPackages, updateVersions } from "./npm";
+import { bold, green, runArgs } from "./utils";
 
 type ReleaseType =
   | "major"
@@ -22,9 +23,6 @@ const RELEASE_TYPES: readonly string[] = [
   "prepatch",
   "prerelease",
 ];
-
-const bold = (s: string): string => `\x1b[1m${s}\x1b[0m`;
-const green = (s: string): string => `\x1b[32m${s}\x1b[0m`;
 
 function nextVersion(current: string, release: ReleaseType, preid: string): string {
   const result = inc(current, release, preid);
@@ -230,7 +228,6 @@ export async function bump(options: BumpOptions): Promise<void> {
   updateVersions(packages, newVersion);
   spinner.succeed(`Updated ${packages.length} packages to ${bold(newVersion)}`);
 
-  // git operations
   const commitMsg = (options.commit ?? "%s").replace(/%s/g, newVersion);
   const doTag = options.tag !== false;
   const doPush = options.push !== false;
@@ -247,7 +244,7 @@ export async function bump(options: BumpOptions): Promise<void> {
 
     if (doPush) {
       const pushSpinner = ora("Pushing to remote...").start();
-      execFileSync("git", ["push", ...(doTag ? ["--follow-tags"] : [])], { stdio: "pipe" });
+      await runArgs("git", ["push", ...(doTag ? ["--follow-tags"] : [])]);
       pushSpinner.succeed("Pushed");
     }
   } catch (e) {

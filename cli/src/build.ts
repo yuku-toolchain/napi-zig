@@ -1,13 +1,13 @@
-import { execSync } from "node:child_process";
 import { existsSync, readdirSync, statSync, mkdirSync, copyFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import ora from "ora";
+import { runInherit } from "./utils";
 
-export function buildDev(optimize: string | undefined): void {
+export async function buildDev(optimize: string | undefined): Promise<void> {
   const optFlag = optimize ? ` --release=${optimize}` : "";
 
   const spinner = ora("Building for current platform...").start();
-  run(`zig build${optFlag}`);
+  await runInherit(`zig build${optFlag}`);
   spinner.succeed("Build complete");
 
   const libDir = join(process.cwd(), "zig-out", "lib");
@@ -32,11 +32,11 @@ export function buildDev(optimize: string | undefined): void {
   }
 }
 
-export function buildRelease(optimize: string): void {
+export async function buildRelease(optimize: string): Promise<void> {
   const optFlag = ` --release=${optimize}`;
 
   const spinner = ora("Cross-compiling for all platforms...").start();
-  run(`zig build -Dnpm=true${optFlag}`);
+  await runInherit(`zig build -Dnpm=true${optFlag}`);
   spinner.succeed("Cross-compilation complete");
 
   const srcBase = join(process.cwd(), "zig-out", "npm");
@@ -98,13 +98,5 @@ function copyDir(src: string, dest: string) {
     } else {
       copyFileSync(srcPath, destPath);
     }
-  }
-}
-
-function run(cmd: string) {
-  try {
-    execSync(cmd, { stdio: "inherit", cwd: process.cwd() });
-  } catch {
-    process.exit(1);
   }
 }

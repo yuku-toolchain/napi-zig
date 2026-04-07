@@ -1,12 +1,12 @@
-import { execSync } from "node:child_process";
 import ora from "ora";
-import { discoverPackages } from "./npm.js";
+import { discoverPackages } from "./npm";
+import { run } from "./utils";
 
 export interface PublishOptions {
   provenance?: boolean;
 }
 
-export function publish(options: PublishOptions): void {
+export async function publish(options: PublishOptions): Promise<void> {
   const packages = discoverPackages();
   const bindings = packages.filter((p) => !p.main);
   const main = packages.find((p) => p.main);
@@ -18,22 +18,22 @@ export function publish(options: PublishOptions): void {
 
   // publish bindings first
   for (const pkg of bindings) {
-    publishPackage(pkg.name, pkg.dir, flagStr);
+    await publishPackage(pkg.name, pkg.dir, flagStr);
   }
 
   // publish main package last
   if (main) {
-    publishPackage(main.name, main.dir, flagStr);
+    await publishPackage(main.name, main.dir, flagStr);
   }
 }
 
-function publishPackage(name: string, dir: string, flags: string): void {
+async function publishPackage(name: string, dir: string, flags: string): Promise<void> {
   const spinner = ora(`Publishing ${name}...`).start();
   try {
-    execSync(`npm publish ${flags}`, { cwd: dir, stdio: "pipe" });
+    await run(`npm publish ${flags}`, { cwd: dir });
     spinner.succeed(`Published ${name}`);
   } catch (error: unknown) {
-    const stderr = String((error as { stderr?: Buffer }).stderr ?? "");
+    const stderr = String((error as { stderr?: string }).stderr ?? "");
     if (
       stderr.includes("previously published") ||
       stderr.includes("cannot publish over") ||

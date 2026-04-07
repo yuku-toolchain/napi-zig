@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
 import cac from "cac";
-import { buildDev, buildRelease } from "./build.js";
-import { bump } from "./bump.js";
-import { publish } from "./publish.js";
-import { npmInit } from "./init.js";
-import pkg from "../package.json" with { type: "json" };
+import { buildDev, buildRelease } from "./build";
+import { bump } from "./bump";
+import { publish } from "./publish";
+import { npmInit } from "./init";
+import { CLI_VERSION } from "./utils";
 
 const cli = cac("napi-zig");
 
@@ -15,9 +15,9 @@ cli
   .option("--optimize <mode>", "Optimization: safe, fast, small (default: fast with --release)")
   .action((options: { release?: boolean; optimize?: string }) => {
     if (options.release) {
-      buildRelease(options.optimize ?? "fast");
+      return buildRelease(options.optimize ?? "fast");
     } else {
-      buildDev(options.optimize);
+      return buildDev(options.optimize);
     }
   });
 
@@ -41,7 +41,7 @@ cli
   .option("--provenance", "Generate provenance (default: auto in CI)")
   .option("--no-provenance", "Skip provenance generation")
   .action((options: { provenance?: boolean }) => {
-    publish(options);
+    return publish(options);
   });
 
 cli
@@ -54,11 +54,11 @@ cli
       console.error("Example: napi npm-init --repo myorg/myrepo --workflow publish.yml");
       process.exit(1);
     }
-    npmInit({ repo: options.repo, workflow: options.workflow });
+    return npmInit({ repo: options.repo, workflow: options.workflow });
   });
 
 cli.help();
-cli.version(pkg.version);
+cli.version(CLI_VERSION);
 cli.usage("Build native Node.js addons with Zig");
 
 cli.parse();

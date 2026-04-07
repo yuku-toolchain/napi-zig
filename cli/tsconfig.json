@@ -1,12 +1,12 @@
 {
   "compilerOptions": {
     "target": "ESNext",
-    "module": "NodeNext",
+    "module": "ESNext",
     "moduleDetection": "force",
 
     "resolveJsonModule": true,
     "esModuleInterop": true,
-    "moduleResolution": "nodenext",
+    "moduleResolution": "bundler",
     "verbatimModuleSyntax": true,
 
     "strict": true,
