@@ -18,12 +18,8 @@
 
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "noPropertyAccessFromIndexSignature": false,
-
-    "rootDir": "./src",
-    "outDir": "./dist"
+    "noPropertyAccessFromIndexSignature": false
   },
-
-  "include": ["src/**/*"],
+  "include": ["**/*"],
   "exclude": ["node_modules", "dist"]
 }
