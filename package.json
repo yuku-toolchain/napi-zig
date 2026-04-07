@@ -1,10 +1,10 @@
 {
   "name": "napi-zig",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "description": "Build native Node.js addons with Zig",
   "license": "MIT",
   "bin": {
-    "napi": "dist/src/index.js"
+    "napi": "dist/index.js"
   },
   "files": [
     "dist"
