@@ -13,14 +13,15 @@ export function npmInit(options: NpmInitOptions): void {
   const bindings = packages.filter(p => !p.main)
   const main = packages.find(p => p.main)
 
-  ora().info(`Found ${packages.length} packages to publish`)
+  ora().info(`Found ${packages.length} packages to publish\n`)
 
-  // publish bindings first, then main
+  // publish bindings first, then main, use stdio "inherit" so npm's
+  // interactive auth (OTP / browser-based 2FA) works for the user
   for (const pkg of [...bindings, ...(main ? [main] : [])]) {
     const spinner = ora(`Publishing ${pkg.name}@${pkg.version}...`).start()
+
     try {
-      execSync("npm publish --access public", { cwd: pkg.dir, stdio: "pipe" })
-      spinner.succeed(`Published ${pkg.name}@${pkg.version}`)
+      execSync("npm publish --access public", { cwd: pkg.dir, stdio: "inherit" })
     } catch (error: unknown) {
       const stderr = String((error as { stderr?: Buffer }).stderr ?? "")
       if (
@@ -35,10 +36,10 @@ export function npmInit(options: NpmInitOptions): void {
         process.exit(1)
       }
     }
+    console.log()
   }
 
   // configure trusted publishing
-  console.log()
   requireNpmVersion(11, 10, "trusted publishing")
   ora().info(`Configuring trusted publishing for ${options.repo} / ${options.workflow}`)
 
