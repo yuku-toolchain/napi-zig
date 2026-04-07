@@ -4,16 +4,181 @@ Write [Node.js native addons](https://nodejs.org/api/n-api.html) in Zig. Cross-c
 
 ## Quick start
 
-**1. Add the dependency**
+### 1. Add the dependency
 
 ```sh
 zig fetch --save git+https://github.com/yuku-toolchain/napi-zig.git/#HEAD
+```
+
+### 2. Install the CLI
+
+```sh
+npm install -D napi-zig
+```
+
+This gives you the `napi` command for building, versioning, and publishing.
+
+### 3. Write your addon
+
+Create a Zig file (e.g. `src/lib.zig`):
+
+```zig
+const napi = @import("napi-zig");
+
+comptime {
+    napi.module(@This());
+}
+
+pub fn add(a: i32, b: i32) i32 {
+    return a + b;
+}
+
+pub fn greet(name: []const u8) ![]const u8 {
+    const alloc = @import("std").heap.page_allocator;
+    return std.fmt.allocPrint(alloc, "Hello, {s}!", .{name});
+}
 ```
 
 `napi.module(@This())` exports every `pub fn` as a JS function and every `pub const` with a JS-compatible value as a JS property. Snake_case names are converted to camelCase automatically.
 
 > [!NOTE]
 > Only _values_ are exported, not types. `pub const config = .{ .debug = true }` becomes a JS object. `pub const Config = struct { ... }` is a type and is skipped.
+
+### 4. Configure build.zig
+
+```zig
+const std = @import("std");
+const napi_zig = @import("napi_zig");
+
+pub fn build(b: *std.Build) void {
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
+
+    const napi_dep = b.dependency("napi_zig", .{});
+
+    napi_zig.addLib(b, napi_dep, .{
+        .name = "my-addon",
+        .root = b.path("src/lib.zig"),
+        .target = target,
+        .optimize = optimize,
+        .npm = .{
+            .scope = "@myscope",
+            .repository = .{ .url = "https://github.com/myorg/myrepo" },
+            .description = "My native addon",
+        },
+    });
+}
+```
+
+**`addLib` options:**
+
+| Option      | Required | Description                                                                           |
+| ----------- | -------- | ------------------------------------------------------------------------------------- |
+| `.name`     | Yes      | Package name (used for the `.node` file and npm package)                              |
+| `.root`     | Yes      | Path to the root Zig source file                                                      |
+| `.target`   | Yes      | Build target (from `standardTargetOptions`)                                           |
+| `.optimize` | Yes      | Optimization mode (from `standardOptimizeOption`)                                     |
+| `.imports`  | No       | Additional Zig module imports (e.g. `.{ .name = "parser", .module = parser_module }`) |
+| `.npm`      | No       | npm package config (required for cross-compilation and publishing)                    |
+
+**`.npm` options:**
+
+| Option         | Required | Default             | Description                                                                       |
+| -------------- | -------- | ------------------- | --------------------------------------------------------------------------------- |
+| `.scope`       | Yes      |                     | npm scope (e.g. `"@myscope"`)                                                     |
+| `.repository`  | Yes      |                     | Repository info for npm provenance (`.url` required, `.type` defaults to `"git"`) |
+| `.description` | No       | `""`                | Package description                                                               |
+| `.license`     | No       | `"MIT"`             | License identifier                                                                |
+| `.dts`         | No       | `null`              | Path to a TypeScript declaration file to include                                  |
+| `.platforms`   | No       | `Platform.defaults` | Target platforms to cross-compile for                                             |
+
+The default platforms cover Linux (x64/arm64/arm, glibc and musl), macOS (x64/arm64), Windows (x64/arm64), and FreeBSD (x64).
+
+### 5. Create the npm scope
+
+Before publishing, create a matching npm organization at [npmjs.com/org/create](https://www.npmjs.com/org/create). The scope in your build config (e.g. `@myscope`) must match the npm org name. Binding packages are published as `@myscope/binding-linux-x64-gnu`, `@myscope/binding-darwin-arm64`, etc.
+
+### 6. Development
+
+Build for your current platform:
+
+```sh
+napi build
+```
+
+This compiles to `zig-out/lib/my-addon.node` and creates a loader `my-addon.js` so you can `require("./my-addon")` directly.
+
+### 7. Release build
+
+Cross-compile for all platforms and generate the npm package structure:
+
+```sh
+napi build --release
+```
+
+This produces `npm/my-addon/` with the main package and all platform-specific binding packages.
+
+### 8. First-time npm setup
+
+Log in to npm, then publish the initial versions and configure trusted publishing (OIDC) so GitHub Actions can publish future releases without tokens:
+
+```sh
+npm login
+napi npm-init --repo myorg/myrepo --workflow publish.yml
+```
+
+This publishes all packages (main + bindings) and configures each one for GitHub Actions OIDC publishing. Requires npm >= 11.10.0.
+
+### 9. Publishing releases
+
+Bump the version across all packages, commit, tag, and push:
+
+```sh
+napi bump
+```
+
+This shows an interactive version picker (patch/minor/major/pre-release/custom). The push triggers your GitHub Actions workflow, which runs `napi publish` to release all packages to npm.
+
+You can also pass the version directly:
+
+```sh
+napi bump patch
+napi bump 1.2.3
+napi bump --commit "release v%s" --preid alpha
+```
+
+### 10. GitHub Actions workflow
+
+Create `.github/workflows/publish.yml`:
+
+```yaml
+name: Publish
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: npm install -g napi-zig
+      - run: napi build --release
+      - run: napi publish
+```
+
+No `NPM_TOKEN` needed. The `id-token: write` permission enables OIDC authentication with npm's trusted publishing, which was configured during `napi npm-init`.
+
+---
 
 ## Calling conventions
 

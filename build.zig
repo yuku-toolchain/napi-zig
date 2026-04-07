@@ -58,12 +58,6 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&check_lib.step);
 }
 
-pub const Lib = struct {
-    compile: *std.Build.Step.Compile,
-    install: *std.Build.Step.InstallArtifact,
-    step: *std.Build.Step,
-};
-
 /// build a .node shared library for the current platform.
 ///
 /// installs to zig-out/lib/{name}.node for local development.
@@ -71,7 +65,7 @@ pub const Lib = struct {
 /// if `npm` config is provided and `-Dnpm=true` is passed, also cross-compiles
 /// for all target platforms and generates npm package scaffold in zig-out/npm/.
 /// use the napi-zig CLI to sync the output to your project's npm/ folder.
-pub fn addLib(b: *std.Build, napi_dep: *std.Build.Dependency, options: LibOptions) Lib {
+pub fn addLib(b: *std.Build, napi_dep: *std.Build.Dependency, options: LibOptions) void {
     const napi_module = napi_dep.module("napi");
     const node_api_def = napi_dep.path("build/node_api.def");
 
@@ -117,12 +111,6 @@ pub fn addLib(b: *std.Build, napi_dep: *std.Build.Dependency, options: LibOption
             addNpmRelease(b, napi_module, options, npm, node_api_def);
         }
     }
-
-    return .{
-        .compile = lib,
-        .install = install,
-        .step = &install.step,
-    };
 }
 
 fn addNpmRelease(

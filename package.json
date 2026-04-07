@@ -1,16 +1,14 @@
 {
   "name": "napi-zig-root",
   "workspaces": [
-    "cli",
-    "docs"
+    "cli"
   ],
   "scripts": {
     "type-check": "bun --filter './cli' type-check",
     "release": "bumpp -r --commit 'npm %s' --push --tag --yes --release 'patch'",
     "lint": "oxlint",
     "format": "oxfmt",
-    "build:cli": "bun --filter './cli' build",
-    "dev:docs": "bun --filter './docs' dev"
+    "build:cli": "bun --filter './cli' build"
   },
   "dependencies": {
     "cac": "^7.0.0",
