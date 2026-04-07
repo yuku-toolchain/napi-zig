@@ -276,13 +276,21 @@ test "exportableNames skips underscore prefixed declarations" {
 }
 
 test "isRawFn detects env and callinfo signature" {
-    try testing.expect(isRawFn(fn (Env, CallInfo) callconv(.c) ?Val));
-    try testing.expect(!isRawFn(fn (i32) void));
-    try testing.expect(!isRawFn(fn () void));
+    const raw = struct {
+        pub fn f(_: Env, _: CallInfo) !Val {
+            unreachable;
+        }
+    };
+    try testing.expect(comptime isRawFn(@TypeOf(raw.f)));
+    try testing.expect(comptime !isRawFn(fn (i32) void));
+    try testing.expect(comptime !isRawFn(fn () void));
 }
 
 test "isRawFn rejects single parameter function" {
-    try testing.expect(!isRawFn(fn (Env) void));
+    const not_raw = struct {
+        pub fn f(_: Env) void {}
+    };
+    try testing.expect(comptime !isRawFn(@TypeOf(not_raw.f)));
 }
 
 test "isAllDefaults returns true when all fields have defaults" {
