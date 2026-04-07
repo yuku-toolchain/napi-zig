@@ -102,8 +102,10 @@ pub fn build(b: *std.Build) void {
 npm run debug
 ```
 
+This compiles for your current platform and creates a `my-addon.js` loader so you can import the addon directly:
+
 ```js
-const addon = require("./my-addon");
+import addon from "./my-addon.js";
 console.log(addon.add(2, 3)); // 5
 console.log(addon.greet("world")); // Hello, world!
 ```
@@ -134,7 +136,7 @@ const parser_module = b.addModule("parser", .{
     .optimize = optimize,
 });
 
-_ = napi_zig.addLib(b, napi_dep, .{
+napi_zig.addLib(b, napi_dep, .{
     .name = "my-addon",
     .root = b.path("src/napi/root.zig"),
     .target = target,
@@ -159,7 +161,7 @@ Then in your addon code: `const parser = @import("parser");`
 | `.dts`         | No       | `null`              | Path to a TypeScript declaration file                                        |
 | `.platforms`   | No       | `Platform.defaults` | Target platforms for cross-compilation                                       |
 
-Default platforms: Linux (x64, arm64, arm -- glibc and musl), macOS (x64, arm64), Windows (x64, arm64), FreeBSD (x64).
+Default platforms: Linux (x64, arm64, arm with glibc and musl), macOS (x64, arm64), Windows (x64, arm64), FreeBSD (x64).
 
 ## Building
 
@@ -169,7 +171,7 @@ Default platforms: Linux (x64, arm64, arm -- glibc and musl), macOS (x64, arm64)
 napi build
 ```
 
-Compiles for your current platform only. Output: `zig-out/lib/my-addon.node` with a loader `my-addon.js` so you can `require("./my-addon")` directly.
+Compiles for your current platform only. Output: `zig-out/lib/my-addon.node` with a loader `my-addon.js` so you can `import addon from "./my-addon.js"` directly.
 
 ### Release
 
@@ -195,7 +197,7 @@ npm/my-addon/
       ...
 ```
 
-The main `index.js` re-exports the native binding. You can replace it with a custom wrapper in `npm/my-addon/` -- the build system preserves existing files and only updates `.node` binaries on subsequent builds.
+The main `index.js` re-exports the native binding. You can replace it with a custom wrapper in `npm/my-addon/`. The build system preserves existing files and only updates `.node` binaries on subsequent builds.
 
 ## Publishing to npm
 
@@ -576,7 +578,7 @@ divide("x", 1); // TypeError: expected number, got string
 
 ## Callbacks
 
-Accept a JS function as a parameter by using `napi.Callback`. It is validated on conversion -- if the JS value is not a function, a `TypeError` is thrown.
+Accept a JS function as a parameter by using `napi.Callback`. It is validated on conversion. If the JS value is not a function, a `TypeError` is thrown.
 
 ```zig
 pub fn forEach(env: napi.Env, arr: []napi.Val, callback: napi.Callback) !void {
