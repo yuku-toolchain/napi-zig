@@ -67,6 +67,7 @@ pub const Lib = struct {
 /// use the napi-zig CLI to sync the output to your project's npm/ folder.
 pub fn addLib(b: *std.Build, napi_dep: *std.Build.Dependency, options: LibOptions) Lib {
     const napi_module = napi_dep.module("napi");
+    const node_api_def = napi_dep.path("build/node_api.def");
 
     const lib_mod = b.createModule(.{
         .root_source_file = options.root,
@@ -85,7 +86,7 @@ pub fn addLib(b: *std.Build, napi_dep: *std.Build.Dependency, options: LibOption
         .linkage = .dynamic,
     });
 
-    configureLinkerFlags(lib, options.target);
+    configureLinkerFlags(b, lib, options.target, node_api_def);
 
     const install = b.addInstallArtifact(lib, .{
         .dest_dir = .{ .override = .lib },
@@ -107,7 +108,7 @@ pub fn addLib(b: *std.Build, napi_dep: *std.Build.Dependency, options: LibOption
     if (options.npm) |npm| {
         const do_npm = b.option(bool, "npm", "Cross-compile and generate npm packages") orelse false;
         if (do_npm) {
-            addNpmRelease(b, napi_module, options, npm);
+            addNpmRelease(b, napi_module, options, npm, node_api_def);
         }
     }
 
@@ -123,6 +124,7 @@ fn addNpmRelease(
     napi_module: *std.Build.Module,
     options: LibOptions,
     npm: NpmConfig,
+    node_api_def: std.Build.LazyPath,
 ) void {
     const wf = b.addWriteFiles();
 
@@ -182,7 +184,7 @@ fn addNpmRelease(
             .linkage = .dynamic,
         });
 
-        configureLinkerFlags(lib, target);
+        configureLinkerFlags(b, lib, target, node_api_def);
 
         const node_install = b.addInstallArtifact(lib, .{
             .dest_dir = .{ .override = .{
@@ -207,7 +209,7 @@ fn addNpmRelease(
     }
 }
 
-fn configureLinkerFlags(lib: *std.Build.Step.Compile, target: std.Build.ResolvedTarget) void {
+fn configureLinkerFlags(b: *std.Build, lib: *std.Build.Step.Compile, target: std.Build.ResolvedTarget, node_api_def: std.Build.LazyPath) void {
     lib.root_module.red_zone = false;
     lib.root_module.unwind_tables = .none;
 
@@ -217,6 +219,27 @@ fn configureLinkerFlags(lib: *std.Build.Step.Compile, target: std.Build.Resolved
         },
         .linux => {
             lib.root_module.link_libc = true;
+        },
+        .windows => {
+            lib.root_module.link_libc = true;
+            // windows PE/COFF requires all symbols resolved at link time.
+            // generate an import library from node_api.def so the linker knows
+            // these N-API symbols come from node.exe at runtime.
+            const machine = switch (target.result.cpu.arch) {
+                .x86_64 => "i386:x86-64",
+                .aarch64 => "arm64",
+                else => @panic("unsupported Windows architecture for Node.js addon"),
+            };
+            const dlltool = b.addSystemCommand(&.{ b.graph.zig_exe, "dlltool" });
+            dlltool.addArg("-d");
+            dlltool.addFileArg(node_api_def);
+            dlltool.addArg("-D");
+            dlltool.addArg("node.exe");
+            dlltool.addArg("-m");
+            dlltool.addArg(machine);
+            dlltool.addArg("-l");
+            const node_lib = dlltool.addOutputFileArg("node.lib");
+            lib.root_module.addObjectFile(node_lib);
         },
         else => {},
     }
