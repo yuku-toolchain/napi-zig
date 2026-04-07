@@ -55,15 +55,15 @@ zig build napi
 ```
 
 ```js
-const addon = require('./zig-out/lib/my-addon.node');
-addon.add(1, 2)  // 3
-addon.version     // "1.0.0"
+const addon = require("./zig-out/lib/my-addon.node");
+addon.add(1, 2); // 3
+addon.version; // "1.0.0"
 ```
 
 `napi.module(@This())` exports every `pub fn` as a JS function and every `pub const` with a JS-compatible value as a JS property. Snake_case names are converted to camelCase automatically.
 
 > [!NOTE]
-> Only *values* are exported, not types. `pub const config = .{ .debug = true }` becomes a JS object. `pub const Config = struct { ... }` is a type and is skipped.
+> Only _values_ are exported, not types. `pub const config = .{ .debug = true }` becomes a JS object. `pub const Config = struct { ... }` is a type and is skipped.
 
 ## Calling conventions
 
@@ -129,100 +129,100 @@ pub fn variadic(env: napi.Env, info: napi.CallInfo) !napi.Val {
 
 **Constants:**
 
-| Zig type | JS result |
-|---|---|
-| `bool` | Boolean |
-| `void` | `undefined` |
-| `?T` | inner value or `null` |
+| Zig type | JS result             |
+| -------- | --------------------- |
+| `bool`   | Boolean               |
+| `void`   | `undefined`           |
+| `?T`     | inner value or `null` |
 
 **Numbers:**
 
-| Zig type | JS result | Notes |
-|---|---|---|
-| `comptime_int` | Number | Compiler-checked to fit f64 |
-| `comptime_float` | Number | |
-| `i1`..`i32` | Number | |
-| `u1`..`u32` | Number | |
-| `i33`..`i53`, `u33`..`u53` | Number | Via f64, within safe integer range |
-| `i54`..`i64` | BigInt | |
-| `u54`..`u64` | BigInt | |
-| `f16`, `f32`, `f64` | Number | Cast to f64 |
+| Zig type                   | JS result | Notes                              |
+| -------------------------- | --------- | ---------------------------------- |
+| `comptime_int`             | Number    | Compiler-checked to fit f64        |
+| `comptime_float`           | Number    |                                    |
+| `i1`..`i32`                | Number    |                                    |
+| `u1`..`u32`                | Number    |                                    |
+| `i33`..`i53`, `u33`..`u53` | Number    | Via f64, within safe integer range |
+| `i54`..`i64`               | BigInt    |                                    |
+| `u54`..`u64`               | BigInt    |                                    |
+| `f16`, `f32`, `f64`        | Number    | Cast to f64                        |
 
 **Strings:**
 
-| Zig type | JS result |
-|---|---|
-| `[]const u8`, `[:0]const u8` | String |
-| `*const [N:0]u8` | String (string literals) |
+| Zig type                     | JS result                |
+| ---------------------------- | ------------------------ |
+| `[]const u8`, `[:0]const u8` | String                   |
+| `*const [N:0]u8`             | String (string literals) |
 
 **Arrays:**
 
-| Zig type | JS result |
-|---|---|
-| `[N]T` | Array (fixed-size) |
-| `[]T`, `[]const T` | Array (slice) |
-| `struct { S, T }` | Array (tuple) |
+| Zig type           | JS result          |
+| ------------------ | ------------------ |
+| `[N]T`             | Array (fixed-size) |
+| `[]T`, `[]const T` | Array (slice)      |
+| `struct { S, T }`  | Array (tuple)      |
 
 **Objects:**
 
-| Zig type | JS result |
-|---|---|
-| `enum` | String (tag name) |
+| Zig type                    | JS result                                    |
+| --------------------------- | -------------------------------------------- |
+| `enum`                      | String (tag name)                            |
 | `struct { foo: S, bar: T }` | Object (field names snake_case to camelCase) |
 
 **Special:**
 
-| Zig type | JS result |
-|---|---|
-| `Val` | Passthrough |
+| Zig type                 | JS result                                            |
+| ------------------------ | ---------------------------------------------------- |
+| `Val`                    | Passthrough                                          |
 | Types with `pub fn toJs` | Custom (see [Custom conversion](#custom-conversion)) |
 
 ### JS to Zig (`val.to(env, T)`)
 
 **Constants:**
 
-| JS type | Zig type |
-|---|---|
-| Boolean | `bool` |
+| JS type         | Zig type            |
+| --------------- | ------------------- |
+| Boolean         | `bool`              |
 | null, undefined | `?T` returns `null` |
 
 **Numbers:**
 
-| JS type | Zig type | Notes |
-|---|---|---|
-| Number | `i1`..`i32`, `u1`..`u32` | Validated by N-API |
-| Number | `i33`..`i53`, `u33`..`u53` | Via i64/f64 |
-| Number | `f16`, `f32`, `f64` | Cast from f64 |
-| BigInt | `i54`..`i64`, `u54`..`u64` | |
+| JS type | Zig type                   | Notes              |
+| ------- | -------------------------- | ------------------ |
+| Number  | `i1`..`i32`, `u1`..`u32`   | Validated by N-API |
+| Number  | `i33`..`i53`, `u33`..`u53` | Via i64/f64        |
+| Number  | `f16`, `f32`, `f64`        | Cast from f64      |
+| BigInt  | `i54`..`i64`, `u54`..`u64` |                    |
 
 **Strings:**
 
-| JS type | Zig type | Notes |
-|---|---|---|
-| String | `[]const u8` | Arena-allocated |
-| String | `enum` | Accepts camelCase or snake_case, invalid values throw TypeError |
+| JS type | Zig type     | Notes                                                           |
+| ------- | ------------ | --------------------------------------------------------------- |
+| String  | `[]const u8` | Arena-allocated                                                 |
+| String  | `enum`       | Accepts camelCase or snake_case, invalid values throw TypeError |
 
 **Arrays:**
 
-| JS type | Zig type | Notes |
-|---|---|---|
-| Array | `[N]T` | Fixed-size, elements converted by index |
-| Array | `[]T` | Arena-allocated |
-| Array | `struct { S, T }` | Tuple, elements converted by index |
+| JS type | Zig type          | Notes                                   |
+| ------- | ----------------- | --------------------------------------- |
+| Array   | `[N]T`            | Fixed-size, elements converted by index |
+| Array   | `[]T`             | Arena-allocated                         |
+| Array   | `struct { S, T }` | Tuple, elements converted by index      |
 
 **Objects:**
 
-| JS type | Zig type | Notes |
-|---|---|---|
-| Object | `struct` | camelCase field matching, defaults respected |
+| JS type  | Zig type   | Notes                                         |
+| -------- | ---------- | --------------------------------------------- |
+| Object   | `struct`   | camelCase field matching, defaults respected  |
 | Function | `Callback` | Validated, throws TypeError if not a function |
 
 **Special:**
 
-| JS type | Zig type |
-|---|---|
-| any | `Val` (passthrough) |
-| any | Types with `pub fn fromJs` (custom, see below) |
+| JS type | Zig type                                       |
+| ------- | ---------------------------------------------- |
+| any     | `Val` (passthrough)                            |
+| any     | Types with `pub fn fromJs` (custom, see below) |
 
 Type mismatches throw a descriptive `TypeError`:
 
@@ -246,16 +246,16 @@ pub fn compile(opts: Options) ![]const u8 { ... }
 ```
 
 ```js
-compile({ filePath: "main.zig", lineCount: 100 })
+compile({ filePath: "main.zig", lineCount: 100 });
 // verbose defaults to false
 ```
 
 Enums map to/from strings. Both camelCase and snake_case accepted on input:
 
 ```js
-log("warning", "disk almost full")
-log("errorLevel", "out of memory")  // camelCase also works
-log("invalid", "...")               // TypeError: invalid enum value: 'invalid'
+log("warning", "disk almost full");
+log("errorLevel", "out of memory"); // camelCase also works
+log("invalid", "..."); // TypeError: invalid enum value: 'invalid'
 ```
 
 ### Custom conversion
@@ -297,44 +297,44 @@ Works for structs too. If a struct has a `toJs` or `fromJs` method, it takes pri
 
 A JS value handle. One method per concern:
 
-| Method | Purpose |
-|---|---|
-| `to(env, T)` | Convert to any supported Zig type |
-| `typeOf(env)` | Returns `.string`, `.number`, `.object`, `.function`, etc. |
-| `isArray(env)`, `isBuffer(env)`, `isArrayBuffer(env)`, `isTypedArray(env)` | Type checks |
-| `getProperty(env, key)`, `setProperty(env, key, val)` | Dynamic key access |
-| `getNamedProperty(env, key)`, `setNamedProperty(env, key, val)` | Compile-time string key access |
-| `hasNamedProperty(env, key)` | Property existence check |
-| `getElement(env, i)`, `setElement(env, i, val)` | Array index access |
-| `getArrayLength(env)` | Array length |
-| `getArrayBufferData(env)` | `[]u8` into an ArrayBuffer's backing memory |
-| `getBufferData(env)` | `[]u8` into a Node.js Buffer's backing memory |
+| Method                                                                     | Purpose                                                    |
+| -------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `to(env, T)`                                                               | Convert to any supported Zig type                          |
+| `typeOf(env)`                                                              | Returns `.string`, `.number`, `.object`, `.function`, etc. |
+| `isArray(env)`, `isBuffer(env)`, `isArrayBuffer(env)`, `isTypedArray(env)` | Type checks                                                |
+| `getProperty(env, key)`, `setProperty(env, key, val)`                      | Dynamic key access                                         |
+| `getNamedProperty(env, key)`, `setNamedProperty(env, key, val)`            | Compile-time string key access                             |
+| `hasNamedProperty(env, key)`                                               | Property existence check                                   |
+| `getElement(env, i)`, `setElement(env, i, val)`                            | Array index access                                         |
+| `getArrayLength(env)`                                                      | Array length                                               |
+| `getArrayBufferData(env)`                                                  | `[]u8` into an ArrayBuffer's backing memory                |
+| `getBufferData(env)`                                                       | `[]u8` into a Node.js Buffer's backing memory              |
 
 ### `Env`
 
 The Node-API environment. Provides value creation, the per-call arena, and exception handling.
 
-| Method | Purpose |
-|---|---|
-| `toJs(value)` | Convert any Zig type to JS (inferred) |
-| `createBoolean`, `createInt32`, `createUint32`, `createInt64`, `createFloat64` | Primitives |
-| `createBigintInt64`, `createBigintUint64` | BigInt |
-| `createString([]const u8)`, `createStringZ([*:0]const u8)` | Strings |
-| `createNull`, `createUndefined`, `getGlobal` | Singletons |
-| `createObject`, `createArray`, `createArrayWithLength` | Containers |
-| `createArrayBuffer(len)` | Returns `{ .val, .data }` (JS value + writable `[]u8`) |
-| `createBuffer(len)` | Node.js Buffer, returns `{ .val, .data }` |
-| `createTypedArray(type, len, arraybuffer, offset)` | TypedArray view |
-| `createExternalArrayBuffer(ptr, len, finalize_cb, hint)` | Externally-owned memory |
-| `createFunction(name, callback)` | Native-backed JS function |
-| `createReference(val)` | Strong GC reference, returns `Ref` |
-| `createPromise()` | Returns `{ .promise, .deferred }` |
-| `runWorker(name, context)` | Background work, returns Promise |
-| `throwError`, `throwTypeError`, `throwRangeError` | Throw exceptions |
-| `throwValue(val)` | Throw an existing JS value |
-| `isExceptionPending()` | Check for pending exception |
-| `getVersion()` | Node-API version |
-| `arena` | Per-call `*ArenaAllocator`, see [Memory model](#memory-model) |
+| Method                                                                         | Purpose                                                       |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------- |
+| `toJs(value)`                                                                  | Convert any Zig type to JS (inferred)                         |
+| `createBoolean`, `createInt32`, `createUint32`, `createInt64`, `createFloat64` | Primitives                                                    |
+| `createBigintInt64`, `createBigintUint64`                                      | BigInt                                                        |
+| `createString([]const u8)`, `createStringZ([*:0]const u8)`                     | Strings                                                       |
+| `createNull`, `createUndefined`, `getGlobal`                                   | Singletons                                                    |
+| `createObject`, `createArray`, `createArrayWithLength`                         | Containers                                                    |
+| `createArrayBuffer(len)`                                                       | Returns `{ .val, .data }` (JS value + writable `[]u8`)        |
+| `createBuffer(len)`                                                            | Node.js Buffer, returns `{ .val, .data }`                     |
+| `createTypedArray(type, len, arraybuffer, offset)`                             | TypedArray view                                               |
+| `createExternalArrayBuffer(ptr, len, finalize_cb, hint)`                       | Externally-owned memory                                       |
+| `createFunction(name, callback)`                                               | Native-backed JS function                                     |
+| `createReference(val)`                                                         | Strong GC reference, returns `Ref`                            |
+| `createPromise()`                                                              | Returns `{ .promise, .deferred }`                             |
+| `runWorker(name, context)`                                                     | Background work, returns Promise                              |
+| `throwError`, `throwTypeError`, `throwRangeError`                              | Throw exceptions                                              |
+| `throwValue(val)`                                                              | Throw an existing JS value                                    |
+| `isExceptionPending()`                                                         | Check for pending exception                                   |
+| `getVersion()`                                                                 | Node-API version                                              |
+| `arena`                                                                        | Per-call `*ArenaAllocator`, see [Memory model](#memory-model) |
 
 ### `Ref`
 
@@ -359,7 +359,7 @@ pub fn forEach(env: napi.Env, arr: []napi.Val, callback: napi.Callback) !void {
 ```
 
 ```js
-forEach([1, 2, 3], (item) => console.log(item))
+forEach([1, 2, 3], (item) => console.log(item));
 // 1
 // 2
 // 3
@@ -373,11 +373,11 @@ const result = try callback.callWith(env, this_obj, &.{arg1, arg2});
 
 To call a callback from a background thread, convert it to a `ThreadsafeFn` first (see [ThreadsafeFn](#threadsafefn)).
 
-| Method | Purpose |
-|---|---|
-| `call(env, args)` | Call with `undefined` as `this` |
-| `callWith(env, this, args)` | Call with specific `this` binding |
-| `threadsafe(env, name, T)` | Create a `ThreadsafeFn(T)` for cross-thread calls |
+| Method                      | Purpose                                           |
+| --------------------------- | ------------------------------------------------- |
+| `call(env, args)`           | Call with `undefined` as `this`                   |
+| `callWith(env, this, args)` | Call with specific `this` binding                 |
+| `threadsafe(env, name, T)`  | Create a `ThreadsafeFn(T)` for cross-thread calls |
 
 ## Memory model
 
@@ -408,8 +408,8 @@ pub fn divide(a: f64, b: f64) !f64 {
 ```
 
 ```js
-divide(1, 0)    // Error: DivisionByZero
-divide("x", 1)  // TypeError: expected number, got string
+divide(1, 0); // Error: DivisionByZero
+divide("x", 1); // TypeError: expected number, got string
 ```
 
 ## Async
@@ -446,7 +446,7 @@ pub fn asyncFib(env: napi.Env, n: i32) !napi.Val {
 ```
 
 ```js
-const result = await asyncFib(10) // 55
+const result = await asyncFib(10); // 55
 ```
 
 If `resolve` returns an error, the promise is rejected with the error name.
@@ -511,7 +511,7 @@ pub fn startWorkers(env: napi.Env, callback: napi.Callback) !void {
 ```
 
 ```js
-startWorkers((id) => console.log("worker", id, "done"))
+startWorkers((id) => console.log("worker", id, "done"));
 // worker 0 done
 // worker 2 done
 // worker 1 done
@@ -520,13 +520,13 @@ startWorkers((id) => console.log("worker", id, "done"))
 
 Use `void` for signal-only callbacks with no data: `callback.threadsafe(env, "signal", void)`.
 
-| Method | Purpose |
-|---|---|
-| `call(value, mode)` | Queue a call from any thread (`.blocking` or `.non_blocking`) |
-| `release()` | Release this thread's reference |
-| `abort()` | Release and reject pending calls |
-| `acquire()` | Register an additional thread |
-| `ref(env)` / `unref(env)` | Control whether the event loop stays alive |
+| Method                    | Purpose                                                       |
+| ------------------------- | ------------------------------------------------------------- |
+| `call(value, mode)`       | Queue a call from any thread (`.blocking` or `.non_blocking`) |
+| `release()`               | Release this thread's reference                               |
+| `abort()`                 | Release and reject pending calls                              |
+| `acquire()`               | Register an additional thread                                 |
+| `ref(env)` / `unref(env)` | Control whether the event loop stays alive                    |
 
 > [!TIP]
 > Use `ThreadsafeFn` when you need to call into JS **multiple times** from a background thread (progress, events, streaming). For one-shot background work that returns a single result, use `env.runWorker` instead.
