@@ -1,4 +1,4 @@
-import { execFileSync, execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import prompts from "prompts";
 import { inc, valid, clean, parse } from "semver";
 import ora from "ora";
