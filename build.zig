@@ -193,6 +193,8 @@ fn addNpmRelease(
                 }),
             } },
             .dest_sub_path = b.fmt("{s}.node", .{options.name}),
+            .pdb_dir = .disabled,
+            .implib_dir = .disabled,
         });
 
         b.getInstallStep().dependOn(&node_install.step);
