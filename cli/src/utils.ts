@@ -1,6 +1,15 @@
 import { execSync } from "node:child_process"
 import ora from "ora"
 
+export function packageExistsOnNpm(name: string): boolean {
+  try {
+    execSync(`npm view "${name}" version`, { stdio: "pipe" })
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function requireNpmVersion(minMajor: number, minMinor: number, feature: string): void {
   try {
     const version = execSync("npm --version", { encoding: "utf-8" }).trim()

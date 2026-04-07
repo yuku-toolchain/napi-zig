@@ -1,41 +1,36 @@
 {
   "name": "napi-zig",
   "version": "0.1.11",
-  "description": "Build native Node.js addons with Zig",
-  "license": "MIT",
-  "files": [
-    "dist"
-  ],
-  "bin": {
-    "napi": "dist/index.js"
-  },
-  "scripts": {
-    "build": "bunup",
-    "dev": "bunup --watch",
-    "type-check": "tsc --noEmit",
-    "release": "bumpp -r --commit 'npm %s' --push --tag --yes --release 'patch'"
-  },
-  "devDependencies": {
-    "@types/bun": "^1.3.11",
-    "@types/prompts": "^2.4.9",
-    "@types/semver": "^7.7.1",
-    "bumpp": "^11.0.1",
-    "bunup": "^0.16.31",
-    "typescript": "^6.0.2"
-  },
-  "peerDependencies": {
-    "typescript": ">=4.5.0"
-  },
-  "peerDependenciesMeta": {
-    "typescript": {
-      "optional": true
-    }
-  },
-  "type": "module",
   "dependencies": {
     "cac": "^7.0.0",
     "ora": "^9.3.0",
     "prompts": "^2.4.2",
     "semver": "^7.7.4"
-  }
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.11",
+    "@types/prompts": "^2.4.9",
+    "@types/semver": "^7.7.1",
+    "@typescript/native-preview": "^7.0.0-dev.20260407.1",
+    "bumpp": "^11.0.1"
+  },
+  "bin": {
+    "napi": "dist/src/index.js"
+  },
+  "description": "Build native Node.js addons with Zig",
+  "files": [
+    "dist"
+  ],
+  "license": "MIT",
+  "peerDependenciesMeta": {
+    "typescript": {
+      "optional": true
+    }
+  },
+  "scripts": {
+    "build": "tsgo",
+    "type-check": "tsgo --noEmit",
+    "release": "bumpp -r --commit 'npm %s' --push --tag --yes --release 'patch'"
+  },
+  "type": "module"
 }

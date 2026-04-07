@@ -43,7 +43,6 @@ export function discoverPackages(): NpmPackage[] {
       }
       packages.push({ name: bindingPkg.name, version: bindingPkg.version, dir: bindingDir, main: false })
     }
-    break // only one main package expected
   }
 
   if (packages.length === 0) {
