@@ -194,10 +194,10 @@ pub fn ThreadsafeFn(comptime T: type) type {
             if (T == void) {
                 try check(c.napi_call_threadsafe_function(self.raw, null, mode));
             } else {
-                const ptr = try std.heap.c_allocator.create(T);
+                const ptr = try std.heap.smp_allocator.create(T);
                 ptr.* = value;
                 if (c.napi_call_threadsafe_function(self.raw, ptr, mode) != .ok) {
-                    std.heap.c_allocator.destroy(ptr);
+                    std.heap.smp_allocator.destroy(ptr);
                     return error.napi_error;
                 }
             }
@@ -231,9 +231,9 @@ pub fn ThreadsafeFn(comptime T: type) type {
         // called on the main thread by Node.js to convert data and invoke the JS callback.
         fn callJs(raw_env: c.napi_env, js_callback: c.napi_value, _: ?*anyopaque, data: ?*anyopaque) callconv(.c) void {
             const typed: *T = @ptrCast(@alignCast(data orelse return));
-            defer std.heap.c_allocator.destroy(typed);
+            defer std.heap.smp_allocator.destroy(typed);
 
-            var arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
+            var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
             defer arena.deinit();
             const env: Env = .{ .raw = raw_env, .arena = &arena };
 

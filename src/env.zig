@@ -240,7 +240,7 @@ pub const Env = struct {
         const S = WorkerState(T);
 
         const p = try self.createPromise();
-        const state = try std.heap.c_allocator.create(S);
+        const state = try std.heap.smp_allocator.create(S);
         state.* = .{ .ctx = context, .deferred = p.deferred };
 
         state.work = try self.createAsyncWork(name, &S.execute, &S.complete, state);
@@ -298,9 +298,9 @@ fn WorkerState(comptime T: type) type {
 
         fn complete(raw_env: c.napi_env, _: c.napi_status, data: ?*anyopaque) callconv(.c) void {
             const state: *@This() = @ptrCast(@alignCast(data));
-            defer std.heap.c_allocator.destroy(state);
+            defer std.heap.smp_allocator.destroy(state);
 
-            var arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
+            var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
             defer arena.deinit();
             const env: Env = .{ .raw = raw_env, .arena = &arena };
 

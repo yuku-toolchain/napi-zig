@@ -47,8 +47,8 @@ pub const Platform = enum {
             .linux_arm_musl => .{ .cpu_arch = .arm, .os_tag = .linux, .abi = .musleabihf, .npm_os = "linux", .npm_cpu = "arm", .npm_libc = "musl", .suffix = "linux-arm-musl" },
             .macos_x64 => .{ .cpu_arch = .x86_64, .os_tag = .macos, .npm_os = "darwin", .npm_cpu = "x64", .suffix = "darwin-x64" },
             .macos_arm64 => .{ .cpu_arch = .aarch64, .os_tag = .macos, .npm_os = "darwin", .npm_cpu = "arm64", .suffix = "darwin-arm64" },
-            .windows_x64 => .{ .cpu_arch = .x86_64, .os_tag = .windows, .abi = .gnu, .npm_os = "win32", .npm_cpu = "x64", .suffix = "win32-x64" },
-            .windows_arm64 => .{ .cpu_arch = .aarch64, .os_tag = .windows, .abi = .gnu, .npm_os = "win32", .npm_cpu = "arm64", .suffix = "win32-arm64" },
+            .windows_x64 => .{ .cpu_arch = .x86_64, .os_tag = .windows, .npm_os = "win32", .npm_cpu = "x64", .suffix = "win32-x64" },
+            .windows_arm64 => .{ .cpu_arch = .aarch64, .os_tag = .windows, .npm_os = "win32", .npm_cpu = "arm64", .suffix = "win32-arm64" },
             .freebsd_x64 => .{ .cpu_arch = .x86_64, .os_tag = .freebsd, .npm_os = "freebsd", .npm_cpu = "x64", .suffix = "freebsd-x64" },
         };
     }

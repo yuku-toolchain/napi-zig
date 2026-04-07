@@ -223,7 +223,6 @@ fn configureLinkerFlags(b: *std.Build, lib: *std.Build.Step.Compile, target: std
             lib.root_module.link_libc = true;
         },
         .windows => {
-            lib.root_module.link_libc = true;
             // windows PE/COFF requires all symbols resolved at link time.
             // generate an import library from node_api.def so the linker knows
             // these N-API symbols come from node.exe at runtime.

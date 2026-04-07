@@ -390,10 +390,8 @@ pub fn process(env: napi.Env, input: []const u8) ![]const u8 {
 }
 ```
 
-The arena is backed by `std.heap.c_allocator` and grows as needed. There is no hard limit. If the system runs out of memory, the allocation error propagates as a JS exception.
-
 > [!IMPORTANT]
-> Arena data is only valid for the duration of the call. If you need allocations that outlive the function (e.g., data passed to a background thread), use `std.heap.c_allocator` and manage the lifetime yourself. See [Workers](#workers) for an example.
+> Arena data is only valid for the duration of the call. If you need allocations that outlive the function (e.g., data passed to a background thread), use a long-lived allocator and manage the lifetime yourself. See [Workers](#workers) for an example.
 
 ## Error handling
 
@@ -471,7 +469,7 @@ const ParseWork = struct {
     }
 
     pub fn resolve(self: *ParseWork, env: napi.Env) !napi.Val {
-        defer std.heap.c_allocator.free(self.source);
+        defer std.heap.smp_allocator.free(self.source);
         if (self.failed) return error.ParseFailed;
         return env.toJs(self.result);
     }
@@ -485,7 +483,7 @@ const ParseWork = struct {
 
 ```zig
 pub fn asyncParse(env: napi.Env, source: []const u8) !napi.Val {
-    const owned = try std.heap.c_allocator.dupe(u8, source);
+    const owned = try std.heap.smp_allocator.dupe(u8, source);
     return env.runWorker("parse", ParseWork{ .source = owned });
 }
 ```

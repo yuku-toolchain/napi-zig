@@ -21,7 +21,7 @@ fn ModuleInit(comptime Module: type) type {
 
     return struct {
         fn init(raw_env: c.napi_env, exports: c.napi_value) callconv(.c) ?c.napi_value {
-            var arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
+            var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
             defer arena.deinit();
             const env: Env = .{ .raw = raw_env, .arena = &arena };
             register(env, .{ .raw = exports }) catch {
@@ -44,7 +44,7 @@ fn ModuleInit(comptime Module: type) type {
                         if (comptime isRawFn(T)) {
                             const S = struct {
                                 fn wrapper(raw_env: c.napi_env, info: c.napi_callback_info) callconv(.c) ?c.napi_value {
-                                    var a = std.heap.ArenaAllocator.init(std.heap.c_allocator);
+                                    var a = std.heap.ArenaAllocator.init(std.heap.page_allocator);
                                     defer a.deinit();
                                     const e: Env = .{ .raw = raw_env, .arena = &a };
                                     const result = @field(Module, name)(e, CallInfo{ .raw = info }) catch |err| {
@@ -95,7 +95,7 @@ fn FnBridge(comptime Module: type, comptime name: []const u8) type {
 
     return struct {
         fn call(raw_env: c.napi_env, raw_info: c.napi_callback_info) callconv(.c) ?c.napi_value {
-            var arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
+            var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
             defer arena.deinit();
             const env: Env = .{ .raw = raw_env, .arena = &arena };
             const result = invoke(env, .{ .raw = raw_info }) catch {
