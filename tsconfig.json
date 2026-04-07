@@ -20,10 +20,10 @@
 		"noUnusedParameters": false,
 		"noPropertyAccessFromIndexSignature": false,
 
-		"rootDir": "./cli/src",
+		"rootDir": "./cli",
 		"outDir": "./dist"
 	},
 
-	"include": ["cli/src/**/*"],
+	"include": ["cli/**/*", "cli/build.ts", "cli/bump.ts", "cli/index.ts", "cli/publish.ts", "cli/npm.ts", "cli/utils.ts", "cli/init.ts"],
 	"exclude": ["node_modules", "dist"]
 }
