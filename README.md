@@ -81,25 +81,10 @@ pub fn build(b: *std.Build) void {
 }
 ```
 
-### 5. Add scripts to package.json
-
-```json
-{
-  "scripts": {
-    "build": "napi build --release",
-    "debug": "napi build",
-    "release": "napi bump"
-  },
-  "devDependencies": {
-    "napi-zig": "latest"
-  }
-}
-```
-
-### 6. Build and test
+### 5. Build and test
 
 ```sh
-npm run debug
+napi build
 ```
 
 This compiles for your current platform and creates a `my-addon.js` loader so you can import the addon directly:
