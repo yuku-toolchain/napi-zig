@@ -39,23 +39,15 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/root.zig"),
     });
 
-    const check_mod = b.createModule(.{
-        .root_source_file = b.path("src/root.zig"),
-        .target = target,
-        .optimize = optimize,
+    const test_step = b.step("test", "Run all tests");
+    const tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/tests.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
-
-    const check_lib = b.addLibrary(.{
-        .name = "napi-zig",
-        .root_module = check_mod,
-        .linkage = .dynamic,
-    });
-
-    check_lib.linker_allow_shlib_undefined = true;
-
-    const check_step = b.step("check", "Check the source compiles");
-
-    check_step.dependOn(&check_lib.step);
+    test_step.dependOn(&b.addRunArtifact(tests).step);
 }
 
 /// build a .node shared library for the current platform.
