@@ -57,9 +57,7 @@ describe("multiple workers run concurrently", () => {
 
   test("many workers complete without losing values", async () => {
     const N = 32;
-    const results = await Promise.all(
-      Array.from({ length: N }, (_, i) => m.asyncFib(i % 10)),
-    );
+    const results = await Promise.all(Array.from({ length: N }, (_, i) => m.asyncFib(i % 10)));
     expect(results).toHaveLength(N);
     for (const v of results) {
       expect(typeof v).toBe("number");

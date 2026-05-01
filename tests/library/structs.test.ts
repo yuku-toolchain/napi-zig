@@ -9,9 +9,7 @@ describe("struct in / out", () => {
   });
 
   test("snake_case fields exposed as camelCase", () => {
-    expect(m.formatOptions({ filePath: "lib.zig", lineCount: 100 })).toBe(
-      "lib.zig:100:false",
-    );
+    expect(m.formatOptions({ filePath: "lib.zig", lineCount: 100 })).toBe("lib.zig:100:false");
   });
 
   test("default-valued field can be omitted", () => {
@@ -19,9 +17,7 @@ describe("struct in / out", () => {
   });
 
   test("default-valued field can be overridden", () => {
-    expect(
-      m.formatOptions({ filePath: "x", lineCount: 1, verbose: true }),
-    ).toBe("x:1:true");
+    expect(m.formatOptions({ filePath: "x", lineCount: 1, verbose: true })).toBe("x:1:true");
   });
 
   test("required field missing throws TypeError", () => {
@@ -31,9 +27,7 @@ describe("struct in / out", () => {
   });
 
   test("nested struct", () => {
-    expect(m.formatContainer({ name: "p", point: { x: 1, y: 2 } })).toBe(
-      "p@1,2",
-    );
+    expect(m.formatContainer({ name: "p", point: { x: 1, y: 2 } })).toBe("p@1,2");
   });
 });
 
@@ -50,27 +44,21 @@ describe("FullStruct (mix of required, optional, default, nested)", () => {
   });
 
   test("optional ?T can be null", () => {
-    expect(
-      m.formatFullStruct({ name: "bob", age: 25, nickName: null }),
-    ).toBe("bob/25/null/false");
+    expect(m.formatFullStruct({ name: "bob", age: 25, nickName: null })).toBe("bob/25/null/false");
   });
 
   test("optional ?T can be undefined", () => {
-    expect(
-      m.formatFullStruct({ name: "bob", age: 25, nickName: undefined }),
-    ).toBe("bob/25/null/false");
-  });
-
-  test("optional ?T can be missing entirely", () => {
-    expect(m.formatFullStruct({ name: "bob", age: 25 })).toBe(
+    expect(m.formatFullStruct({ name: "bob", age: 25, nickName: undefined })).toBe(
       "bob/25/null/false",
     );
   });
 
+  test("optional ?T can be missing entirely", () => {
+    expect(m.formatFullStruct({ name: "bob", age: 25 })).toBe("bob/25/null/false");
+  });
+
   test("default field omitted", () => {
-    expect(
-      m.formatFullStruct({ name: "bob", age: 25, nickName: "b" }),
-    ).toBe("bob/25/b/false");
+    expect(m.formatFullStruct({ name: "bob", age: 25, nickName: "b" })).toBe("bob/25/b/false");
   });
 
   test("required field missing still throws even with defaults present", () => {
@@ -94,8 +82,6 @@ describe("all-default struct", () => {
 
 describe("extra unknown JS keys are ignored", () => {
   test("unrelated property doesn't break conversion", () => {
-    expect(
-      m.formatOptions({ filePath: "x", lineCount: 1, extraJunk: 99 }),
-    ).toBe("x:1:false");
+    expect(m.formatOptions({ filePath: "x", lineCount: 1, extraJunk: 99 })).toBe("x:1:false");
   });
 });

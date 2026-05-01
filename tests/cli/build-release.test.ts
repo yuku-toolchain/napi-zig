@@ -27,125 +27,102 @@ function listAllFiles(root: string): string[] {
 }
 
 describe("napi build --release", () => {
-  test(
-    "produces the expected npm scaffolding",
-    async () => {
-      const dir = stageCliFixture();
-      cleanup.push(dir);
+  test("produces the expected npm scaffolding", async () => {
+    const dir = stageCliFixture();
+    cleanup.push(dir);
 
-      await withCwd(dir, () => buildRelease("fast"));
+    await withCwd(dir, () => buildRelease("fast"));
 
-      // main package files
-      expect(fileExists(join(dir, "npm", "fcli", "package.json"))).toBe(true);
-      expect(fileExists(join(dir, "npm", "fcli", "index.js"))).toBe(true);
-      expect(fileExists(join(dir, "npm", "fcli", "binding.js"))).toBe(true);
+    // main package files
+    expect(fileExists(join(dir, "npm", "fcli", "package.json"))).toBe(true);
+    expect(fileExists(join(dir, "npm", "fcli", "index.js"))).toBe(true);
+    expect(fileExists(join(dir, "npm", "fcli", "binding.js"))).toBe(true);
 
-      // per-platform binding directory
-      const bindingDir = join(dir, "npm", "fcli", "@fixture", "binding-darwin-arm64");
-      expect(fileExists(join(bindingDir, "package.json"))).toBe(true);
-      expect(fileExists(join(bindingDir, "fcli.node"))).toBe(true);
-    },
-    120_000,
-  );
+    // per-platform binding directory
+    const bindingDir = join(dir, "npm", "fcli", "@fixture", "binding-darwin-arm64");
+    expect(fileExists(join(bindingDir, "package.json"))).toBe(true);
+    expect(fileExists(join(bindingDir, "fcli.node"))).toBe(true);
+  }, 120_000);
 
-  test(
-    "main package.json has optionalDependencies for each platform",
-    async () => {
-      const dir = stageCliFixture();
-      cleanup.push(dir);
+  test("main package.json has optionalDependencies for each platform", async () => {
+    const dir = stageCliFixture();
+    cleanup.push(dir);
 
-      await withCwd(dir, () => buildRelease("fast"));
+    await withCwd(dir, () => buildRelease("fast"));
 
-      const main = readJson(join(dir, "npm", "fcli", "package.json"));
-      expect(main.name).toBe("fcli");
-      expect(main.type).toBe("module");
-      expect(main.main).toBe("index.js");
-      expect(main.optionalDependencies).toEqual({
-        "@fixture/binding-darwin-arm64": "0.0.0",
-      });
-      expect(main.files).toContain("index.js");
-      expect(main.files).toContain("binding.js");
-    },
-    120_000,
-  );
+    const main = readJson(join(dir, "npm", "fcli", "package.json"));
+    expect(main.name).toBe("fcli");
+    expect(main.type).toBe("module");
+    expect(main.main).toBe("index.js");
+    expect(main.optionalDependencies).toEqual({
+      "@fixture/binding-darwin-arm64": "0.0.0",
+    });
+    expect(main.files).toContain("index.js");
+    expect(main.files).toContain("binding.js");
+  }, 120_000);
 
-  test(
-    "binding.js contains musl detection + suffix-based loader",
-    async () => {
-      const dir = stageCliFixture();
-      cleanup.push(dir);
+  test("binding.js contains musl detection + suffix-based loader", async () => {
+    const dir = stageCliFixture();
+    cleanup.push(dir);
 
-      await withCwd(dir, () => buildRelease("fast"));
+    await withCwd(dir, () => buildRelease("fast"));
 
-      const binding = readFileSync(join(dir, "npm", "fcli", "binding.js"), "utf-8");
-      expect(binding).toContain("isMusl");
-      expect(binding).toContain("@fixture");
-      expect(binding).toContain("fcli.node");
-    },
-    120_000,
-  );
+    const binding = readFileSync(join(dir, "npm", "fcli", "binding.js"), "utf-8");
+    expect(binding).toContain("isMusl");
+    expect(binding).toContain("@fixture");
+    expect(binding).toContain("fcli.node");
+  }, 120_000);
 
-  test(
-    "platform package.json has correct os/cpu fields",
-    async () => {
-      const dir = stageCliFixture();
-      cleanup.push(dir);
+  test("platform package.json has correct os/cpu fields", async () => {
+    const dir = stageCliFixture();
+    cleanup.push(dir);
 
-      await withCwd(dir, () => buildRelease("fast"));
+    await withCwd(dir, () => buildRelease("fast"));
 
-      const pkg = readJson(
-        join(dir, "npm", "fcli", "@fixture", "binding-darwin-arm64", "package.json"),
-      );
-      expect(pkg.name).toBe("@fixture/binding-darwin-arm64");
-      expect(pkg.os).toEqual(["darwin"]);
-      expect(pkg.cpu).toEqual(["arm64"]);
-      expect(pkg.main).toBe("fcli.node");
-    },
-    120_000,
-  );
+    const pkg = readJson(
+      join(dir, "npm", "fcli", "@fixture", "binding-darwin-arm64", "package.json"),
+    );
+    expect(pkg.name).toBe("@fixture/binding-darwin-arm64");
+    expect(pkg.os).toEqual(["darwin"]);
+    expect(pkg.cpu).toEqual(["arm64"]);
+    expect(pkg.main).toBe("fcli.node");
+  }, 120_000);
 
-  test(
-    "subsequent runs only update .node files; everything else is byte-identical",
-    async () => {
-      const dir = stageCliFixture();
-      cleanup.push(dir);
+  test("subsequent runs only update .node files; everything else is byte-identical", async () => {
+    const dir = stageCliFixture();
+    cleanup.push(dir);
 
-      // first run
-      await withCwd(dir, () => buildRelease("fast"));
-      const npmRoot = join(dir, "npm");
-      const initial = listAllFiles(npmRoot);
-      const initialHashes: Record<string, string> = {};
-      for (const f of initial) initialHashes[f] = sha256(join(npmRoot, f));
+    // first run
+    await withCwd(dir, () => buildRelease("fast"));
+    const npmRoot = join(dir, "npm");
+    const initial = listAllFiles(npmRoot);
+    const initialHashes: Record<string, string> = {};
+    for (const f of initial) initialHashes[f] = sha256(join(npmRoot, f));
 
-      // touch one of the metadata files to ensure timestamps differ if they
-      // were rewritten. mtime is captured for comparison.
-      const pkgPath = join(npmRoot, "fcli", "package.json");
-      const initialMtime = statSync(pkgPath).mtimeMs;
+    // touch one of the metadata files to ensure timestamps differ if they
+    // were rewritten. mtime is captured for comparison.
+    const pkgPath = join(npmRoot, "fcli", "package.json");
+    const initialMtime = statSync(pkgPath).mtimeMs;
 
-      // wait long enough that filesystem mtime would differ if rewritten
-      await new Promise((r) => setTimeout(r, 50));
+    // wait long enough that filesystem mtime would differ if rewritten
+    await new Promise((r) => setTimeout(r, 50));
 
-      // second run
-      await withCwd(dir, () => buildRelease("fast"));
+    // second run
+    await withCwd(dir, () => buildRelease("fast"));
 
-      const second = listAllFiles(npmRoot);
-      expect(second).toEqual(initial); // no new/removed files
+    const second = listAllFiles(npmRoot);
+    expect(second).toEqual(initial); // no new/removed files
 
-      for (const f of initial) {
-        const newHash = sha256(join(npmRoot, f));
-        if (f.endsWith(".node")) {
-          // .node may rebuild; just assert it still exists and is non-empty.
-          expect(newHash).toBeDefined();
-        } else {
-          expect(newHash).toBe(initialHashes[f]!);
-        }
+    for (const f of initial) {
+      const newHash = sha256(join(npmRoot, f));
+      if (f.endsWith(".node")) {
+        // .node may rebuild
+        expect(newHash).toBeDefined();
+      } else {
+        expect(newHash).toBe(initialHashes[f]!);
       }
+    }
 
-      // package.json's mtime should not have moved since content didn't change.
-      // (some filesystems may still update — accept that, but content equality
-      //  is the hard guarantee already checked above.)
-      void initialMtime;
-    },
-    180_000,
-  );
+    void initialMtime;
+  }, 180_000);
 });

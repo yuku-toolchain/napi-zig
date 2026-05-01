@@ -24,8 +24,7 @@ export function loadFixture(): any {
     const out = new TextDecoder().decode(result.stdout);
     const err = new TextDecoder().decode(result.stderr);
     throw new Error(
-      `fixture-lib build failed (exit ${result.exitCode})\n` +
-        `stdout:\n${out}\nstderr:\n${err}`,
+      `fixture-lib build failed (exit ${result.exitCode})\n` + `stdout:\n${out}\nstderr:\n${err}`,
     );
   }
 
