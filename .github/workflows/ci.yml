@@ -97,3 +97,51 @@ jobs:
 
       - name: Smoke-test addon under Deno
         run: deno run --allow-all tests/smoke.mjs
+
+  cross-compile:
+    name: Cross-compile all platforms
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: master
+
+      - name: Cross-compile fixture-cli for every target
+        run: cd tests/fixture-cli && zig build -Dnpm=true --release=fast
+
+      - name: Upload npm package directory
+        uses: actions/upload-artifact@v4
+        with:
+          name: cross-compiled-pkg
+          path: tests/fixture-cli/zig-out/npm/
+
+  cross-install:
+    name: Install + load on ${{ matrix.os }}
+    needs: cross-compile
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Download cross-compiled package
+        uses: actions/download-artifact@v4
+        with:
+          name: cross-compiled-pkg
+          path: pkg-out/
+
+      - name: Load + smoke-test the binding for this platform
+        run: node tests/installed-smoke.mjs pkg-out/fcli

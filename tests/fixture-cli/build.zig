@@ -14,9 +14,7 @@ pub fn build(b: *std.Build) void {
             .scope = "@fixture",
             .repository = .{ .url = "https://example.com/fixture" },
             .description = "fixture for cli tests",
-            // single-platform list keeps cross-compile time bounded, test
-            // logic doesn't depend on the count.
-            .platforms = &.{ .macos_arm64 },
+            .platforms = &.{ .linux_x64_gnu, .macos_arm64, .windows_x64 },
         },
     });
 }

@@ -54,12 +54,17 @@ describe("napi build --release", () => {
     expect(main.name).toBe("fcli");
     expect(main.type).toBe("module");
     expect(main.main).toBe("index.js");
-    expect(main.optionalDependencies).toEqual({
-      "@fixture/binding-darwin-arm64": "0.0.0",
-    });
+    expect(Object.keys(main.optionalDependencies).sort()).toEqual([
+      "@fixture/binding-darwin-arm64",
+      "@fixture/binding-linux-x64-gnu",
+      "@fixture/binding-win32-x64",
+    ]);
+    for (const v of Object.values(main.optionalDependencies)) {
+      expect(v).toBe("0.0.0");
+    }
     expect(main.files).toContain("index.js");
     expect(main.files).toContain("binding.js");
-  }, 120_000);
+  }, 180_000);
 
   test("binding.js contains musl detection + suffix-based loader", async () => {
     const dir = stageCliFixture();
