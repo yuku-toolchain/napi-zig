@@ -9,7 +9,7 @@ const Callback = val_mod.Callback;
 
 const check = err.check;
 
-// zig to js. structs may opt out of field-by-field with a `toJs` method.
+/// zig to js. structs may opt out of field-by-field with a `toJs` method.
 pub fn toJs(comptime T: type, env: Env, value: T) !Val {
     return switch (@typeInfo(T)) {
         .void => env.createUndefined(),
@@ -43,13 +43,7 @@ pub fn toJs(comptime T: type, env: Env, value: T) !Val {
 
         .pointer => |info| {
             if (info.size == .slice and info.child == u8) return env.createString(value);
-            if (info.size == .slice) {
-                const arr = try env.createArrayWithLength(@intCast(value.len));
-                for (value, 0..) |item, i| {
-                    try arr.setElement(env, @intCast(i), try toJs(info.child, env, item));
-                }
-                return arr;
-            }
+            if (info.size == .slice) return arrayFromSlice(info.child, env, value);
             if (info.size == .one) {
                 const child = @typeInfo(info.child);
                 if (child == .array and child.array.child == u8) {
@@ -60,13 +54,7 @@ pub fn toJs(comptime T: type, env: Env, value: T) !Val {
             @compileError("napi-zig: unsupported pointer type for toJs: " ++ @typeName(T));
         },
 
-        .array => |info| {
-            const arr = try env.createArrayWithLength(@intCast(info.len));
-            for (0..info.len) |i| {
-                try arr.setElement(env, @intCast(i), try toJs(info.child, env, value[i]));
-            }
-            return arr;
-        },
+        .array => |info| arrayFromSlice(info.child, env, &value),
 
         .@"struct" => |info| {
             if (T == Val) return value;
@@ -80,8 +68,7 @@ pub fn toJs(comptime T: type, env: Env, value: T) !Val {
             }
             const obj = try env.createObject();
             inline for (info.fields) |field| {
-                const key = comptime util.snakeToCamel(field.name);
-                try obj.setNamedProperty(env, key, try toJs(field.type, env, @field(value, field.name)));
+                try obj.setNamedProperty(env, comptime util.snakeToCamel(field.name), try toJs(field.type, env, @field(value, field.name)));
             }
             return obj;
         },
@@ -95,67 +82,51 @@ pub fn toJs(comptime T: type, env: Env, value: T) !Val {
     };
 }
 
-// js to zig. mirror of toJs. allocations come from env.allocator().
+fn arrayFromSlice(comptime Child: type, env: Env, items: []const Child) !Val {
+    const arr = try env.createArrayWithLength(@intCast(items.len));
+    for (items, 0..) |item, i| {
+        try arr.setElement(env, @intCast(i), try toJs(Child, env, item));
+    }
+    return arr;
+}
+
+/// js to zig. mirror of toJs. allocations come from env.allocator().
 pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
     return switch (@typeInfo(T)) {
-        .bool => {
-            var out: bool = undefined;
-            try expect(env, value, c.napi_get_value_bool(env.handle, value.handle, &out), "expected boolean");
-            return out;
-        },
+        .bool => extract(bool, env, value, c.napi_get_value_bool, "expected boolean"),
 
         .int => |info| switch (info.signedness) {
             .signed => switch (info.bits) {
-                0...32 => {
-                    var out: i32 = undefined;
-                    try expect(env, value, c.napi_get_value_int32(env.handle, value.handle, &out), "expected number");
-                    return @intCast(out);
-                },
-                33...64 => {
-                    var out: i64 = undefined;
-                    try expect(env, value, c.napi_get_value_int64(env.handle, value.handle, &out), "expected number");
-                    return @intCast(out);
-                },
+                0...32 => @intCast(try extract(i32, env, value, c.napi_get_value_int32, "expected number")),
+                33...64 => @intCast(try extract(i64, env, value, c.napi_get_value_int64, "expected number")),
                 else => @compileError("napi-zig: integer too wide: " ++ @typeName(T)),
             },
             .unsigned => switch (info.bits) {
-                0...32 => {
-                    var out: u32 = undefined;
-                    try expect(env, value, c.napi_get_value_uint32(env.handle, value.handle, &out), "expected number");
-                    return @intCast(out);
-                },
-                33...64 => {
+                0...32 => @intCast(try extract(u32, env, value, c.napi_get_value_uint32, "expected number")),
+                33...64 => blk: {
                     var out: u64 = undefined;
                     var lossless: bool = undefined;
                     try expect(env, value, c.napi_get_value_bigint_uint64(env.handle, value.handle, &out, &lossless), "expected bigint");
-                    return @intCast(out);
+                    break :blk @intCast(out);
                 },
                 else => @compileError("napi-zig: integer too wide: " ++ @typeName(T)),
             },
         },
 
-        .float => {
-            var out: f64 = undefined;
-            try expect(env, value, c.napi_get_value_double(env.handle, value.handle, &out), "expected number");
-            return @floatCast(out);
-        },
+        .float => @floatCast(try extract(f64, env, value, c.napi_get_value_double, "expected number")),
 
-        .optional => |opt| {
-            const vt = try value.typeOf(env);
-            if (vt == .null or vt == .undefined) return null;
-            return try fromJs(opt.child, env, value);
+        .optional => |opt| switch (try value.typeOf(env)) {
+            .null, .undefined => null,
+            else => try fromJs(opt.child, env, value),
         },
 
         .@"enum" => |info| {
-            // small stack buffer covers virtually all enum names
             var stack: [128]u8 = undefined;
             var n: usize = 0;
             try expect(env, value, c.napi_get_value_string_utf8(env.handle, value.handle, &stack, stack.len, &n), "expected string");
             const str = stack[0..n];
             inline for (info.fields) |field| {
-                if (std.mem.eql(u8, str, comptime util.snakeToCamelSlice(field.name)) or
-                    std.mem.eql(u8, str, field.name))
-                {
+                if (std.mem.eql(u8, str, comptime util.snakeToCamel(field.name)) or std.mem.eql(u8, str, field.name)) {
                     return @enumFromInt(field.value);
                 }
             }
@@ -166,9 +137,7 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
         },
 
         .pointer => |info| {
-            if (info.size == .slice and info.child == u8) {
-                return readString(env, value);
-            }
+            if (info.size == .slice and info.child == u8) return readString(env, value);
             if (info.size == .slice) {
                 var len: u32 = undefined;
                 try expect(env, value, c.napi_get_array_length(env.handle, value.handle, &len), "expected array");
@@ -191,16 +160,7 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
 
         .@"struct" => |info| {
             if (T == Val) return value;
-            if (T == Callback) {
-                const vt = try value.typeOf(env);
-                if (vt != .function) {
-                    var buf: [128]u8 = undefined;
-                    const msg = std.fmt.bufPrintZ(&buf, "expected function, got {s}", .{jsTypeName(env, value)}) catch "expected function";
-                    env.throwTypeError(msg);
-                    return err.Error.FunctionExpected;
-                }
-                return .{ .val = value };
-            }
+            if (T == Callback) return readCallback(env, value);
             if (@hasDecl(T, "fromJs")) return T.fromJs(env, value);
             if (info.is_tuple) {
                 var out: T = undefined;
@@ -209,15 +169,15 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
                 }
                 return out;
             }
-            // undefined means "missing" so default-valued fields can be omitted.
+
+            // undefined means "missing"; default-valued fields can be omitted.
             var out: T = undefined;
             inline for (info.fields) |field| {
                 const key = comptime util.snakeToCamel(field.name);
                 const prop = try value.getNamedProperty(env, key);
-                const vt = try prop.typeOf(env);
-                if (vt == .undefined) {
-                    if (field.default_value_ptr) |_| {
-                        @field(out, field.name) = field.defaultValue().?;
+                if (try prop.typeOf(env) == .undefined) {
+                    if (field.defaultValue()) |dflt| {
+                        @field(out, field.name) = dflt;
                     } else {
                         env.throwTypeError("missing required field: " ++ key);
                         return err.Error.InvalidArg;
@@ -238,6 +198,22 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
     };
 }
 
+inline fn extract(comptime T: type, env: Env, value: Val, comptime nf: anytype, comptime label: [*:0]const u8) !T {
+    var out: T = undefined;
+    try expect(env, value, nf(env.handle, value.handle, &out), label);
+    return out;
+}
+
+fn readCallback(env: Env, value: Val) !Callback {
+    if (try value.typeOf(env) != .function) {
+        var buf: [128]u8 = undefined;
+        const msg = std.fmt.bufPrintZ(&buf, "expected function, got {s}", .{jsTypeName(env, value)}) catch "expected function";
+        env.throwTypeError(msg);
+        return err.Error.FunctionExpected;
+    }
+    return .{ .val = value };
+}
+
 // probe length, then read. napi_get_value_string_utf8 doesn't distinguish
 // "fit exactly" from "truncated", so a stack fast path can't be correct.
 fn readString(env: Env, value: Val) ![]const u8 {
@@ -254,7 +230,7 @@ fn expect(env: Env, value: Val, status: c.napi_status, comptime expected: [*:0]c
     var buf: [128]u8 = undefined;
     const dyn = std.fmt.bufPrintZ(&buf, "{s}, got {s}", .{ expected, jsTypeName(env, value) });
     env.throwTypeError(if (dyn) |s| s.ptr else |_| expected);
-    return err.check(status);
+    return check(status);
 }
 
 fn jsTypeName(env: Env, value: Val) [*:0]const u8 {

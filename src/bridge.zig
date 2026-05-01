@@ -1,6 +1,6 @@
 // shared call-site machinery for the function, constructor, and method
-// bridges. each fetches cb_info, builds an args tuple, and unwraps a
-// return value, so all of that lives here.
+// bridges. argument unpacking + return marshalling live here so each
+// bridge only contains its unique behaviour.
 
 const std = @import("std");
 const c = @import("c.zig");
@@ -14,16 +14,15 @@ const Env = env_mod.Env;
 /// returns false if a js exception is now pending. caller fills any
 /// `args[0..js_start]` slots (Env, *Self) after this returns.
 pub fn invoke(
-    comptime Fn: type,
     comptime js_start: usize,
     env: Env,
     info: c.napi_callback_info,
-    args: *std.meta.ArgsTuple(Fn),
+    args: anytype,
     this_out: ?*c.napi_value,
     comptime label: []const u8,
 ) bool {
-    const params = @typeInfo(Fn).@"fn".params;
-    const js_count = params.len - js_start;
+    const fields = @typeInfo(@typeInfo(@TypeOf(args)).pointer.child).@"struct".fields;
+    const js_count = fields.len - js_start;
 
     var argv: [@max(js_count, 1)]c.napi_value = undefined;
     var argc: usize = js_count;
@@ -33,20 +32,18 @@ pub fn invoke(
         return false;
     }
 
-    inline for (js_start..params.len) |i| {
-        const T = params[i].type.?;
+    inline for (fields[js_start..], js_start..) |field, i| {
+        const T = field.type;
         const js_i = i - js_start;
-        if (js_i >= argc) {
-            if (@typeInfo(T) == .optional) {
-                args[i] = null;
-            } else if (@typeInfo(T) == .@"struct" and comptime isAllDefaults(T)) {
-                args[i] = .{};
-            } else {
-                env.throwTypeError(label ++ " expects " ++ std.fmt.comptimePrint("{d}", .{js_count}) ++ " arguments");
-                return false;
-            }
-        } else {
+        if (js_i < argc) {
             args[i] = convert.fromJs(T, env, .{ .handle = argv[js_i] }) catch return false;
+        } else if (@typeInfo(T) == .optional) {
+            args[i] = null;
+        } else if (@typeInfo(T) == .@"struct" and comptime isAllDefaults(T)) {
+            args[i] = .{};
+        } else {
+            env.throwTypeError(label ++ " expects " ++ std.fmt.comptimePrint("{d}", .{js_count}) ++ " arguments");
+            return false;
         }
     }
     return true;
@@ -55,13 +52,14 @@ pub fn invoke(
 /// convert the raw result of `@call` to a napi_value. handles error
 /// unions, void, and Val passthrough. returns null on any failure with
 /// a js exception already pending.
-pub fn returnResult(env: Env, comptime Payload: type, raw: anytype) ?c.napi_value {
+pub fn returnResult(env: Env, raw: anytype) ?c.napi_value {
     const Return = @TypeOf(raw);
     const value = if (@typeInfo(Return) == .error_union) (raw catch |e| {
         if (!env.isExceptionPending()) env.throwError(@errorName(e));
         return null;
     }) else raw;
 
+    const Payload = @TypeOf(value);
     if (Payload == void) {
         const undef = env.createUndefined() catch return null;
         return undef.handle;
@@ -72,7 +70,7 @@ pub fn returnResult(env: Env, comptime Payload: type, raw: anytype) ?c.napi_valu
 }
 
 fn isAllDefaults(comptime T: type) bool {
-    for (@typeInfo(T).@"struct".fields) |f| {
+    inline for (@typeInfo(T).@"struct".fields) |f| {
         if (f.default_value_ptr == null) return false;
     }
     return true;

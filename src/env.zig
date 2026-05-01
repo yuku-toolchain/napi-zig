@@ -14,168 +14,95 @@ pub const Env = struct {
     handle: c.napi_env,
     arena: *std.heap.ArenaAllocator,
 
-    /// per-call allocator. freed when the function returns.
     pub fn allocator(self: Env) std.mem.Allocator {
         return self.arena.allocator();
     }
 
-    /// convert any zig value to a js value (type inferred).
     pub fn toJs(self: Env, value: anytype) !Val {
         return convert.toJs(@TypeOf(value), self, value);
     }
 
-
-    pub fn createBoolean(self: Env, value: bool) !Val {
+    /// uniform shape for napi_create_*/napi_get_* calls that produce a Val.
+    inline fn make(self: Env, comptime nf: anytype, args: anytype) !Val {
         var out: c.napi_value = undefined;
-        try check(c.napi_get_boolean(self.handle, value, &out));
+        try check(@call(.auto, nf, .{self.handle} ++ args ++ .{&out}));
         return .{ .handle = out };
     }
 
-    pub fn createInt32(self: Env, value: i32) !Val {
-        var out: c.napi_value = undefined;
-        try check(c.napi_create_int32(self.handle, value, &out));
-        return .{ .handle = out };
+    pub fn createBoolean(self: Env, v: bool) !Val {
+        return self.make(c.napi_get_boolean, .{v});
     }
-
-    pub fn createUint32(self: Env, value: u32) !Val {
-        var out: c.napi_value = undefined;
-        try check(c.napi_create_uint32(self.handle, value, &out));
-        return .{ .handle = out };
+    pub fn createInt32(self: Env, v: i32) !Val {
+        return self.make(c.napi_create_int32, .{v});
     }
-
-    pub fn createInt64(self: Env, value: i64) !Val {
-        var out: c.napi_value = undefined;
-        try check(c.napi_create_int64(self.handle, value, &out));
-        return .{ .handle = out };
+    pub fn createUint32(self: Env, v: u32) !Val {
+        return self.make(c.napi_create_uint32, .{v});
     }
-
-    pub fn createFloat64(self: Env, value: f64) !Val {
-        var out: c.napi_value = undefined;
-        try check(c.napi_create_double(self.handle, value, &out));
-        return .{ .handle = out };
+    pub fn createInt64(self: Env, v: i64) !Val {
+        return self.make(c.napi_create_int64, .{v});
     }
-
-    pub fn createBigintInt64(self: Env, value: i64) !Val {
-        var out: c.napi_value = undefined;
-        try check(c.napi_create_bigint_int64(self.handle, value, &out));
-        return .{ .handle = out };
+    pub fn createFloat64(self: Env, v: f64) !Val {
+        return self.make(c.napi_create_double, .{v});
     }
-
-    pub fn createBigintUint64(self: Env, value: u64) !Val {
-        var out: c.napi_value = undefined;
-        try check(c.napi_create_bigint_uint64(self.handle, value, &out));
-        return .{ .handle = out };
+    pub fn createBigintInt64(self: Env, v: i64) !Val {
+        return self.make(c.napi_create_bigint_int64, .{v});
     }
-
-    pub fn createString(self: Env, str: []const u8) !Val {
-        var out: c.napi_value = undefined;
-        try check(c.napi_create_string_utf8(self.handle, str.ptr, str.len, &out));
-        return .{ .handle = out };
+    pub fn createBigintUint64(self: Env, v: u64) !Val {
+        return self.make(c.napi_create_bigint_uint64, .{v});
     }
-
-    pub fn createStringZ(self: Env, str: [*:0]const u8) !Val {
-        var out: c.napi_value = undefined;
-        try check(c.napi_create_string_utf8(self.handle, str, c.NAPI_AUTO_LENGTH, &out));
-        return .{ .handle = out };
+    pub fn createString(self: Env, s: []const u8) !Val {
+        return self.make(c.napi_create_string_utf8, .{ s.ptr, s.len });
     }
-
     pub fn createNull(self: Env) !Val {
-        var out: c.napi_value = undefined;
-        try check(c.napi_get_null(self.handle, &out));
-        return .{ .handle = out };
+        return self.make(c.napi_get_null, .{});
     }
-
     pub fn createUndefined(self: Env) !Val {
-        var out: c.napi_value = undefined;
-        try check(c.napi_get_undefined(self.handle, &out));
-        return .{ .handle = out };
+        return self.make(c.napi_get_undefined, .{});
     }
-
-    pub fn getGlobal(self: Env) !Val {
-        var out: c.napi_value = undefined;
-        try check(c.napi_get_global(self.handle, &out));
-        return .{ .handle = out };
-    }
-
     pub fn createObject(self: Env) !Val {
-        var out: c.napi_value = undefined;
-        try check(c.napi_create_object(self.handle, &out));
-        return .{ .handle = out };
+        return self.make(c.napi_create_object, .{});
     }
-
     pub fn createArray(self: Env) !Val {
-        var out: c.napi_value = undefined;
-        try check(c.napi_create_array(self.handle, &out));
-        return .{ .handle = out };
+        return self.make(c.napi_create_array, .{});
     }
-
     pub fn createArrayWithLength(self: Env, len: u32) !Val {
-        var out: c.napi_value = undefined;
-        try check(c.napi_create_array_with_length(self.handle, len, &out));
-        return .{ .handle = out };
+        return self.make(c.napi_create_array_with_length, .{len});
+    }
+    pub fn createDate(self: Env, time_ms: f64) !Val {
+        return self.make(c.napi_create_date, .{time_ms});
+    }
+    pub fn getGlobal(self: Env) !Val {
+        return self.make(c.napi_get_global, .{});
     }
 
     pub fn createSymbol(self: Env, description: ?Val) !Val {
-        var out: c.napi_value = undefined;
-        try check(c.napi_create_symbol(self.handle, if (description) |d| d.handle else null, &out));
-        return .{ .handle = out };
+        return self.make(c.napi_create_symbol, .{if (description) |d| d.handle else null});
     }
 
-    pub fn createDate(self: Env, time_ms: f64) !Val {
-        var out: c.napi_value = undefined;
-        try check(c.napi_create_date(self.handle, time_ms, &out));
-        return .{ .handle = out };
-    }
-
-    /// wrap an opaque zig pointer in a js external value with optional finalizer.
     pub fn createExternal(self: Env, ptr: ?*anyopaque, finalize: ?c.napi_finalize, hint: ?*anyopaque) !Val {
-        var out: c.napi_value = undefined;
-        try check(c.napi_create_external(self.handle, ptr, finalize, hint, &out));
-        return .{ .handle = out };
+        return self.make(c.napi_create_external, .{ ptr, finalize, hint });
     }
 
-    pub fn createFunction(self: Env, name: ?[*:0]const u8, cb: c.napi_callback) !Val {
-        return self.createFunctionWithData(name, cb, null);
+    pub fn createExternalArrayBuffer(self: Env, data: [*]u8, len: usize, finalize: ?c.napi_finalize, hint: ?*anyopaque) !Val {
+        return self.make(c.napi_create_external_arraybuffer, .{ data, len, finalize, hint });
     }
 
-    pub fn createFunctionWithData(self: Env, name: ?[*:0]const u8, cb: c.napi_callback, data: ?*anyopaque) !Val {
-        var out: c.napi_value = undefined;
-        try check(c.napi_create_function(self.handle, name, if (name) |_| c.NAPI_AUTO_LENGTH else 0, cb, data, &out));
-        return .{ .handle = out };
+    pub fn createTypedArray(self: Env, typ: c.napi_typedarray_type, len: usize, ab: Val, offset: usize) !Val {
+        return self.make(c.napi_create_typedarray, .{ typ, len, ab.handle, offset });
+    }
+
+    pub fn createFunction(self: Env, name: ?[*:0]const u8, cb: c.napi_callback, data: ?*anyopaque) !Val {
+        return self.make(c.napi_create_function, .{ name, c.NAPI_AUTO_LENGTH, cb, data });
     }
 
     pub const ArrayBuffer = struct { val: Val, data: []u8 };
 
     pub fn createArrayBuffer(self: Env, len: usize) !ArrayBuffer {
-        var data: ?*anyopaque = null;
-        var out: c.napi_value = undefined;
-        try check(c.napi_create_arraybuffer(self.handle, len, &data, &out));
-        return .{
-            .val = .{ .handle = out },
-            .data = if (data) |p| @as([*]u8, @ptrCast(p))[0..len] else &.{},
-        };
-    }
-
-    pub fn createExternalArrayBuffer(self: Env, data: [*]u8, len: usize, finalize: ?c.napi_finalize, hint: ?*anyopaque) !Val {
-        var out: c.napi_value = undefined;
-        try check(c.napi_create_external_arraybuffer(self.handle, data, len, finalize, hint, &out));
-        return .{ .handle = out };
+        return makeBuffer(self, c.napi_create_arraybuffer, len);
     }
 
     pub fn createBuffer(self: Env, len: usize) !ArrayBuffer {
-        var data: ?*anyopaque = null;
-        var out: c.napi_value = undefined;
-        try check(c.napi_create_buffer(self.handle, len, &data, &out));
-        return .{
-            .val = .{ .handle = out },
-            .data = if (data) |p| @as([*]u8, @ptrCast(p))[0..len] else &.{},
-        };
-    }
-
-    pub fn createTypedArray(self: Env, typ: c.napi_typedarray_type, len: usize, ab: Val, offset: usize) !Val {
-        var out: c.napi_value = undefined;
-        try check(c.napi_create_typedarray(self.handle, typ, len, ab.handle, offset, &out));
-        return .{ .handle = out };
+        return makeBuffer(self, c.napi_create_buffer, len);
     }
 
     pub fn throwValue(self: Env, value: Val) !void {
@@ -185,22 +112,18 @@ pub const Env = struct {
     pub fn throwError(self: Env, msg: [*:0]const u8) void {
         _ = c.napi_throw_error(self.handle, null, msg);
     }
-
     pub fn throwTypeError(self: Env, msg: [*:0]const u8) void {
         _ = c.napi_throw_type_error(self.handle, null, msg);
     }
-
     pub fn throwRangeError(self: Env, msg: [*:0]const u8) void {
         _ = c.napi_throw_range_error(self.handle, null, msg);
     }
 
-    /// build a js error without throwing. used to reject promises from
-    /// contexts where throw doesn't propagate (workers, threadsafe).
+    /// build a js error value without throwing. used to reject promises
+    /// from contexts where throw doesn't propagate (workers, threadsafe).
     pub fn createError(self: Env, message: []const u8) !Val {
-        const msg_val = try self.createString(message);
-        var out: c.napi_value = undefined;
-        try check(c.napi_create_error(self.handle, null, msg_val.handle, &out));
-        return .{ .handle = out };
+        const msg = try self.createString(message);
+        return self.make(c.napi_create_error, .{ null, msg.handle });
     }
 
     pub fn isExceptionPending(self: Env) bool {
@@ -215,10 +138,7 @@ pub const Env = struct {
         return .{ .handle = out };
     }
 
-    pub const Promise = struct {
-        promise: Val,
-        deferred: Deferred,
-    };
+    pub const Promise = struct { promise: Val, deferred: Deferred };
 
     pub fn createPromise(self: Env) !Promise {
         var d: c.napi_deferred = undefined;
@@ -231,8 +151,7 @@ pub const Env = struct {
     /// context must declare `compute(*Self) void` (worker thread) and
     /// `resolve(*Self, Env) !T` (main thread, value becomes promise).
     pub fn runWorker(self: Env, comptime name: [*:0]const u8, context: anytype) !Val {
-        const T = @TypeOf(context);
-        const State = WorkerState(T);
+        const State = WorkerState(@TypeOf(context));
 
         const p = try self.createPromise();
         errdefer rejectWith(self, p.deferred, "napi-zig: failed to start worker");
@@ -241,15 +160,10 @@ pub const Env = struct {
         errdefer std.heap.smp_allocator.destroy(state);
         state.* = .{ .ctx = context, .deferred = p.deferred };
 
-        var name_val: c.napi_value = undefined;
-        try check(c.napi_create_string_utf8(self.handle, name, c.NAPI_AUTO_LENGTH, &name_val));
-
-        var work: c.napi_async_work = undefined;
-        try check(c.napi_create_async_work(self.handle, null, name_val, &State.execute, &State.complete, state, &work));
-        errdefer _ = c.napi_delete_async_work(self.handle, work);
-
-        state.work = work;
-        try check(c.napi_queue_async_work(self.handle, work));
+        const name_val = try self.createString(std.mem.span(name));
+        try check(c.napi_create_async_work(self.handle, null, name_val.handle, &State.execute, &State.complete, state, &state.work));
+        errdefer _ = c.napi_delete_async_work(self.handle, state.work);
+        try check(c.napi_queue_async_work(self.handle, state.work));
 
         return p.promise;
     }
@@ -266,6 +180,14 @@ pub const Env = struct {
         return out;
     }
 };
+
+fn makeBuffer(self: Env, comptime nf: anytype, len: usize) !Env.ArrayBuffer {
+    var data: ?*anyopaque = null;
+    var out: c.napi_value = undefined;
+    try check(nf(self.handle, len, &data, &out));
+    const slice = if (data) |p| @as([*]u8, @ptrCast(p))[0..len] else &.{};
+    return .{ .val = .{ .handle = out }, .data = slice };
+}
 
 fn WorkerState(comptime T: type) type {
     const Resolve = @TypeOf(@field(T, "resolve"));
@@ -313,7 +235,6 @@ fn WorkerState(comptime T: type) type {
     };
 }
 
-// best-effort rejection with a real js error so .catch(e) sees e.message.
 fn rejectWith(env: Env, deferred: Deferred, message: []const u8) void {
     const reason = env.createError(message) catch return;
     deferred.reject(env, reason) catch {};

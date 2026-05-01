@@ -64,20 +64,21 @@ pub fn collectMethods(comptime T: type) []const []const u8 {
         var names: []const []const u8 = &.{};
         for (@typeInfo(T).@"struct".decls) |d| {
             if (d.name[0] == '_') continue;
-            if (std.mem.eql(u8, d.name, "init")) continue;
-            if (std.mem.eql(u8, d.name, "deinit")) continue;
-            const VT = @TypeOf(@field(T, d.name));
-            if (@typeInfo(VT) != .@"fn") continue;
-            const fn_info = @typeInfo(VT).@"fn";
-            if (fn_info.params.len < 1) continue;
-            const first = fn_info.params[0].type orelse continue;
-            const fi = @typeInfo(first);
-            if (fi != .pointer) continue;
-            if (fi.pointer.child != T) continue;
+            if (std.mem.eql(u8, d.name, "init") or std.mem.eql(u8, d.name, "deinit")) continue;
+            if (!hasSelfReceiver(T, d.name)) continue;
             names = names ++ &[_][]const u8{d.name};
         }
         return names;
     }
+}
+
+fn hasSelfReceiver(comptime T: type, comptime name: []const u8) bool {
+    const VT = @TypeOf(@field(T, name));
+    if (@typeInfo(VT) != .@"fn") return false;
+    const params = @typeInfo(VT).@"fn".params;
+    if (params.len < 1) return false;
+    const first = params[0].type orelse return false;
+    return @typeInfo(first) == .pointer and @typeInfo(first).pointer.child == T;
 }
 
 fn ConstructorBridge(comptime T: type) type {
@@ -104,7 +105,7 @@ fn ConstructorBridge(comptime T: type) type {
             var this_val: c.napi_value = undefined;
             var args: std.meta.ArgsTuple(Init) = undefined;
             if (inject_env) args[0] = env;
-            if (!bridge.invoke(Init, js_start, env, raw_info, &args, &this_val, "constructor")) return null;
+            if (!bridge.invoke(js_start, env, raw_info, &args, &this_val, "constructor")) return null;
 
             const raw = @call(.auto, @field(T, "init"), args);
             const value = if (@typeInfo(Return) == .error_union) (raw catch |e| {
@@ -137,14 +138,9 @@ fn ConstructorBridge(comptime T: type) type {
 fn MethodBridge(comptime T: type, comptime method_name: []const u8) type {
     const Method = @TypeOf(@field(T, method_name));
     const params = @typeInfo(Method).@"fn".params;
-    // params[0] is *Self, params[1] is optional Env.
+    // params[0] is *Self, params[1] may be Env.
     const inject_env = params.len > 1 and params[1].type.? == Env;
     const js_start: usize = if (inject_env) 2 else 1;
-    const Return = @typeInfo(Method).@"fn".return_type orelse void;
-    const Payload = switch (@typeInfo(Return)) {
-        .error_union => |eu| eu.payload,
-        else => Return,
-    };
 
     return struct {
         fn call(raw_env: c.napi_env, raw_info: c.napi_callback_info) callconv(.c) ?c.napi_value {
@@ -155,7 +151,7 @@ fn MethodBridge(comptime T: type, comptime method_name: []const u8) type {
             var this_val: c.napi_value = undefined;
             var args: std.meta.ArgsTuple(Method) = undefined;
             if (inject_env) args[1] = env;
-            if (!bridge.invoke(Method, js_start, env, raw_info, &args, &this_val, "method '" ++ method_name ++ "'")) return null;
+            if (!bridge.invoke(js_start, env, raw_info, &args, &this_val, "method '" ++ method_name ++ "'")) return null;
 
             var unwrapped: ?*anyopaque = null;
             if (c.napi_unwrap(env.handle, this_val, &unwrapped) != .ok) {
@@ -164,7 +160,7 @@ fn MethodBridge(comptime T: type, comptime method_name: []const u8) type {
             }
             args[0] = @ptrCast(@alignCast(unwrapped));
 
-            return bridge.returnResult(env, Payload, @call(.auto, @field(T, method_name), args));
+            return bridge.returnResult(env, @call(.auto, @field(T, method_name), args));
         }
     };
 }

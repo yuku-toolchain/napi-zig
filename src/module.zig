@@ -14,11 +14,11 @@ const CallInfo = val_mod.CallInfo;
 
 pub const NAPI_MODULE_VERSION: u32 = 8;
 
-const Kind = enum { func, constant, namespace, class, skip };
+pub const Kind = enum { func, constant, namespace, class, skip };
 
 pub fn registerModule(comptime Module: type) void {
-    // skip emitting c entry points when the module is pulled into a
-    // host executable (e.g. dts_emit). lib targets only.
+    // skip emitting c entry points when the module is pulled into a host
+    // executable (e.g. dts_emit). lib targets only.
     if (builtin.output_mode != .Lib) return;
 
     const Init = ModuleInit(Module);
@@ -46,14 +46,11 @@ fn ModuleInit(comptime Module: type) type {
     };
 }
 
-/// recursively register every exportable pub declaration of `Module`
-/// onto `target`.
+/// recursively register every exportable pub declaration of `Module` onto `target`.
 pub fn registerInto(env: Env, target: Val, comptime Module: type) !void {
-    const decls = @typeInfo(Module).@"struct".decls;
-    inline for (decls) |decl| {
+    inline for (@typeInfo(Module).@"struct".decls) |decl| {
         if (decl.name[0] == '_') continue;
-        const kind = comptime classify(Module, decl.name);
-        switch (kind) {
+        switch (comptime classify(Module, decl.name)) {
             .skip => {},
             .func => try registerFn(env, target, Module, decl.name),
             .constant => try registerConst(env, target, Module, decl.name),
@@ -65,9 +62,9 @@ pub fn registerInto(env: Env, target: Val, comptime Module: type) !void {
 
 inline fn registerFn(env: Env, target: Val, comptime Module: type, comptime name: []const u8) !void {
     const js_name = comptime util.snakeToCamel(name);
-    const fn_type = @TypeOf(@field(Module, name));
-    const cb = if (comptime isRawFn(fn_type)) RawBridge(Module, name).call else FnBridge(Module, name).call;
-    try target.setNamedProperty(env, js_name, try env.createFunction(js_name, cb));
+    const Fn = @TypeOf(@field(Module, name));
+    const cb = if (comptime isRawFn(Fn)) RawBridge(Module, name).call else FnBridge(Module, name).call;
+    try target.setNamedProperty(env, js_name, try env.createFunction(js_name, cb, null));
 }
 
 inline fn registerConst(env: Env, target: Val, comptime Module: type, comptime name: []const u8) !void {
@@ -78,9 +75,8 @@ inline fn registerConst(env: Env, target: Val, comptime Module: type, comptime n
 
 inline fn registerNamespace(env: Env, target: Val, comptime Module: type, comptime name: []const u8) !void {
     const js_name = comptime util.snakeToCamel(name);
-    const Inner = @field(Module, name);
     const obj = try env.createObject();
-    try registerInto(env, obj, Inner);
+    try registerInto(env, obj, @field(Module, name));
     try target.setNamedProperty(env, js_name, obj);
 }
 
@@ -91,11 +87,6 @@ fn FnBridge(comptime Module: type, comptime name: []const u8) type {
     const params = @typeInfo(Fn).@"fn".params;
     const inject_env = params.len > 0 and params[0].type.? == Env;
     const js_start: usize = if (inject_env) 1 else 0;
-    const Return = @typeInfo(Fn).@"fn".return_type orelse void;
-    const Payload = switch (@typeInfo(Return)) {
-        .error_union => |eu| eu.payload,
-        else => Return,
-    };
 
     return struct {
         fn call(raw_env: c.napi_env, raw_info: c.napi_callback_info) callconv(.c) ?c.napi_value {
@@ -105,9 +96,9 @@ fn FnBridge(comptime Module: type, comptime name: []const u8) type {
 
             var args: std.meta.ArgsTuple(Fn) = undefined;
             if (inject_env) args[0] = env;
-            if (!bridge.invoke(Fn, js_start, env, raw_info, &args, null, "function '" ++ name ++ "'")) return null;
+            if (!bridge.invoke(js_start, env, raw_info, &args, null, "function '" ++ name ++ "'")) return null;
 
-            return bridge.returnResult(env, Payload, @call(.auto, @field(Module, name), args));
+            return bridge.returnResult(env, @call(.auto, @field(Module, name), args));
         }
     };
 }
@@ -120,7 +111,7 @@ fn RawBridge(comptime Module: type, comptime name: []const u8) type {
             defer arena.deinit();
             const env: Env = .{ .handle = raw_env, .arena = &arena };
 
-            const result = @field(Module, name)(env, CallInfo{ .handle = raw_info }) catch |e| {
+            const result = @field(Module, name)(env, .{ .handle = raw_info }) catch |e| {
                 if (!env.isExceptionPending()) env.throwError(@errorName(e));
                 return null;
             };
@@ -129,38 +120,36 @@ fn RawBridge(comptime Module: type, comptime name: []const u8) type {
     };
 }
 
-fn classify(comptime Module: type, comptime name: []const u8) Kind {
+pub fn classify(comptime Module: type, comptime name: []const u8) Kind {
     const T = @TypeOf(@field(Module, name));
 
     if (T == type) {
         const Inner = @field(Module, name);
-        if (@typeInfo(Inner) == .@"struct") {
-            if (class_mod.isClass(Inner)) return .class;
-            if (hasExportable(Inner)) return .namespace;
-        }
+        if (@typeInfo(Inner) != .@"struct") return .skip;
+        if (class_mod.isClass(Inner)) return .class;
+        if (hasExportable(Inner)) return .namespace;
         return .skip;
     }
 
     return switch (@typeInfo(T)) {
         .@"fn" => .func,
-        .comptime_int, .comptime_float => .constant,
-        .bool, .int, .float, .@"enum", .@"struct", .optional => .constant,
-        .pointer => |ptr| {
-            if (ptr.size == .one) {
-                const child = @typeInfo(ptr.child);
-                if (child == .array and child.array.child == u8) return .constant;
-            }
-            if (ptr.size == .slice and ptr.child == u8) return .constant;
-            return .skip;
-        },
+        .bool, .int, .float, .comptime_int, .comptime_float, .@"enum", .@"struct", .optional => .constant,
+        .pointer => |ptr| if (isStringPointer(ptr)) .constant else .skip,
         else => .skip,
     };
 }
 
-fn hasExportable(comptime T: type) bool {
-    if (@typeInfo(T) != .@"struct") return false;
-    const decls = @typeInfo(T).@"struct".decls;
-    for (decls) |d| {
+fn isStringPointer(comptime ptr: std.builtin.Type.Pointer) bool {
+    if (ptr.size == .slice and ptr.child == u8) return true;
+    if (ptr.size == .one) {
+        const child = @typeInfo(ptr.child);
+        if (child == .array and child.array.child == u8) return true;
+    }
+    return false;
+}
+
+pub fn hasExportable(comptime T: type) bool {
+    inline for (@typeInfo(T).@"struct".decls) |d| {
         if (d.name[0] == '_') continue;
         if (classify(T, d.name) != .skip) return true;
     }
@@ -169,12 +158,9 @@ fn hasExportable(comptime T: type) bool {
 
 fn isRawFn(comptime Fn: type) bool {
     const info = @typeInfo(Fn);
-    if (info != .@"fn") return false;
-    const params = info.@"fn".params;
-    if (params.len < 2) return false;
-    const first = if (params[0].type) |T| T == Env else false;
-    const second = if (params[1].type) |T| T == CallInfo else false;
-    return first and second;
+    if (info != .@"fn" or info.@"fn".params.len < 2) return false;
+    const p = info.@"fn".params;
+    return (p[0].type orelse return false) == Env and (p[1].type orelse return false) == CallInfo;
 }
 
 const testing = std.testing;

@@ -262,7 +262,7 @@ fn rootPackageJson(alloc: std.mem.Allocator, name: []const u8, npm: NpmConfig) [
     var deps: []const u8 = "";
     for (npm.platforms, 0..) |platform, i| {
         deps = std.fmt.allocPrint(alloc, "{s}    \"{s}/binding-{s}\": \"0.0.0\"{s}\n", .{
-            deps, npm.scope, platform.suffix(),
+            deps,                                       npm.scope, platform.suffix(),
             if (i < npm.platforms.len - 1) "," else "",
         }) catch return "";
     }
@@ -327,8 +327,8 @@ fn platformPackageJson(alloc: std.mem.Allocator, name: []const u8, npm: NpmConfi
         \\}}
         \\
     , .{
-        npm.scope, platform.suffix(),       repo_line, platform.npmOs(),
-        platform.npmCpu(), libc_line,       name,      name,
+        npm.scope,         platform.suffix(), repo_line, platform.npmOs(),
+        platform.npmCpu(), libc_line,         name,      name,
     }) catch "";
 }
 

@@ -8,12 +8,24 @@ const Env = env_mod.Env;
 const check = err.check;
 
 /// opaque handle to a js value, valid only within the current call.
-pub const Val = struct {
+/// extern layout guarantees `[]const Val` is castable to `[*]const napi_value`.
+pub const Val = extern struct {
     handle: c.napi_value,
 
-    /// convert this js value to any supported zig type.
     pub fn to(self: Val, env: Env, comptime T: type) !T {
         return convert.fromJs(T, env, self);
+    }
+
+    inline fn boolFn(self: Val, env: Env, comptime nf: anytype, args: anytype) !bool {
+        var out: bool = undefined;
+        try check(@call(.auto, nf, .{ env.handle, self.handle } ++ args ++ .{&out}));
+        return out;
+    }
+
+    inline fn valFn(self: Val, env: Env, comptime nf: anytype, args: anytype) !Val {
+        var out: c.napi_value = undefined;
+        try check(@call(.auto, nf, .{ env.handle, self.handle } ++ args ++ .{&out}));
+        return .{ .handle = out };
     }
 
     pub fn typeOf(self: Val, env: Env) !c.napi_valuetype {
@@ -23,77 +35,46 @@ pub const Val = struct {
     }
 
     pub fn strictEquals(self: Val, env: Env, other: Val) !bool {
-        var out: bool = undefined;
-        try check(c.napi_strict_equals(env.handle, self.handle, other.handle, &out));
-        return out;
+        return self.boolFn(env, c.napi_strict_equals, .{other.handle});
     }
-
     pub fn isArray(self: Val, env: Env) !bool {
-        var out: bool = undefined;
-        try check(c.napi_is_array(env.handle, self.handle, &out));
-        return out;
+        return self.boolFn(env, c.napi_is_array, .{});
     }
-
     pub fn isArrayBuffer(self: Val, env: Env) !bool {
-        var out: bool = undefined;
-        try check(c.napi_is_arraybuffer(env.handle, self.handle, &out));
-        return out;
+        return self.boolFn(env, c.napi_is_arraybuffer, .{});
     }
-
     pub fn isBuffer(self: Val, env: Env) !bool {
-        var out: bool = undefined;
-        try check(c.napi_is_buffer(env.handle, self.handle, &out));
-        return out;
+        return self.boolFn(env, c.napi_is_buffer, .{});
     }
-
     pub fn isTypedArray(self: Val, env: Env) !bool {
-        var out: bool = undefined;
-        try check(c.napi_is_typedarray(env.handle, self.handle, &out));
-        return out;
+        return self.boolFn(env, c.napi_is_typedarray, .{});
     }
-
     pub fn isDate(self: Val, env: Env) !bool {
-        var out: bool = undefined;
-        try check(c.napi_is_date(env.handle, self.handle, &out));
-        return out;
+        return self.boolFn(env, c.napi_is_date, .{});
     }
-
     pub fn isPromise(self: Val, env: Env) !bool {
-        var out: bool = undefined;
-        try check(c.napi_is_promise(env.handle, self.handle, &out));
-        return out;
+        return self.boolFn(env, c.napi_is_promise, .{});
+    }
+    pub fn hasNamedProperty(self: Val, env: Env, key: [:0]const u8) !bool {
+        return self.boolFn(env, c.napi_has_named_property, .{key.ptr});
     }
 
     pub fn getProperty(self: Val, env: Env, key: Val) !Val {
-        var out: c.napi_value = undefined;
-        try check(c.napi_get_property(env.handle, self.handle, key.handle, &out));
-        return .{ .handle = out };
+        return self.valFn(env, c.napi_get_property, .{key.handle});
+    }
+    pub fn getNamedProperty(self: Val, env: Env, key: [:0]const u8) !Val {
+        return self.valFn(env, c.napi_get_named_property, .{key.ptr});
+    }
+    pub fn getElement(self: Val, env: Env, index: u32) !Val {
+        return self.valFn(env, c.napi_get_element, .{index});
     }
 
     pub fn setProperty(self: Val, env: Env, key: Val, value: Val) !void {
         try check(c.napi_set_property(env.handle, self.handle, key.handle, value.handle));
     }
 
-    pub fn getNamedProperty(self: Val, env: Env, key: [:0]const u8) !Val {
-        var out: c.napi_value = undefined;
-        try check(c.napi_get_named_property(env.handle, self.handle, key, &out));
-        return .{ .handle = out };
-    }
-
     pub fn setNamedProperty(self: Val, env: Env, key: [:0]const u8, value: Val) !void {
-        try check(c.napi_set_named_property(env.handle, self.handle, key, value.handle));
-    }
-
-    pub fn hasNamedProperty(self: Val, env: Env, key: [:0]const u8) !bool {
-        var out: bool = undefined;
-        try check(c.napi_has_named_property(env.handle, self.handle, key, &out));
-        return out;
-    }
-
-    pub fn getElement(self: Val, env: Env, index: u32) !Val {
-        var out: c.napi_value = undefined;
-        try check(c.napi_get_element(env.handle, self.handle, index, &out));
-        return .{ .handle = out };
+        try check(c.napi_set_named_property(env.handle, self.handle, key.ptr, value.handle));
     }
 
     pub fn setElement(self: Val, env: Env, index: u32, value: Val) !void {
@@ -107,17 +88,10 @@ pub const Val = struct {
     }
 
     pub fn getArrayBufferData(self: Val, env: Env) ![]u8 {
-        var data: ?*anyopaque = null;
-        var len: usize = 0;
-        try check(c.napi_get_arraybuffer_info(env.handle, self.handle, &data, &len));
-        return if (data) |p| @as([*]u8, @ptrCast(p))[0..len] else &.{};
+        return bufferInfo(env, self, c.napi_get_arraybuffer_info);
     }
-
     pub fn getBufferData(self: Val, env: Env) ![]u8 {
-        var data: ?*anyopaque = null;
-        var len: usize = 0;
-        try check(c.napi_get_buffer_info(env.handle, self.handle, &data, &len));
-        return if (data) |p| @as([*]u8, @ptrCast(p))[0..len] else &.{};
+        return bufferInfo(env, self, c.napi_get_buffer_info);
     }
 
     pub fn getExternalData(self: Val, env: Env) !?*anyopaque {
@@ -133,28 +107,29 @@ pub const Val = struct {
     }
 };
 
+fn bufferInfo(env: Env, val: Val, comptime nf: anytype) ![]u8 {
+    var data: ?*anyopaque = null;
+    var len: usize = 0;
+    try check(nf(env.handle, val.handle, &data, &len));
+    return if (data) |p| @as([*]u8, @ptrCast(p))[0..len] else &.{};
+}
+
 /// js function handle, validated as callable.
 pub const Callback = struct {
     val: Val,
 
     /// call with `undefined` as `this`. args is a tuple or `[]const Val`.
     pub fn call(self: Callback, env: Env, args: anytype) !Val {
-        const undef = try env.createUndefined();
-        return self.invoke(env, undef, args);
+        return self.callWith(env, try env.createUndefined(), args);
     }
 
     /// call with a specific `this` binding.
     pub fn callWith(self: Callback, env: Env, this: Val, args: anytype) !Val {
-        return self.invoke(env, this, args);
-    }
-
-    fn invoke(self: Callback, env: Env, this: Val, args: anytype) !Val {
         const T = @TypeOf(args);
 
-        // val is a single-field wrapper over napi_value, so the pointers
-        // are layout-compatible.
         if (T == []const Val or T == []Val) {
-            return self.callRaw(env, this, if (args.len > 0) @ptrCast(args.ptr) else null, args.len);
+            const argv: ?[*]const c.napi_value = if (args.len > 0) @ptrCast(args.ptr) else null;
+            return self.invoke(env, this, argv, args.len);
         }
 
         const info = @typeInfo(T);
@@ -165,28 +140,27 @@ pub const Callback = struct {
                 const v = @field(args, f.name);
                 argv[i] = (if (@TypeOf(v) == Val) v else try env.toJs(v)).handle;
             }
-            return self.callRaw(env, this, if (fields.len > 0) &argv else null, fields.len);
+            return self.invoke(env, this, if (fields.len > 0) &argv else null, fields.len);
         }
 
         @compileError("Callback args must be a tuple or []const Val, got " ++ @typeName(T));
     }
 
-    fn callRaw(self: Callback, env: Env, this: Val, argv: ?[*]const c.napi_value, argc: usize) !Val {
-        var result: c.napi_value = undefined;
-        try check(c.napi_call_function(env.handle, this.handle, self.val.handle, argc, argv, &result));
-        return .{ .handle = result };
+    fn invoke(self: Callback, env: Env, this: Val, argv: ?[*]const c.napi_value, argc: usize) !Val {
+        var out: c.napi_value = undefined;
+        try check(c.napi_call_function(env.handle, this.handle, self.val.handle, argc, argv, &out));
+        return .{ .handle = out };
     }
 
     /// wrap as a thread-safe function. use `void` for signal-only callbacks.
     pub fn threadsafe(self: Callback, env: Env, comptime name: [*:0]const u8, comptime T: type) !ThreadsafeFn(T) {
-        var name_val: c.napi_value = undefined;
-        try check(c.napi_create_string_utf8(env.handle, name, c.NAPI_AUTO_LENGTH, &name_val));
+        const name_val = try env.createString(std.mem.span(name));
         var out: c.napi_threadsafe_function = undefined;
         try check(c.napi_create_threadsafe_function(
             env.handle,
             self.val.handle,
             null,
-            name_val,
+            name_val.handle,
             0,
             1,
             null,
@@ -208,36 +182,28 @@ pub fn ThreadsafeFn(comptime T: type) type {
         pub const Mode = c.napi_threadsafe_function_call_mode;
 
         pub fn call(self: Self, value: T, mode: Mode) !void {
-            if (T == void) {
-                try check(c.napi_call_threadsafe_function(self.handle, null, mode));
-            } else {
-                const ptr = try std.heap.smp_allocator.create(T);
-                ptr.* = value;
-                if (c.napi_call_threadsafe_function(self.handle, ptr, mode) != .ok) {
-                    std.heap.smp_allocator.destroy(ptr);
-                    return err.Error.GenericFailure;
-                }
-            }
+            if (T == void) return check(c.napi_call_threadsafe_function(self.handle, null, mode));
+
+            const ptr = try std.heap.smp_allocator.create(T);
+            errdefer std.heap.smp_allocator.destroy(ptr);
+            ptr.* = value;
+            try check(c.napi_call_threadsafe_function(self.handle, ptr, mode));
         }
 
         pub fn release(self: Self) !void {
-            try check(c.napi_release_threadsafe_function(self.handle, .release));
+            return check(c.napi_release_threadsafe_function(self.handle, .release));
         }
-
         pub fn abort(self: Self) !void {
-            try check(c.napi_release_threadsafe_function(self.handle, .abort));
+            return check(c.napi_release_threadsafe_function(self.handle, .abort));
         }
-
         pub fn acquire(self: Self) !void {
-            try check(c.napi_acquire_threadsafe_function(self.handle));
+            return check(c.napi_acquire_threadsafe_function(self.handle));
         }
-
         pub fn unref(self: Self, env: Env) !void {
-            try check(c.napi_unref_threadsafe_function(env.handle, self.handle));
+            return check(c.napi_unref_threadsafe_function(env.handle, self.handle));
         }
-
         pub fn ref(self: Self, env: Env) !void {
-            try check(c.napi_ref_threadsafe_function(env.handle, self.handle));
+            return check(c.napi_ref_threadsafe_function(env.handle, self.handle));
         }
 
         fn callJs(raw_env: c.napi_env, js_callback: c.napi_value, _: ?*anyopaque, data: ?*anyopaque) callconv(.c) void {
@@ -250,8 +216,8 @@ pub fn ThreadsafeFn(comptime T: type) type {
 
             const js_val = convert.toJs(T, env, typed.*) catch return;
             const undef = env.createUndefined() catch return;
-            var result: c.napi_value = undefined;
-            _ = c.napi_call_function(raw_env, undef.handle, js_callback, 1, @ptrCast(&js_val.handle), &result);
+            var out: c.napi_value = undefined;
+            _ = c.napi_call_function(raw_env, undef.handle, js_callback, 1, @ptrCast(&js_val.handle), &out);
         }
     };
 }
