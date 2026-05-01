@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
@@ -6,11 +7,9 @@ import assert from "node:assert/strict";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixtureDir = join(here, "fixture-lib");
+const nodeBinary = join(fixtureDir, "zig-out", "lib", "fixture.node");
 
-// Skip the in-process zig build when CI has already pre-built the fixture.
-// Cross-runtime spawnSync semantics (esp. Deno on Windows) make in-process
-// builds unreliable; the CI flag side-steps that.
-if (!process.argv.includes("--skip-build")) {
+if (!existsSync(nodeBinary)) {
   const built = spawnSync("zig", ["build"], {
     cwd: fixtureDir,
     stdio: "inherit",
@@ -22,7 +21,7 @@ if (!process.argv.includes("--skip-build")) {
 }
 
 const require = createRequire(import.meta.url);
-const m = require(join(fixtureDir, "zig-out", "lib", "fixture.node"));
+const m = require(nodeBinary);
 
 // primitives
 assert.equal(m.roundtripBool(true), true);

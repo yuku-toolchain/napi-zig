@@ -134,11 +134,8 @@ jobs:
         with:
           deno-version: v2.x
 
-      - name: Pre-build fixture-lib
-        run: cd tests/fixture-lib && zig build
-
       - name: Smoke-test addon under Deno
-        run: deno run --allow-all tests/smoke.mjs --skip-build
+        run: deno run --allow-all tests/smoke.mjs
 
   cross-compile:
     name: Cross-compile all platforms
@@ -197,6 +194,39 @@ jobs:
       - name: Load + smoke-test the binding for this platform
         run: node tests/installed-smoke.mjs pkg-out/fcli
 
+  musl-abi:
+    name: Musl on Alpine (linux-x64)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: master
+
+      - name: Cache zig artifacts
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ZIG_GLOBAL_CACHE_DIR }}
+          key: ${{ runner.os }}-zig-musl-${{ hashFiles('**/build.zig.zon', '**/build.zig') }}
+          restore-keys: |
+            ${{ runner.os }}-zig-musl-
+            ${{ runner.os }}-zig-
+
+      - name: Cross-compile fixture-lib for musl
+        run: cd tests/fixture-lib && zig build -Dtarget=x86_64-linux-musl
+
+      - name: Smoke-test inside node:24-alpine
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/work \
+            -w /work \
+            -e DISABLE_V8_COMPILE_CACHE=1 \
+            node:24-alpine \
+            node tests/smoke.mjs
+
   done:
     # branch-protection target. one job to require, automatically updates as
     # upstream jobs are added or removed. fails if any required job failed
@@ -210,6 +240,7 @@ jobs:
       - deno-abi
       - cross-compile
       - cross-install
+      - musl-abi
     steps:
       - name: Verify upstream results
         run: |

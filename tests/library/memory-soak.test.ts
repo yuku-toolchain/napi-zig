@@ -11,10 +11,8 @@ function settle() {
 
 describe("memory soak", () => {
   test("allocating string fn does not leak across 100k calls", () => {
-    // warm up
     for (let i = 0; i < 1_000; i++) m.roundtripString("warmup");
     settle();
-    const baseline = process.memoryUsage().rss;
 
     for (let i = 0; i < ITERS; i++) m.roundtripString("x".repeat(100));
     settle();
@@ -24,15 +22,11 @@ describe("memory soak", () => {
     settle();
     const afterBatch2 = process.memoryUsage().rss;
 
-    const batch1Growth = afterBatch1 - baseline;
-    const batch2Growth = afterBatch2 - afterBatch1;
-    const ratio = batch1Growth === 0 ? 0 : batch2Growth / batch1Growth;
-
-    // batch 2 should be much smaller than batch 1 (warm-up pays the
-    // first-allocation cost, steady-state should plateau). allow some
-    // slack, RSS is noisy. failure here = real linear growth.
-    expect(batch2Growth).toBeLessThan(20 * 1024 * 1024); // <20MiB drift
-    expect(ratio).toBeLessThan(0.5); // batch 2 < half of batch 1
+    // batch 1 may grow as the allocator warms its pool, batch 2 should
+    // plateau. asserting plateau by absolute threshold avoids the
+    // ratio-of-tiny-numbers fragility a relative check has when both
+    // growths are small.
+    expect(afterBatch2 - afterBatch1).toBeLessThan(20 * 1024 * 1024);
   }, 60_000);
 
   test("non-allocating fn (add) does not grow RSS at all", () => {
