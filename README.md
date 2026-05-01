@@ -389,7 +389,7 @@ pub fn process(env: napi.Env, input: []const u8) ![]const u8 {
 }
 ```
 
-The arena is a **per-thread, reset-on-release pool**: the first call on a thread pays one allocation; every subsequent call rewinds the existing pages without touching the kernel. Calls that don't allocate pay nothing, `add(i32, i32)` never goes near the allocator.
+A fresh arena is constructed for each call and freed when your function returns. Its backing pages come from `std.heap.smp_allocator`, a thread-cached allocator: pages freed on return stay on the thread's freelist for the next call to reuse, so the hot path doesn't hit the kernel. Calls that don't allocate pay nothing, `add(i32, i32)` never goes near the allocator.
 
 > [!IMPORTANT]
 > Arena memory is valid only for the duration of the call. For data that outlives the function (workers, threads), copy to a long-lived allocator yourself. See [Workers](#workers).
