@@ -85,7 +85,7 @@ describe("constructor type errors", () => {
 describe("deinit fires on garbage collection", () => {
   beforeEach(async () => {
     // collect any instances orphaned by earlier tests in this suite, then
-    // reset the counter — otherwise stale finalizers contaminate this test.
+    // reset the counter, otherwise stale finalizers contaminate this test.
     Bun.gc(true);
     await new Promise((r) => setImmediate(r));
     Bun.gc(true);

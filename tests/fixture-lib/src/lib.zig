@@ -583,3 +583,151 @@ pub fn nodeMajorVersion(env: napi.Env) !u32 {
     const v = try env.getNodeVersion();
     return v.major;
 }
+
+// ---- promises (synchronous) ----
+
+pub fn resolveImmediately(env: napi.Env, value: i32) !napi.Val {
+    const p = try env.createPromise();
+    try p.deferred.resolve(env, try env.toJs(value));
+    return p.promise;
+}
+
+pub fn rejectImmediately(env: napi.Env, message: []const u8) !napi.Val {
+    const p = try env.createPromise();
+    const reason = try env.createError(message);
+    try p.deferred.reject(env, reason);
+    return p.promise;
+}
+
+pub fn isPromise(env: napi.Env, v: napi.Val) !bool {
+    return v.isPromise(env);
+}
+
+// ---- workers (background async) ----
+
+const I32Work = struct {
+    input: i32,
+    result: i32 = 0,
+
+    pub fn compute(self: *I32Work) void {
+        self.result = fib(self.input);
+    }
+
+    pub fn resolve(self: *I32Work, _: napi.Env) !i32 {
+        return self.result;
+    }
+
+    fn fib(n: i32) i32 {
+        if (n <= 1) return n;
+        return fib(n - 1) + fib(n - 2);
+    }
+};
+
+pub fn asyncFib(env: napi.Env, n: i32) !napi.Val {
+    return env.runWorker("fib", I32Work{ .input = n });
+}
+
+const VoidWork = struct {
+    flag: u32 = 0,
+
+    pub fn compute(self: *VoidWork) void {
+        self.flag = 1;
+    }
+
+    pub fn resolve(_: *VoidWork, _: napi.Env) !void {}
+};
+
+pub fn asyncVoid(env: napi.Env) !napi.Val {
+    return env.runWorker("void", VoidWork{});
+}
+
+const ErrorWork = struct {
+    pub fn compute(_: *ErrorWork) void {}
+
+    pub fn resolve(_: *ErrorWork, _: napi.Env) !i32 {
+        return error.WorkerFailed;
+    }
+};
+
+pub fn asyncError(env: napi.Env) !napi.Val {
+    return env.runWorker("error", ErrorWork{});
+}
+
+const StructWork = struct {
+    pub fn compute(_: *StructWork) void {}
+
+    pub fn resolve(_: *StructWork, _: napi.Env) !struct { x: i32, y: i32 } {
+        return .{ .x = 3, .y = 4 };
+    }
+};
+
+pub fn asyncStruct(env: napi.Env) !napi.Val {
+    return env.runWorker("struct", StructWork{});
+}
+
+const ValWork = struct {
+    pub fn compute(_: *ValWork) void {}
+
+    pub fn resolve(_: *ValWork, env: napi.Env) !napi.Val {
+        return env.toJs(@as(i32, 99));
+    }
+};
+
+pub fn asyncVal(env: napi.Env) !napi.Val {
+    return env.runWorker("val", ValWork{});
+}
+
+const StringWork = struct {
+    result: [16]u8 = undefined,
+    len: usize = 0,
+
+    pub fn compute(self: *StringWork) void {
+        const msg = "from worker";
+        @memcpy(self.result[0..msg.len], msg);
+        self.len = msg.len;
+    }
+
+    pub fn resolve(self: *StringWork, env: napi.Env) ![]const u8 {
+        return env.allocator().dupe(u8, self.result[0..self.len]);
+    }
+};
+
+pub fn asyncString(env: napi.Env) !napi.Val {
+    return env.runWorker("string", StringWork{});
+}
+
+// ---- threadsafe functions ----
+
+pub fn signalOnce(env: napi.Env, cb: napi.Callback) !void {
+    const tsfn = try cb.threadsafe(env, "tick", void);
+    try tsfn.call({}, .blocking);
+    try tsfn.release();
+}
+
+pub fn signalOnceFromThread(env: napi.Env, cb: napi.Callback) !void {
+    const tsfn = try cb.threadsafe(env, "thread_tick", void);
+    const t = try std.Thread.spawn(.{}, struct {
+        fn run(ts: napi.ThreadsafeFn(void)) void {
+            ts.call({}, .blocking) catch {};
+            ts.release() catch {};
+        }
+    }.run, .{tsfn});
+    t.detach();
+}
+
+pub fn fanOutWorkers(env: napi.Env, cb: napi.Callback, count: u32) !void {
+    const tsfn = try cb.threadsafe(env, "workers", u32);
+
+    var i: u32 = 0;
+    while (i < count) : (i += 1) {
+        try tsfn.acquire();
+        const t = try std.Thread.spawn(.{}, struct {
+            fn run(ts: napi.ThreadsafeFn(u32), id: u32) void {
+                defer ts.release() catch {};
+                ts.call(id, .blocking) catch {};
+            }
+        }.run, .{ tsfn, i });
+        t.detach();
+    }
+    try tsfn.release();
+}
