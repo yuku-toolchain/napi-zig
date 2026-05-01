@@ -1,16 +1,11 @@
-#!/usr/bin/env node
-// ABI smoke test: builds the fixture-lib addon, loads it under the host
-// Node, and runs a representative slice of the surface. Catches breakage
-// when N-API ABI shifts between Node versions or when napi-zig's
-// hand-translated bindings drift.
+import { spawnSync } from "node:child_process";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
+import assert from "node:assert/strict";
 
-"use strict";
-
-const { spawnSync } = require("node:child_process");
-const path = require("node:path");
-const assert = require("node:assert/strict");
-
-const fixtureDir = path.join(__dirname, "fixture-lib");
+const here = dirname(fileURLToPath(import.meta.url));
+const fixtureDir = join(here, "fixture-lib");
 
 const built = spawnSync("zig", ["build"], {
   cwd: fixtureDir,
@@ -21,7 +16,8 @@ if (built.status !== 0) {
   process.exit(built.status ?? 1);
 }
 
-const m = require(path.join(fixtureDir, "zig-out", "lib", "fixture.node"));
+const require = createRequire(import.meta.url);
+const m = require(join(fixtureDir, "zig-out", "lib", "fixture.node"));
 
 // primitives
 assert.equal(m.roundtripBool(true), true);
@@ -77,18 +73,17 @@ assert.equal(Buffer.isBuffer(buf), true);
 assert.deepEqual([...buf], [0xab, 0xab, 0xab, 0xab]);
 
 // async / promises
-(async () => {
-  assert.equal(await m.asyncFib(10), 55);
-  assert.equal(await m.asyncVoid(), undefined);
-  assert.equal(await m.asyncString(), "from worker");
-  await assert.rejects(m.asyncError(), /WorkerFailed/);
+assert.equal(await m.asyncFib(10), 55);
+assert.equal(await m.asyncVoid(), undefined);
+assert.equal(await m.asyncString(), "from worker");
+await assert.rejects(m.asyncError(), /WorkerFailed/);
 
-  // sync promise
-  assert.equal(await m.resolveImmediately(7), 7);
-  await assert.rejects(m.rejectImmediately("boom"), /boom/);
+// sync promise
+assert.equal(await m.resolveImmediately(7), 7);
+await assert.rejects(m.rejectImmediately("boom"), /boom/);
 
-  console.log(`node smoke OK on ${process.version}`);
-})().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+const runtime =
+  typeof globalThis.Deno !== "undefined"
+    ? `deno ${globalThis.Deno.version.deno}`
+    : `node ${process.version}`;
+console.log(`smoke OK on ${runtime}`);
