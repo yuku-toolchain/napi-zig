@@ -1,8 +1,7 @@
-// end-to-end verification of the showcase addon. exits non-zero on regression.
-
-const m = require("./zig-out/lib/showcase.node");
+import m from "./lib";
 
 let failed = 0;
+
 const eq = (label: string, actual: unknown, expected: unknown): void => {
   const ok = JSON.stringify(actual) === JSON.stringify(expected);
   console.log(`${ok ? "✓" : "✗"} ${label}: ${JSON.stringify(actual)}`);
@@ -55,8 +54,8 @@ eq("Counter reset", c.get(), 0);
 
 eq("sum variadic", m.sum(1, 2, 3, 4, 5), 15);
 
-const collected: [number, number][] = [];
-m.forEach([10, 20, 30], (item: number, i: number) => collected.push([i, item]));
+const collected: [unknown, unknown][] = [];
+m.forEach([10, 20, 30], (item, i) => collected.push([i, item]));
 eq("forEach", collected, [
   [0, 10],
   [1, 20],

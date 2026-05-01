@@ -6,7 +6,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     napi_zig.addLib(b, b.dependency("napi_zig", .{}), .{
-        .name = "showcase",
+        .name = "lib",
         .root = b.path("src/lib.zig"),
         .target = target,
         .optimize = optimize,

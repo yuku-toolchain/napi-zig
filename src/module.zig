@@ -12,7 +12,6 @@ const Env = env_mod.Env;
 const Val = val_mod.Val;
 const CallInfo = val_mod.CallInfo;
 
-// pinned to v8, the highest stable node-api version.
 pub const NAPI_MODULE_VERSION: u32 = 8;
 
 const Kind = enum { func, constant, namespace, class, skip };
