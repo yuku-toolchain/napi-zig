@@ -65,7 +65,11 @@ assert.equal(c.get(), 0);
 // callbacks
 const seen = [];
 m.forEach([10, 20, 30], (v, i) => seen.push([i, v]));
-assert.deepEqual(seen, [[0, 10], [1, 20], [2, 30]]);
+assert.deepEqual(seen, [
+  [0, 10],
+  [1, 20],
+  [2, 30],
+]);
 
 // buffers
 const buf = m.createFilledBuffer(4, 0xab);

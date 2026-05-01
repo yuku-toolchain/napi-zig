@@ -127,9 +127,7 @@ describe("Callback as a struct field", () => {
   });
 
   test("non-function field throws TypeError", () => {
-    expect(() =>
-      m.fireHandlers({ onData: "nope", onDone: () => {} }, 1),
-    ).toThrow(TypeError);
+    expect(() => m.fireHandlers({ onData: "nope", onDone: () => {} }, 1)).toThrow(TypeError);
   });
 
   test("missing field (no defaults) throws TypeError", () => {
@@ -139,14 +137,7 @@ describe("Callback as a struct field", () => {
 
 describe("nested slice [][]i32", () => {
   test("recursively converts inner arrays", () => {
-    expect(
-      m.nestedSliceSum([
-        [1, 2, 3],
-        [10, 20],
-        [],
-        [100],
-      ]),
-    ).toBe(136);
+    expect(m.nestedSliceSum([[1, 2, 3], [10, 20], [], [100]])).toBe(136);
   });
 
   test("empty outer array", () => {
