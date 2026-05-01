@@ -24,7 +24,6 @@ pub const Error = error{
     WouldDeadlock,
     NoExternalBuffersAllowed,
     CannotRunJs,
-    OutOfMemory,
 };
 
 pub fn check(status: c.napi_status) Error!void {

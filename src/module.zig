@@ -1,17 +1,16 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const c = @import("c.zig");
-const err = @import("error.zig");
 const env_mod = @import("env.zig");
 const convert = @import("convert.zig");
 const util = @import("util.zig");
 const val_mod = @import("val.zig");
 const class_mod = @import("class.zig");
+const bridge = @import("bridge.zig");
 
 const Env = env_mod.Env;
 const Val = val_mod.Val;
 const CallInfo = val_mod.CallInfo;
-const check = err.check;
 
 // We pin to v8: the highest stable Node-API version. v9 is experimental.
 pub const NAPI_MODULE_VERSION: u32 = 8;
@@ -105,17 +104,13 @@ inline fn registerNamespace(env: Env, target: Val, comptime Module: type, compti
 // Wraps `Module.name` as a `napi_callback`. Optionally injects `Env`
 // as the first argument (recognized by type identity); converts every
 // remaining parameter from a JS argument; converts the return value
-// (or error) back. Missing optional args become `null`; missing
-// all-default-struct args become `.{}`; otherwise throws TypeError.
+// (or error) back.
 fn FnBridge(comptime Module: type, comptime name: []const u8) type {
-    const func = @field(Module, name);
-    const Fn = @TypeOf(func);
-    const fn_info = @typeInfo(Fn).@"fn";
-    const params = fn_info.params;
+    const Fn = @TypeOf(@field(Module, name));
+    const params = @typeInfo(Fn).@"fn".params;
     const inject_env = params.len > 0 and params[0].type.? == Env;
     const js_start: usize = if (inject_env) 1 else 0;
-    const js_count = params.len - js_start;
-    const Return = fn_info.return_type orelse void;
+    const Return = @typeInfo(Fn).@"fn".return_type orelse void;
     const Payload = switch (@typeInfo(Return)) {
         .error_union => |eu| eu.payload,
         else => Return,
@@ -127,58 +122,18 @@ fn FnBridge(comptime Module: type, comptime name: []const u8) type {
             defer env_mod.releaseArena(arena);
             const env: Env = .{ .handle = raw_env, .arena = arena };
 
-            const result = invoke(env, .{ .handle = raw_info }) catch {
-                if (!env.isExceptionPending()) {
-                    env.throwError("napi-zig: call to '" ++ name ++ "' failed");
-                }
-                return null;
-            };
-            return result.handle;
-        }
+            var args: std.meta.ArgsTuple(Fn) = undefined;
+            if (inject_env) args[0] = env;
+            if (!bridge.invoke(Fn, js_start, env, raw_info, &args, null, "function '" ++ name ++ "'")) return null;
 
-        fn invoke(env: Env, info: CallInfo) !Val {
-            const argc = try info.argCount(env);
-            const argv = try info.args(env, js_count);
-            const args_tuple = try buildArgs(env, argv, argc);
-
-            const raw = @call(.auto, func, args_tuple);
-            const value = switch (@typeInfo(Return)) {
-                .error_union => raw catch |e| {
-                    if (!env.isExceptionPending()) env.throwError(@errorName(e));
-                    return e;
-                },
-                else => raw,
-            };
-            return convert.toJs(Payload, env, value);
-        }
-
-        fn buildArgs(env: Env, argv: [js_count]Val, argc: usize) !std.meta.ArgsTuple(Fn) {
-            var tuple: std.meta.ArgsTuple(Fn) = undefined;
-            if (inject_env) tuple[0] = env;
-            inline for (js_start..params.len) |i| {
-                const js_i = i - js_start;
-                const T = params[i].type.?;
-                if (js_i >= argc) {
-                    if (@typeInfo(T) == .optional) {
-                        tuple[i] = null;
-                    } else if (@typeInfo(T) == .@"struct" and comptime isAllDefaults(T)) {
-                        tuple[i] = .{};
-                    } else {
-                        env.throwTypeError("expected " ++ std.fmt.comptimePrint("{d}", .{js_count}) ++ " arguments");
-                        return err.Error.InvalidArg;
-                    }
-                } else {
-                    tuple[i] = try convert.fromJs(T, env, argv[js_i]);
-                }
-            }
-            return tuple;
+            return bridge.returnResult(env, Payload, @call(.auto, @field(Module, name), args));
         }
     };
 }
 
 // ── Raw function bridge ───────────────────────────────────────────────
 //
-// For functions with signature `fn(Env, CallInfo) !Val` — full manual
+// For functions with signature `fn(Env, CallInfo) !Val`, full manual
 // control over argument extraction (variadic, mixed-shape, etc).
 fn RawBridge(comptime Module: type, comptime name: []const u8) type {
     return struct {
@@ -246,15 +201,6 @@ fn isRawFn(comptime Fn: type) bool {
     return first and second;
 }
 
-fn isAllDefaults(comptime T: type) bool {
-    const info = @typeInfo(T);
-    if (info != .@"struct") return false;
-    for (info.@"struct".fields) |field| {
-        if (field.default_value_ptr == null) return false;
-    }
-    return true;
-}
-
 // ── Tests ─────────────────────────────────────────────────────────────
 
 const testing = std.testing;
@@ -319,14 +265,6 @@ test "isRawFn detects (Env, CallInfo) signature" {
     try testing.expect(comptime isRawFn(@TypeOf(raw.f)));
     try testing.expect(comptime !isRawFn(fn (i32) void));
     try testing.expect(comptime !isRawFn(fn (Env) void));
-}
-
-test "isAllDefaults" {
-    const A = struct { x: i32 = 0, y: bool = true };
-    const B = struct { x: i32, y: bool = true };
-    try testing.expect(comptime isAllDefaults(A));
-    try testing.expect(comptime !isAllDefaults(B));
-    try testing.expect(comptime !isAllDefaults(i32));
 }
 
 test "underscore prefixed decls are skipped during enumeration" {

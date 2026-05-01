@@ -98,8 +98,8 @@ napi build
 
 ```js
 import addon from "./my-addon.js";
-console.log(addon.add(2, 3));        // 5
-console.log(addon.greet("world"));   // Hello, world!
+console.log(addon.add(2, 3)); // 5
+console.log(addon.greet("world")); // Hello, world!
 ```
 
 That's the whole loop.
@@ -108,15 +108,15 @@ That's the whole loop.
 
 ### `addLib` options
 
-| Option       | Required | Description                                                          |
-| ------------ | -------- | -------------------------------------------------------------------- |
-| `.name`      | Yes      | Package name (used for the `.node` binary and npm package)           |
-| `.root`      | Yes      | Path to the root Zig source file                                     |
-| `.target`    | Yes      | Build target                                                         |
-| `.optimize`  | Yes      | Optimization mode                                                    |
-| `.imports`   | No       | Additional Zig module imports                                        |
-| `.npm`       | No       | npm package config (required for cross-compile + publish)            |
-| `.host_exe`  | No       | Windows host binary (default `"node.exe"`, use `"electron.exe"` etc.) |
+| Option      | Required | Description                                                           |
+| ----------- | -------- | --------------------------------------------------------------------- |
+| `.name`     | Yes      | Package name (used for the `.node` binary and npm package)            |
+| `.root`     | Yes      | Path to the root Zig source file                                      |
+| `.target`   | Yes      | Build target                                                          |
+| `.optimize` | Yes      | Optimization mode                                                     |
+| `.imports`  | No       | Additional Zig module imports                                         |
+| `.npm`      | No       | npm package config (required for cross-compile + publish)             |
+| `.host_exe` | No       | Windows host binary (default `"node.exe"`, use `"electron.exe"` etc.) |
 
 ### Importing other Zig modules
 
@@ -141,16 +141,16 @@ Then in your addon: `const parser = @import("parser");`
 
 ### `.npm` options
 
-| Option         | Default               | Description                                                       |
-| -------------- | --------------------- | ----------------------------------------------------------------- |
-| `.scope`       | required              | npm scope (e.g. `"@myscope"`)                                     |
-| `.repository`  | required              | `.url` required, `.type` defaults to `"git"`                      |
-| `.description` | `""`                  | Package description                                               |
-| `.license`     | `"MIT"`               | License identifier                                                |
-| `.dts`         | `.none`               | `.{ .file = path }`, `.auto`, or `.none` (see [TypeScript](#typescript-declarations)) |
-| `.platforms`   | `Platform.defaults`   | Cross-compilation targets                                         |
+| Option         | Default             | Description                                                                           |
+| -------------- | ------------------- | ------------------------------------------------------------------------------------- |
+| `.scope`       | required            | npm scope (e.g. `"@myscope"`)                                                         |
+| `.repository`  | required            | `.url` required, `.type` defaults to `"git"`                                          |
+| `.description` | `""`                | Package description                                                                   |
+| `.license`     | `"MIT"`             | License identifier                                                                    |
+| `.dts`         | `.none`             | `.{ .file = path }`, `.auto`, or `.none` (see [TypeScript](#typescript-declarations)) |
+| `.platforms`   | `Platform.defaults` | Cross-compilation targets                                                             |
 
-Default platforms: Linux (x64, arm64, arm — glibc and musl), macOS (x64, arm64), Windows (x64, arm64), FreeBSD (x64).
+Default platforms: Linux (x64, arm64, arm; glibc and musl), macOS (x64, arm64), Windows (x64, arm64), FreeBSD (x64).
 
 ## Writing functions
 
@@ -160,7 +160,7 @@ There is **one rule** for what makes a JS-visible function:
 pub fn name([env: napi.Env,] [info: napi.CallInfo,] ...js_args) Return
 ```
 
-`Env` and `CallInfo` are recognized by type and injected automatically — they don't consume JS arguments. Everything else is converted from the JS arguments at the call site, and the return value is converted back. The progression:
+`Env` and `CallInfo` are recognized by type and injected automatically, they don't consume JS arguments. Everything else is converted from the JS arguments at the call site, and the return value is converted back. The progression:
 
 ```zig
 // no env needed
@@ -173,7 +173,7 @@ pub fn greet(env: napi.Env, name: []const u8) ![]const u8 {
     return std.fmt.allocPrint(env.allocator(), "Hello, {s}!", .{name});
 }
 
-// raw call info — for variadic or dynamic-arity functions
+// raw call info, for variadic or dynamic-arity functions
 pub fn sum(env: napi.Env, info: napi.CallInfo) !napi.Val {
     const args = try info.args(env, 16);
     const argc = try info.argCount(env);
@@ -240,7 +240,7 @@ pub const Counter = napi.class("Counter", struct {
     }
 
     pub fn deinit(self: *@This()) void {
-        // optional — runs when the JS instance is garbage-collected
+        // optional, runs when the JS instance is garbage-collected
         _ = self;
     }
 });
@@ -248,9 +248,9 @@ pub const Counter = napi.class("Counter", struct {
 
 ```js
 const c = new Counter(10);
-c.increment();   // 11
-c.increment();   // 12
-c.get();         // 12
+c.increment(); // 11
+c.increment(); // 12
+c.get(); // 12
 ```
 
 Rules:
@@ -259,48 +259,48 @@ Rules:
 - Every other `pub fn` whose first parameter is `*Self` or `*const Self` becomes a method. May also take `Env` as its second parameter.
 - **`deinit`** (optional, signature `fn(self: *Self) void`) runs when the JS instance is GC'd. The Zig allocation is freed automatically either way.
 
-The instance is heap-allocated once and reused across every method call — no per-call boxing.
+The instance is heap-allocated once and reused across every method call, no per-call boxing.
 
 ## Type conversion
 
 ### Zig → JS (`env.toJs`)
 
-| Zig type                       | JS result                              |
-| ------------------------------ | -------------------------------------- |
-| `void`                         | `undefined`                            |
-| `bool`                         | Boolean                                |
-| `?T`                           | inner value or `null`                  |
-| `comptime_int`, `comptime_float` | Number                               |
-| `i1`..`i32`, `u1`..`u32`       | Number                                 |
-| `i33`..`i53`, `u33`..`u53`     | Number (via f64, safe-integer range)   |
-| `i54`..`i64`, `u54`..`u64`     | BigInt                                 |
-| `f16`, `f32`, `f64`            | Number                                 |
-| `[]const u8`, `*const [N:0]u8` | String                                 |
-| `[N]T`, `[]T`                  | Array                                  |
-| `struct { S, T }` (tuple)      | Array                                  |
-| `enum`                         | String (tag name, snake → camel)       |
-| `struct { foo, bar }`          | Object (snake_case fields → camelCase) |
-| `Val`                          | passthrough                            |
-| Type with `pub fn toJs`        | custom (see below)                     |
+| Zig type                         | JS result                              |
+| -------------------------------- | -------------------------------------- |
+| `void`                           | `undefined`                            |
+| `bool`                           | Boolean                                |
+| `?T`                             | inner value or `null`                  |
+| `comptime_int`, `comptime_float` | Number                                 |
+| `i1`..`i32`, `u1`..`u32`         | Number                                 |
+| `i33`..`i53`, `u33`..`u53`       | Number (via f64, safe-integer range)   |
+| `i54`..`i64`, `u54`..`u64`       | BigInt                                 |
+| `f16`, `f32`, `f64`              | Number                                 |
+| `[]const u8`, `*const [N:0]u8`   | String                                 |
+| `[N]T`, `[]T`                    | Array                                  |
+| `struct { S, T }` (tuple)        | Array                                  |
+| `enum`                           | String (tag name, snake → camel)       |
+| `struct { foo, bar }`            | Object (snake_case fields → camelCase) |
+| `Val`                            | passthrough                            |
+| Type with `pub fn toJs`          | custom (see below)                     |
 
 ### JS → Zig (`val.to(env, T)`)
 
-| JS type            | Zig type                  | Notes                                       |
-| ------------------ | ------------------------- | ------------------------------------------- |
-| Boolean            | `bool`                    |                                             |
-| Number             | `i1`..`i32`, `u1`..`u32`  |                                             |
-| Number             | `i33`..`i53`, `u33`..`u53`| via i64/f64                                 |
-| Number             | `f16`, `f32`, `f64`       |                                             |
-| BigInt             | `i54`..`i64`, `u54`..`u64`|                                             |
-| null / undefined   | `?T` returns `null`       |                                             |
-| String             | `[]const u8`              | allocated on `env.allocator()`              |
-| String             | `enum`                    | accepts camelCase or snake_case             |
-| Array              | `[N]T`, `[]T`             | by-index conversion                         |
-| Array              | `struct { S, T }` (tuple) | by-index conversion                         |
-| Object             | `struct`                  | camelCase field matching, defaults respected |
-| Function           | `Callback`                | validated, throws TypeError if not callable |
-| any                | `Val`                     | passthrough                                 |
-| any                | Type with `pub fn fromJs` | custom (see below)                          |
+| JS type          | Zig type                   | Notes                                        |
+| ---------------- | -------------------------- | -------------------------------------------- |
+| Boolean          | `bool`                     |                                              |
+| Number           | `i1`..`i32`, `u1`..`u32`   |                                              |
+| Number           | `i33`..`i53`, `u33`..`u53` | via i64/f64                                  |
+| Number           | `f16`, `f32`, `f64`        |                                              |
+| BigInt           | `i54`..`i64`, `u54`..`u64` |                                              |
+| null / undefined | `?T` returns `null`        |                                              |
+| String           | `[]const u8`               | allocated on `env.allocator()`               |
+| String           | `enum`                     | accepts camelCase or snake_case              |
+| Array            | `[N]T`, `[]T`              | by-index conversion                          |
+| Array            | `struct { S, T }` (tuple)  | by-index conversion                          |
+| Object           | `struct`                   | camelCase field matching, defaults respected |
+| Function         | `Callback`                 | validated, throws TypeError if not callable  |
+| any              | `Val`                      | passthrough                                  |
+| any              | Type with `pub fn fromJs`  | custom (see below)                           |
 
 Type mismatches throw `TypeError` with the actual JS type:
 
@@ -332,8 +332,8 @@ Enums map to/from strings:
 
 ```js
 log("warning", "disk almost full");
-log("errorLevel", "out of memory");   // camelCase also works
-log("invalid", "...");                // TypeError: invalid enum value
+log("errorLevel", "out of memory"); // camelCase also works
+log("invalid", "..."); // TypeError: invalid enum value
 ```
 
 ### Custom conversion (e.g. unions)
@@ -373,15 +373,15 @@ const Color = union(enum) {
 
 Three modes:
 
-- **`.{ .file = path }`** — copy a hand-written `.d.ts` into the package. **Recommended for libraries published to npm.** Gives you the full TypeScript surface — overloads, conditional types, branded types, JSDoc — and lets you keep your public API stable independent of internal Zig refactors.
-- **`.auto`** — generate a `.d.ts` automatically by walking your module at comptime. Useful for prototypes, internal addons, or as a *starting point* you then check into `src/index.d.ts` and edit. Expect `unknown` wherever you used `napi.Val` or `napi.Callback` — these are intentional escape hatches with no inferable JS type. Tighten the Zig signatures (`[]f64` instead of `[]napi.Val`) and the dts gets specific automatically.
-- **`.none`** (default) — no declarations emitted.
+- **`.{ .file = path }`**, copy a hand-written `.d.ts` into the package. **Recommended for libraries published to npm.** Gives you the full TypeScript surface, overloads, conditional types, branded types, JSDoc, and lets you keep your public API stable independent of internal Zig refactors.
+- **`.auto`**, generate a `.d.ts` automatically by walking your module at comptime. Useful for prototypes, internal addons, or as a _starting point_ you then check into `src/index.d.ts` and edit. Expect `unknown` wherever you used `napi.Val` or `napi.Callback`, these are intentional escape hatches with no inferable JS type. Tighten the Zig signatures (`[]f64` instead of `[]napi.Val`) and the dts gets specific automatically.
+- **`.none`** (default), no declarations emitted.
 
 **Rule of thumb:** if your addon will be installed by other people, hand-write your `.d.ts`. If it's internal, `.auto` is fine.
 
 ## Memory model
 
-Every JS-to-Zig call hands you an `Env` carrying an arena allocator. Use `env.allocator()` for any temporary memory — strings, slices, scratch space. Everything is freed automatically when your function returns.
+Every JS-to-Zig call hands you an `Env` carrying an arena allocator. Use `env.allocator()` for any temporary memory, strings, slices, scratch space. Everything is freed automatically when your function returns.
 
 ```zig
 pub fn process(env: napi.Env, input: []const u8) ![]const u8 {
@@ -389,7 +389,7 @@ pub fn process(env: napi.Env, input: []const u8) ![]const u8 {
 }
 ```
 
-The arena is a **per-thread, reset-on-release pool**: the first call on a thread pays one allocation; every subsequent call rewinds the existing pages without touching the kernel. Calls that don't allocate pay nothing — `add(i32, i32)` never goes near the allocator.
+The arena is a **per-thread, reset-on-release pool**: the first call on a thread pays one allocation; every subsequent call rewinds the existing pages without touching the kernel. Calls that don't allocate pay nothing, `add(i32, i32)` never goes near the allocator.
 
 > [!IMPORTANT]
 > Arena memory is valid only for the duration of the call. For data that outlives the function (workers, threads), copy to a long-lived allocator yourself. See [Workers](#workers).
@@ -406,8 +406,8 @@ pub fn divide(a: f64, b: f64) !f64 {
 ```
 
 ```js
-divide(1, 0);    // Error: DivisionByZero
-divide("x", 1);  // TypeError: expected number, got string
+divide(1, 0); // Error: DivisionByZero
+divide("x", 1); // TypeError: expected number, got string
 ```
 
 If you want to throw a specific JS exception type, do it explicitly and return the error:
@@ -422,11 +422,11 @@ pub fn parse(env: napi.Env, input: []const u8) ![]const u8 {
 }
 ```
 
-`napi.Error` (the napi-zig error set) covers every distinct N-API failure mode — `error.QueueFull`, `error.PendingException`, `error.StringExpected`, etc. You can `catch` them individually when you need to.
+`napi.Error` (the napi-zig error set) covers every distinct N-API failure mode, `error.QueueFull`, `error.PendingException`, `error.StringExpected`, etc. You can `catch` them individually when you need to.
 
 ## Callbacks
 
-Accept a JS function as a parameter using `napi.Callback`. It is validated on conversion — non-functions throw `TypeError`.
+Accept a JS function as a parameter using `napi.Callback`. It is validated on conversion, non-functions throw `TypeError`.
 
 ```zig
 pub fn forEach(env: napi.Env, items: []napi.Val, cb: napi.Callback) !void {
@@ -440,13 +440,13 @@ pub fn forEach(env: napi.Env, items: []napi.Val, cb: napi.Callback) !void {
 forEach([10, 20, 30], (item, i) => console.log(i, item));
 ```
 
-`call`'s args is a Zig **tuple** — values are auto-converted to JS. Use `callWith(env, this, args)` for a specific `this` binding. Pass a `[]const Val` slice when you have one already built.
+`call`'s args is a Zig **tuple**, values are auto-converted to JS. Use `callWith(env, this, args)` for a specific `this` binding. Pass a `[]const Val` slice when you have one already built.
 
-| Method                       | Purpose                                            |
-| ---------------------------- | -------------------------------------------------- |
-| `call(env, args_tuple)`      | Call with `undefined` as `this`                    |
-| `callWith(env, this, args)`  | Call with a specific `this`                        |
-| `threadsafe(env, name, T)`   | Cross-thread wrapper — see [ThreadsafeFn](#threadsafefn) |
+| Method                      | Purpose                                                 |
+| --------------------------- | ------------------------------------------------------- |
+| `call(env, args_tuple)`     | Call with `undefined` as `this`                         |
+| `callWith(env, this, args)` | Call with a specific `this`                             |
+| `threadsafe(env, name, T)`  | Cross-thread wrapper, see [ThreadsafeFn](#threadsafefn) |
 
 ## Async
 
@@ -485,6 +485,12 @@ pub fn asyncFib(env: napi.Env, n: i32) !napi.Val {
 const result = await asyncFib(10); // 55
 ```
 
+If `resolve` returns an error, the Promise rejects with a real JS `Error` whose `.message` is the Zig error name:
+
+```js
+asyncFib(-1).catch((e) => console.log(e.message)); // e.g. "InvalidInput"
+```
+
 > [!WARNING]
 > A panic in `compute` (index out of bounds, unreachable) crashes the entire Node.js process. Handle errors by storing state and checking it in `resolve`.
 
@@ -499,7 +505,7 @@ pub fn asyncParse(env: napi.Env, source: []const u8) !napi.Val {
 
 ### ThreadsafeFn
 
-`ThreadsafeFn(T)` lets a background thread call back into JS. Node is single-threaded, so you can't call N-API from a spawned thread directly — `ThreadsafeFn` queues calls back to the main thread.
+`ThreadsafeFn(T)` lets a background thread call back into JS. Node is single-threaded, so you can't call N-API from a spawned thread directly, `ThreadsafeFn` queues calls back to the main thread.
 
 ```zig
 pub fn startWorkers(env: napi.Env, cb: napi.Callback) !void {
@@ -521,16 +527,16 @@ pub fn startWorkers(env: napi.Env, cb: napi.Callback) !void {
 
 Use `void` for signal-only callbacks: `cb.threadsafe(env, "tick", void)`.
 
-| Method                    | Purpose                                                 |
-| ------------------------- | ------------------------------------------------------- |
+| Method                    | Purpose                                                    |
+| ------------------------- | ---------------------------------------------------------- |
 | `call(value, mode)`       | Queue a call from any thread (`.blocking`/`.non_blocking`) |
-| `release()`               | Release this thread's reference                          |
-| `abort()`                 | Release and reject pending calls                         |
-| `acquire()`               | Register an additional thread                            |
-| `ref(env)` / `unref(env)` | Control whether the event loop stays alive               |
+| `release()`               | Release this thread's reference                            |
+| `abort()`                 | Release and reject pending calls                           |
+| `acquire()`               | Register an additional thread                              |
+| `ref(env)` / `unref(env)` | Control whether the event loop stays alive                 |
 
 > [!TIP]
-> `ThreadsafeFn` is for **multi-call** patterns (progress, events, streaming). For single-result background work, use `runWorker` — it's simpler and returns a Promise.
+> `ThreadsafeFn` is for **multi-call** patterns (progress, events, streaming). For single-result background work, use `runWorker`, it's simpler and returns a Promise.
 
 ### Promises
 
@@ -587,7 +593,7 @@ napi bump patch    # explicit
 napi bump 1.2.3
 ```
 
-Updates every `package.json` (main + every binding), creates an annotated tag, and pushes — branch + tag in one round-trip.
+Updates every `package.json` (main + every binding), creates an annotated tag, and pushes, branch + tag in one round-trip.
 
 ### CI publish workflow
 
@@ -619,23 +625,23 @@ jobs:
 
 ### CLI reference
 
-| Command                                               | Description                                  |
-| ----------------------------------------------------- | -------------------------------------------- |
-| `napi build`                                          | Build for current platform                   |
-| `napi build --release`                                | Cross-compile every platform                 |
-| `napi bump [version]`                                 | Bump version, commit, tag, push              |
-| `napi publish`                                        | Publish all packages to npm (CI)             |
-| `napi npm-init --repo <repo> --workflow <file>`       | Initial publish + configure trusted publishing |
+| Command                                         | Description                                    |
+| ----------------------------------------------- | ---------------------------------------------- |
+| `napi build`                                    | Build for current platform                     |
+| `napi build --release`                          | Cross-compile every platform                   |
+| `napi bump [version]`                           | Bump version, commit, tag, push                |
+| `napi publish`                                  | Publish all packages to npm (CI)               |
+| `napi npm-init --repo <repo> --workflow <file>` | Initial publish + configure trusted publishing |
 
 `napi bump` options:
 
-| Option           | Default     | Description                                              |
-| ---------------- | ----------- | -------------------------------------------------------- |
-| `[version]`      | interactive | `patch`, `minor`, `major`, or an exact version           |
-| `--preid <id>`   | `beta`      | Pre-release identifier                                   |
-| `--commit <msg>` | `%s`        | Commit message (`%s` is replaced with the version)       |
-| `--no-tag`       |             | Skip git tag                                             |
-| `--no-push`      |             | Skip git push                                            |
+| Option           | Default     | Description                                        |
+| ---------------- | ----------- | -------------------------------------------------- |
+| `[version]`      | interactive | `patch`, `minor`, `major`, or an exact version     |
+| `--preid <id>`   | `beta`      | Pre-release identifier                             |
+| `--commit <msg>` | `%s`        | Commit message (`%s` is replaced with the version) |
+| `--no-tag`       |             | Skip git tag                                       |
+| `--no-push`      |             | Skip git push                                      |
 
 `napi publish` options:
 
@@ -650,57 +656,58 @@ jobs:
 
 The Node-API environment, plus the per-call allocator.
 
-| Method                                                                         | Purpose                                              |
-| ------------------------------------------------------------------------------ | ---------------------------------------------------- |
-| `allocator()`                                                                  | Per-call `std.mem.Allocator` (arena, freed on return) |
-| `toJs(value)`                                                                  | Convert any Zig type to JS (inferred)                |
-| `createBoolean`, `createInt32`, `createUint32`, `createInt64`, `createFloat64` | Primitives                                           |
-| `createBigintInt64`, `createBigintUint64`                                      | BigInt                                               |
-| `createString([]const u8)`, `createStringZ([*:0]const u8)`                     | Strings                                              |
-| `createNull`, `createUndefined`, `getGlobal`                                   | Singletons                                           |
-| `createObject`, `createArray`, `createArrayWithLength`                         | Containers                                           |
-| `createSymbol(?description)`                                                   | Symbol                                               |
-| `createDate(time_ms)`                                                          | Date                                                 |
-| `createExternal(ptr, finalize, hint)`                                          | Wrap an opaque Zig pointer                           |
+| Method                                                                         | Purpose                                                |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------ |
+| `allocator()`                                                                  | Per-call `std.mem.Allocator` (arena, freed on return)  |
+| `toJs(value)`                                                                  | Convert any Zig type to JS (inferred)                  |
+| `createBoolean`, `createInt32`, `createUint32`, `createInt64`, `createFloat64` | Primitives                                             |
+| `createBigintInt64`, `createBigintUint64`                                      | BigInt                                                 |
+| `createString([]const u8)`, `createStringZ([*:0]const u8)`                     | Strings                                                |
+| `createNull`, `createUndefined`, `getGlobal`                                   | Singletons                                             |
+| `createObject`, `createArray`, `createArrayWithLength`                         | Containers                                             |
+| `createSymbol(?description)`                                                   | Symbol                                                 |
+| `createDate(time_ms)`                                                          | Date                                                   |
+| `createExternal(ptr, finalize, hint)`                                          | Wrap an opaque Zig pointer                             |
 | `createArrayBuffer(len)`                                                       | Returns `{ .val, .data }` (JS value + writable `[]u8`) |
-| `createBuffer(len)`                                                            | Node.js Buffer, returns `{ .val, .data }`            |
-| `createTypedArray(type, len, ab, offset)`                                      | TypedArray view                                      |
-| `createExternalArrayBuffer(ptr, len, finalize, hint)`                          | Externally-owned memory                              |
-| `createFunction(name, callback)`                                               | Native-backed JS function                            |
-| `createReference(val)`                                                         | Strong GC reference, returns `Ref`                   |
-| `createPromise()`                                                              | Returns `{ .promise, .deferred }`                    |
-| `runWorker(name, context)`                                                     | Background work, returns Promise                     |
-| `throwError`, `throwTypeError`, `throwRangeError`                              | Throw exceptions                                     |
-| `throwValue(val)`                                                              | Throw an existing JS value                           |
-| `isExceptionPending()`                                                         | Check for pending exception                          |
-| `getVersion()`, `getNodeVersion()`                                             | N-API / Node version info                            |
+| `createBuffer(len)`                                                            | Node.js Buffer, returns `{ .val, .data }`              |
+| `createTypedArray(type, len, ab, offset)`                                      | TypedArray view                                        |
+| `createExternalArrayBuffer(ptr, len, finalize, hint)`                          | Externally-owned memory                                |
+| `createFunction(name, callback)`                                               | Native-backed JS function                              |
+| `createReference(val)`                                                         | Strong GC reference, returns `Ref`                     |
+| `createPromise()`                                                              | Returns `{ .promise, .deferred }`                      |
+| `runWorker(name, context)`                                                     | Background work, returns Promise                       |
+| `throwError`, `throwTypeError`, `throwRangeError`                              | Throw exceptions                                       |
+| `throwValue(val)`                                                              | Throw an existing JS value                             |
+| `createError(message)`                                                         | Construct a JS `Error` without throwing it             |
+| `isExceptionPending()`                                                         | Check for pending exception                            |
+| `getVersion()`, `getNodeVersion()`                                             | N-API / Node version info                              |
 
 ### `napi.Val`
 
 A handle to a JS value.
 
-| Method                                                                     | Purpose                                                |
-| -------------------------------------------------------------------------- | ------------------------------------------------------ |
-| `to(env, T)`                                                               | Convert to any supported Zig type                      |
-| `typeOf(env)`                                                              | Returns `.string`, `.number`, `.object`, `.function`, etc. |
-| `strictEquals(env, other)`                                                 | JS `===`                                                |
-| `isArray`, `isBuffer`, `isArrayBuffer`, `isTypedArray`, `isDate`, `isPromise` | Type checks                                          |
-| `getProperty`, `setProperty`                                               | Dynamic key access                                     |
-| `getNamedProperty`, `setNamedProperty`, `hasNamedProperty`                 | Compile-time key access                                |
-| `getElement`, `setElement`, `getArrayLength`                               | Array access                                           |
-| `getArrayBufferData`, `getBufferData`                                      | `[]u8` into backing memory                             |
-| `getExternalData`                                                          | Unwrap an external pointer                             |
-| `getDateValue`                                                             | Date → epoch ms                                        |
+| Method                                                                        | Purpose                                                    |
+| ----------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `to(env, T)`                                                                  | Convert to any supported Zig type                          |
+| `typeOf(env)`                                                                 | Returns `.string`, `.number`, `.object`, `.function`, etc. |
+| `strictEquals(env, other)`                                                    | JS `===`                                                   |
+| `isArray`, `isBuffer`, `isArrayBuffer`, `isTypedArray`, `isDate`, `isPromise` | Type checks                                                |
+| `getProperty`, `setProperty`                                                  | Dynamic key access                                         |
+| `getNamedProperty`, `setNamedProperty`, `hasNamedProperty`                    | Compile-time key access                                    |
+| `getElement`, `setElement`, `getArrayLength`                                  | Array access                                               |
+| `getArrayBufferData`, `getBufferData`                                         | `[]u8` into backing memory                                 |
+| `getExternalData`                                                             | Unwrap an external pointer                                 |
+| `getDateValue`                                                                | Date → epoch ms                                            |
 
 ### `napi.Callback`
 
 A validated JS function handle.
 
-| Method                       | Purpose                                                 |
-| ---------------------------- | ------------------------------------------------------- |
-| `call(env, args_tuple)`      | Call with `undefined` as `this`. Args is a Zig tuple.   |
-| `callWith(env, this, args)`  | Call with a specific `this` binding                     |
-| `threadsafe(env, name, T)`   | Create a `ThreadsafeFn(T)` for cross-thread calls       |
+| Method                      | Purpose                                               |
+| --------------------------- | ----------------------------------------------------- |
+| `call(env, args_tuple)`     | Call with `undefined` as `this`. Args is a Zig tuple. |
+| `callWith(env, this, args)` | Call with a specific `this` binding                   |
+| `threadsafe(env, name, T)`  | Create a `ThreadsafeFn(T)` for cross-thread calls     |
 
 ### `napi.Ref`
 
@@ -736,7 +743,7 @@ Returns the comptime-generated TypeScript declaration string for `Module`. Used 
 
 ## Roadmap
 
-- WASM target via emnapi — same Zig source, runs in browsers and Deno
+- WASM target via emnapi, same Zig source, runs in browsers and Deno
 - Class properties (getters/setters)
 - Static class methods
 - Symbol-keyed methods (`Symbol.iterator`, etc)

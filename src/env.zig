@@ -14,7 +14,7 @@ const check = err.check;
 // on a thread initializes the arena; subsequent calls just rewind it.
 //
 // If a single call drove the arena above the retain limit, the arena
-// is fully freed and re-created — bounds long-tail growth without
+// is fully freed and re-created, bounds long-tail growth without
 // punishing the common case.
 const RETAIN_LIMIT: usize = 1 << 20;
 
@@ -244,6 +244,16 @@ pub const Env = struct {
         _ = c.napi_throw_range_error(self.handle, null, msg);
     }
 
+    /// Construct a JS `Error` object without throwing it. Useful for
+    /// rejecting a Promise with an Error from a context where throwing
+    /// wouldn't propagate (workers, threadsafe callbacks).
+    pub fn createError(self: Env, message: []const u8) !Val {
+        const msg_val = try self.createString(message);
+        var out: c.napi_value = undefined;
+        try check(c.napi_create_error(self.handle, null, msg_val.handle, &out));
+        return .{ .handle = out };
+    }
+
     pub fn isExceptionPending(self: Env) bool {
         var result: bool = false;
         _ = c.napi_is_exception_pending(self.handle, &result);
@@ -284,11 +294,10 @@ pub const Env = struct {
         const State = WorkerState(T);
 
         const p = try self.createPromise();
-        errdefer p.deferred.reject(self, self.createUndefined() catch unreachable) catch {};
+        errdefer rejectWith(self, p.deferred, "napi-zig: failed to start worker");
 
         const state = try std.heap.smp_allocator.create(State);
         errdefer std.heap.smp_allocator.destroy(state);
-
         state.* = .{ .ctx = context, .deferred = p.deferred };
 
         var name_val: c.napi_value = undefined;
@@ -320,8 +329,8 @@ pub const Env = struct {
 };
 
 fn WorkerState(comptime T: type) type {
-    const resolve_fn = @typeInfo(@TypeOf(@field(T, "resolve"))).@"fn";
-    const ResolveReturn = resolve_fn.return_type.?;
+    const Resolve = @TypeOf(@field(T, "resolve"));
+    const ResolveReturn = @typeInfo(Resolve).@"fn".return_type.?;
     const is_error_union = @typeInfo(ResolveReturn) == .error_union;
     const Payload = if (is_error_union) @typeInfo(ResolveReturn).error_union.payload else ResolveReturn;
 
@@ -348,13 +357,10 @@ fn WorkerState(comptime T: type) type {
             _ = c.napi_delete_async_work(raw_env, state.work);
 
             const raw = state.ctx.resolve(env);
-
-            const value = if (is_error_union) raw catch |e| {
-                env.throwError(@errorName(e));
-                const undef = env.createUndefined() catch return;
-                state.deferred.reject(env, undef) catch {};
+            const value = if (is_error_union) (raw catch |e| {
+                rejectWith(env, state.deferred, @errorName(e));
                 return;
-            } else raw;
+            }) else raw;
 
             const js_val = if (Payload == Val)
                 value
@@ -366,4 +372,12 @@ fn WorkerState(comptime T: type) type {
             state.deferred.resolve(env, js_val) catch {};
         }
     };
+}
+
+// Best-effort rejection used by errdefer paths and worker error returns.
+// Constructs a real JS Error so the consumer's `.catch(e)` sees `e.message`
+// rather than an opaque undefined.
+fn rejectWith(env: Env, deferred: Deferred, message: []const u8) void {
+    const reason = env.createError(message) catch return;
+    deferred.reject(env, reason) catch {};
 }

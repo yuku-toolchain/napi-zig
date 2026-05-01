@@ -1,11 +1,11 @@
-// dts-emit — host helper that prints the .d.ts for the user's module
+// dts-emit, host helper that prints the .d.ts for the user's module
 // to a file path given as argv[1]. Built and run by `addLib` when
 // `.dts = .auto`.
 //
 // `napi.module()` is a no-op when output_mode != .Lib, so importing
 // the user module here doesn't try to register C entry points.
 //
-// Targets Zig 0.17's main(init) signature — `init` carries a default
+// Targets Zig 0.17's main(init) signature, `init` carries a default
 // gpa, an Io implementation, and parsed args.
 
 const std = @import("std");

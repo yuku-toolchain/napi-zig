@@ -117,6 +117,7 @@ pub extern fn napi_throw(env: napi_env, @"error": napi_value) napi_status;
 pub extern fn napi_throw_error(env: napi_env, code: ?[*:0]const u8, msg: [*:0]const u8) napi_status;
 pub extern fn napi_throw_type_error(env: napi_env, code: ?[*:0]const u8, msg: [*:0]const u8) napi_status;
 pub extern fn napi_throw_range_error(env: napi_env, code: ?[*:0]const u8, msg: [*:0]const u8) napi_status;
+pub extern fn napi_create_error(env: napi_env, code: ?napi_value, msg: napi_value, result: *napi_value) napi_status;
 pub extern fn napi_is_exception_pending(env: napi_env, result: *bool) napi_status;
 pub extern fn napi_get_and_clear_last_exception(env: napi_env, result: *napi_value) napi_status;
 pub extern fn napi_fatal_error(location: ?[*:0]const u8, location_len: usize, message: [*:0]const u8, message_len: usize) noreturn;

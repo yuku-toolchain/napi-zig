@@ -1,4 +1,4 @@
-// napi-zig — write Node.js native addons in idiomatic Zig.
+// napi-zig, write Node.js native addons in idiomatic Zig.
 //
 // Quick start:
 //
@@ -47,8 +47,8 @@ const module_mod = @import("module.zig");
 ///
 /// Function signatures may optionally start with:
 ///
-///   fn(env: napi.Env, ...)       — Env injected, no JS arg consumed
-///   fn(env: napi.Env, info: napi.CallInfo)  — raw call info for variadics
+///   fn(env: napi.Env, ...)      , Env injected, no JS arg consumed
+///   fn(env: napi.Env, info: napi.CallInfo) , raw call info for variadics
 pub fn module(comptime Module: type) void {
     module_mod.registerModule(Module);
 }

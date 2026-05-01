@@ -2,8 +2,9 @@ const std = @import("std");
 const c = @import("c.zig");
 const err = @import("error.zig");
 const convert = @import("convert.zig");
-const Env = @import("env.zig").Env;
+const env_mod = @import("env.zig");
 
+const Env = env_mod.Env;
 const check = err.check;
 
 /// A handle to a JS value. The `handle` field is the underlying
@@ -144,13 +145,13 @@ pub const Val = struct {
 
 /// A JS function handle that has been validated as callable.
 ///
-/// Created by accepting `napi.Callback` as a parameter — the conversion
+/// Created by accepting `napi.Callback` as a parameter, the conversion
 /// validates the JS value is a function, throwing `TypeError` otherwise.
 pub const Callback = struct {
     val: Val,
 
     /// Call the function with `undefined` as `this`. Args are converted
-    /// from a Zig tuple — pass `.{}` for no args, `.{ "x", 42 }` to mix
+    /// from a Zig tuple, pass `.{}` for no args, `.{ "x", 42 }` to mix
     /// types, or a `[]const Val` slice for dynamic arrays.
     pub fn call(self: Callback, env: Env, args: anytype) !Val {
         const undef = try env.createUndefined();
@@ -164,44 +165,32 @@ pub const Callback = struct {
 
     fn invoke(self: Callback, env: Env, this: Val, args: anytype) !Val {
         const T = @TypeOf(args);
-        const info = @typeInfo(T);
 
-        // Slice of pre-built Vals — passthrough.
+        // Slice of pre-built Vals, passthrough. Val is a single-field
+        // wrapper over napi_value, so the pointers are layout-compatible.
         if (T == []const Val or T == []Val) {
-            var result: c.napi_value = undefined;
-            try check(c.napi_call_function(
-                env.handle,
-                this.handle,
-                self.val.handle,
-                args.len,
-                if (args.len > 0) @ptrCast(args.ptr) else null,
-                &result,
-            ));
-            return .{ .handle = result };
+            return self.callRaw(env, this, if (args.len > 0) @ptrCast(args.ptr) else null, args.len);
         }
 
-        // Tuple of mixed Zig values — auto-convert each.
+        // Tuple of mixed Zig values, auto-convert each into a stack array.
+        const info = @typeInfo(T);
         if (info == .@"struct" and info.@"struct".is_tuple) {
             const fields = info.@"struct".fields;
             var argv: [fields.len]c.napi_value = undefined;
             inline for (fields, 0..) |f, i| {
                 const v = @field(args, f.name);
-                const jsv: Val = if (@TypeOf(v) == Val) v else try env.toJs(v);
-                argv[i] = jsv.handle;
+                argv[i] = (if (@TypeOf(v) == Val) v else try env.toJs(v)).handle;
             }
-            var result: c.napi_value = undefined;
-            try check(c.napi_call_function(
-                env.handle,
-                this.handle,
-                self.val.handle,
-                fields.len,
-                if (fields.len > 0) &argv else null,
-                &result,
-            ));
-            return .{ .handle = result };
+            return self.callRaw(env, this, if (fields.len > 0) &argv else null, fields.len);
         }
 
         @compileError("Callback args must be a tuple or []const Val, got " ++ @typeName(T));
+    }
+
+    fn callRaw(self: Callback, env: Env, this: Val, argv: ?[*]const c.napi_value, argc: usize) !Val {
+        var result: c.napi_value = undefined;
+        try check(c.napi_call_function(env.handle, this.handle, self.val.handle, argc, argv, &result));
+        return .{ .handle = result };
     }
 
     /// Wrap this callback as a thread-safe function callable from any
@@ -275,8 +264,8 @@ pub fn ThreadsafeFn(comptime T: type) type {
             const typed: *T = @ptrCast(@alignCast(data orelse return));
             defer std.heap.smp_allocator.destroy(typed);
 
-            const arena = @import("env.zig").borrowArena();
-            defer @import("env.zig").releaseArena(arena);
+            const arena = env_mod.borrowArena();
+            defer env_mod.releaseArena(arena);
             const env: Env = .{ .handle = raw_env, .arena = arena };
 
             const js_val = convert.toJs(T, env, typed.*) catch return;
@@ -316,7 +305,7 @@ pub const Deferred = struct {
     }
 };
 
-/// Raw call info — for variadic functions or anything where you want
+/// Raw call info, for variadic functions or anything where you want
 /// direct control over argument extraction. Take this as the second
 /// parameter (after `Env`) when you want it.
 pub const CallInfo = struct {
@@ -325,11 +314,8 @@ pub const CallInfo = struct {
     /// Extract up to `max` arguments. Missing slots are filled with
     /// `undefined`. `max` is comptime so the buffer lives on the stack.
     pub fn args(self: CallInfo, env: Env, comptime max: usize) ![max]Val {
-        if (max == 0) {
-            var argc: usize = 0;
-            try check(c.napi_get_cb_info(env.handle, self.handle, &argc, null, null, null));
-            return .{};
-        }
+        if (max == 0) return .{};
+
         var argc: usize = max;
         var argv: [max]c.napi_value = undefined;
         try check(c.napi_get_cb_info(env.handle, self.handle, &argc, &argv, null, null));

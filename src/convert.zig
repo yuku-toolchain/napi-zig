@@ -95,7 +95,7 @@ pub fn toJs(comptime T: type, env: Env, value: T) !Val {
             }
             // Plain struct → object. One create + N set_named_property calls.
             // (`napi_define_properties` would batch but requires per-call
-            // descriptor allocation — net loss for small N.)
+            // descriptor allocation, net loss for small N.)
             const obj = try env.createObject();
             inline for (info.fields) |field| {
                 const key = comptime util.snakeToCamel(field.name);
@@ -278,11 +278,8 @@ fn readString(env: Env, value: Val) ![]const u8 {
 fn expect(env: Env, value: Val, status: c.napi_status, comptime expected: [*:0]const u8) !void {
     if (status == .ok) return;
     var buf: [128]u8 = undefined;
-    if (std.fmt.bufPrintZ(&buf, "{s}, got {s}", .{ expected, jsTypeName(env, value) })) |msg| {
-        env.throwTypeError(msg.ptr);
-    } else |_| {
-        env.throwTypeError(expected);
-    }
+    const dyn = std.fmt.bufPrintZ(&buf, "{s}, got {s}", .{ expected, jsTypeName(env, value) });
+    env.throwTypeError(if (dyn) |s| s.ptr else |_| expected);
     return err.check(status);
 }
 

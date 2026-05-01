@@ -8,7 +8,9 @@
     "release": "bumpp -r --commit 'npm %s' --push --tag --yes --release 'patch'",
     "lint": "oxlint",
     "format": "oxfmt",
-    "build:cli": "bun --filter './cli' build"
+    "build:cli": "bun --filter './cli' build",
+    "test": "zig build test && bun run test:example",
+    "test:example": "cd example && rm -rf zig-out .zig-cache && zig build && bun verify.ts"
   },
   "dependencies": {
     "cac": "^7.0.0",

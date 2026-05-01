@@ -1,4 +1,4 @@
-//! Showcase addon — exercises every major capability of napi-zig:
+//! Showcase addon, exercises every major capability of napi-zig:
 //!
 //!   - plain functions          (add, double)
 //!   - env-injected functions   (greet, parse)

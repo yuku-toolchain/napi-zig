@@ -13,7 +13,6 @@ const env_mod = @import("env.zig");
 const class_mod = @import("class.zig");
 
 const Val = val_mod.Val;
-const Callback = val_mod.Callback;
 const Env = env_mod.Env;
 
 /// Generate a `.d.ts` for every public declaration of `Module`.
@@ -59,7 +58,7 @@ fn emitNamespace(comptime T: type, comptime indent: usize, comptime where: Where
 
             switch (@typeInfo(VT)) {
                 .@"fn" => {
-                    out = out ++ emitFn(name, js_name, VT, value, indent, where);
+                    out = out ++ emitFn(js_name, VT, indent, where);
                 },
                 .comptime_int, .comptime_float, .int, .float, .bool, .@"enum", .@"struct", .optional, .pointer => {
                     if (isExportableConst(VT)) {
@@ -74,117 +73,76 @@ fn emitNamespace(comptime T: type, comptime indent: usize, comptime where: Where
     }
 }
 
+fn emitFn(comptime js_name: []const u8, comptime Fn: type, comptime indent: usize, comptime where: Where) []const u8 {
+    comptime {
+        const info = @typeInfo(Fn).@"fn";
+        const params = info.params;
+        const kw = if (where == .top) "export function " else spaces(indent) ++ "function ";
+
+        // Raw mode `(Env, CallInfo) !Val`, no inferable signature.
+        if (params.len >= 2 and
+            params[0].type.? == Env and
+            params[1].type.? == val_mod.CallInfo)
+        {
+            return kw ++ js_name ++ "(...args: unknown[]): unknown;\n";
+        }
+
+        const start: usize = if (params.len > 0 and params[0].type.? == Env) 1 else 0;
+        return kw ++ js_name ++ "(" ++ paramList(params, start) ++ "): " ++ returnTs(info) ++ ";\n";
+    }
+}
+
 fn emitClass(comptime js_name: []const u8, comptime Wrapper: type, comptime indent: usize, comptime where: Where) []const u8 {
     comptime {
         const T = Wrapper.__napi_class_inner;
         const pad = spaces(indent);
-        const inner_pad = spaces(indent + 2);
+        const inner = spaces(indent + 2);
         const prefix = if (where == .top) "export class " else pad ++ "class ";
 
         var out: []const u8 = prefix ++ js_name ++ " {\n";
 
-        // constructor signature
-        const init_fn = @field(T, "init");
-        const InitFn = @TypeOf(init_fn);
-        const init_info = @typeInfo(InitFn).@"fn";
-        const init_params = init_info.params;
-        const inject_env_init = init_params.len > 0 and init_params[0].type != null and init_params[0].type.? == Env;
-        const init_start: usize = if (inject_env_init) 1 else 0;
+        // constructor: skip Env if injected as the first param of init.
+        const init_info = @typeInfo(@TypeOf(@field(T, "init"))).@"fn";
+        const init_skip: usize = if (init_info.params.len > 0 and init_info.params[0].type.? == Env) 1 else 0;
+        out = out ++ inner ++ "constructor(" ++ paramList(init_info.params, init_skip) ++ ");\n";
 
-        var ctor_args: []const u8 = "";
-        var first = true;
-        for (init_start..init_params.len) |i| {
-            const ParamT = init_params[i].type.?;
-            const arg_name = std.fmt.comptimePrint("a{d}", .{i - init_start});
-            if (!first) ctor_args = ctor_args ++ ", ";
-            first = false;
-            const opt = @typeInfo(ParamT) == .optional or
-                (@typeInfo(ParamT) == .@"struct" and isAllDefaults(ParamT));
-            ctor_args = ctor_args ++ arg_name ++ (if (opt) "?: " else ": ") ++ tsType(ParamT);
-        }
-        out = out ++ inner_pad ++ "constructor(" ++ ctor_args ++ ");\n";
-
-        // methods
-        const methods = class_mod.collectMethods(T);
-        for (methods) |m| {
-            const m_fn = @field(T, m);
-            const MFn = @TypeOf(m_fn);
-            const m_info = @typeInfo(MFn).@"fn";
-            const params = m_info.params;
-            const inject_env = params.len > 1 and params[1].type != null and params[1].type.? == Env;
-            const m_start: usize = if (inject_env) 2 else 1;
-            const Return = m_info.return_type orelse void;
-            const Payload = switch (@typeInfo(Return)) {
-                .error_union => |eu| eu.payload,
-                else => Return,
-            };
-
-            var args: []const u8 = "";
-            var f2 = true;
-            for (m_start..params.len) |i| {
-                const ParamT = params[i].type.?;
-                const arg_name = std.fmt.comptimePrint("a{d}", .{i - m_start});
-                if (!f2) args = args ++ ", ";
-                f2 = false;
-                const opt = @typeInfo(ParamT) == .optional or
-                    (@typeInfo(ParamT) == .@"struct" and isAllDefaults(ParamT));
-                args = args ++ arg_name ++ (if (opt) "?: " else ": ") ++ tsType(ParamT);
-            }
-
-            const ret_ts = if (Payload == val_mod.Val) "unknown" else tsType(Payload);
-            out = out ++ inner_pad ++ util.snakeToCamelSlice(m) ++ "(" ++ args ++ "): " ++ ret_ts ++ ";\n";
+        // methods: skip self (always) plus optional Env injection.
+        for (class_mod.collectMethods(T)) |m| {
+            const m_info = @typeInfo(@TypeOf(@field(T, m))).@"fn";
+            const m_skip: usize = if (m_info.params.len > 1 and m_info.params[1].type.? == Env) 2 else 1;
+            out = out ++ inner ++ util.snakeToCamelSlice(m) ++ "(" ++
+                paramList(m_info.params, m_skip) ++ "): " ++ returnTs(m_info) ++ ";\n";
         }
 
-        out = out ++ pad ++ "}\n\n";
+        return out ++ pad ++ "}\n\n";
+    }
+}
+
+// Build a TypeScript parameter list for a Zig fn param array, skipping
+// the first `start` entries (used to drop self / Env injections). Each
+// param is named `a0`, `a1`, ..., generic but unambiguous.
+fn paramList(comptime params: []const std.builtin.Type.Fn.Param, comptime start: usize) []const u8 {
+    comptime {
+        var out: []const u8 = "";
+        for (start..params.len) |i| {
+            const T = params[i].type.?;
+            if (i > start) out = out ++ ", ";
+            const opt = @typeInfo(T) == .optional or
+                (@typeInfo(T) == .@"struct" and isAllDefaults(T));
+            out = out ++ std.fmt.comptimePrint("a{d}", .{i - start}) ++ (if (opt) "?: " else ": ") ++ tsType(T);
+        }
         return out;
     }
 }
 
-fn emitFn(comptime name: []const u8, comptime js_name: []const u8, comptime Fn: type, comptime func: anytype, comptime indent: usize, comptime where: Where) []const u8 {
-    _ = name;
-    _ = func;
+fn returnTs(comptime info: std.builtin.Type.Fn) []const u8 {
     comptime {
-        const info = @typeInfo(Fn).@"fn";
-        const params = info.params;
         const Return = info.return_type orelse void;
         const Payload = switch (@typeInfo(Return)) {
             .error_union => |eu| eu.payload,
             else => Return,
         };
-
-        // Detect raw mode: `(Env, CallInfo) !Val` — no inferable signature.
-        const is_raw = params.len >= 2 and
-            params[0].type != null and params[0].type.? == Env and
-            params[1].type != null and params[1].type.? == val_mod.CallInfo;
-
-        const pad = spaces(indent);
-        const kw = if (where == .top) "export function " else pad ++ "function ";
-
-        if (is_raw) {
-            // Raw functions take unknown args, return unknown.
-            return kw ++ js_name ++ "(...args: unknown[]): unknown;\n";
-        }
-
-        const inject_env = params.len > 0 and params[0].type != null and params[0].type.? == Env;
-        const start: usize = if (inject_env) 1 else 0;
-
-        var args: []const u8 = "";
-        var first = true;
-        for (start..params.len) |i| {
-            const T = params[i].type.?;
-            const arg_name = std.fmt.comptimePrint("a{d}", .{i - start});
-            if (!first) args = args ++ ", ";
-            first = false;
-            const optional = @typeInfo(T) == .optional or
-                (@typeInfo(T) == .@"struct" and isAllDefaults(T));
-            args = args ++ arg_name ++ (if (optional) "?: " else ": ") ++ tsType(T);
-        }
-
-        const ret_ts = if (Payload == val_mod.Val) "unknown" else tsType(Payload);
-        const is_async = looksAsync(Payload);
-        const ret = if (is_async) ret_ts else ret_ts;
-
-        return kw ++ js_name ++ "(" ++ args ++ "): " ++ ret ++ ";\n";
+        return if (Payload == val_mod.Val) "unknown" else tsType(Payload);
     }
 }
 
@@ -313,10 +271,6 @@ fn spaces(comptime n: usize) []const u8 {
         while (i < n) : (i += 1) s = s ++ " ";
         return s;
     }
-}
-
-fn looksAsync(comptime T: type) bool {
-    return T == val_mod.Val;
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────

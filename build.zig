@@ -15,12 +15,12 @@ pub const Repository = struct {
 
 /// `.dts` controls TypeScript declaration emission for the addon.
 ///
-/// - `.none`          — don't emit a `.d.ts`. (Default.)
-/// - `.{ .file = … }` — copy a hand-written `.d.ts`. **Recommended for
-///                      libraries published to npm** — gives you full
+/// - `.none`         , don't emit a `.d.ts`. (Default.)
+/// - `.{ .file = … }`, copy a hand-written `.d.ts`. **Recommended for
+///                      libraries published to npm**, gives you full
 ///                      TypeScript expressiveness (overloads, conditional
 ///                      types, JSDoc, etc).
-/// - `.auto`          — generate one automatically by walking your module
+/// - `.auto`         , generate one automatically by walking your module
 ///                      at comptime. Useful for prototypes and internal
 ///                      addons. The output is a starting point; expect
 ///                      `unknown` wherever you used `napi.Val` or
@@ -236,7 +236,7 @@ fn addNpmRelease(
 fn configureLinkerFlags(b: *std.Build, lib: *std.Build.Step.Compile, target: std.Build.ResolvedTarget, node_api_def: std.Build.LazyPath, host_exe: []const u8, napi_dep: *std.Build.Dependency) void {
     lib.root_module.red_zone = false;
     lib.root_module.unwind_tables = .none;
-    // Drop unreferenced sections — meaningful saving on small addons.
+    // Drop unreferenced sections, meaningful saving on small addons.
     lib.link_gc_sections = true;
 
     switch (target.result.os.tag) {
