@@ -1,34 +1,37 @@
 const std = @import("std");
 const c = @import("c.zig");
+const err = @import("error.zig");
+const util = @import("util.zig");
 const Env = @import("env.zig").Env;
 const val_mod = @import("val.zig");
 const Val = val_mod.Val;
 const Callback = val_mod.Callback;
-const check = val_mod.check;
-const util = @import("util.zig");
 
-// converts a Zig value to a JS value.
+const check = err.check;
+
+// Zig → JS
 //
-// - bool            -> Boolean
-// - comptime_int    -> Number (f64)
-// - integers        -> Number (up to 53 bits) or BigInt (54-64 bits)
-// - comptime_float  -> Number (f64)
-// - floats          -> Number
-// - ?T              -> inner value or null
-// - enums           -> String (tag name)
-// - *const [N:0]u8  -> String (string literals)
-// - []const u8      -> String (UTF-8)
-// - [N]T            -> Array (fixed-size)
-// - []T             -> Array (slice)
-// - tuples          -> Array
-// - structs         -> Object (camelCase) or custom via toJs method
-// - Val             -> passthrough
-// - void            -> undefined
+// Type mapping:
+//   bool / void / ?T               → Boolean / undefined / null-or-T
+//   integers up to i32/u32         → Number
+//   integers up to i53/u53         → Number (via f64)
+//   integers i54..i64 / u54..u64   → BigInt
+//   f16 / f32 / f64                → Number
+//   enum                           → String (tag name, snake → camel)
+//   []const u8                     → String
+//   []T / [N]T                     → Array
+//   tuple struct                   → Array
+//   struct with `toJs(env)` method → custom
+//   plain struct                   → Object (snake_case fields → camelCase)
+//   union                          → must define `toJs(env)` method
+//   Val                            → passthrough
 pub fn toJs(comptime T: type, env: Env, value: T) !Val {
     return switch (@typeInfo(T)) {
+        .void => env.createUndefined(),
+        .bool => env.createBoolean(value),
         .comptime_int => env.createFloat64(@floatFromInt(value)),
         .comptime_float => env.createFloat64(value),
-        .bool => env.createBoolean(value),
+
         .int => |info| switch (info.signedness) {
             .signed => switch (info.bits) {
                 0...32 => env.createInt32(@intCast(value)),
@@ -43,12 +46,16 @@ pub fn toJs(comptime T: type, env: Env, value: T) !Val {
                 else => @compileError("napi-zig: integer too wide: " ++ @typeName(T)),
             },
         },
+
         .float => |info| switch (info.bits) {
             16, 32, 64 => env.createFloat64(@floatCast(value)),
             else => @compileError("napi-zig: unsupported float width: " ++ @typeName(T)),
         },
-        .optional => if (value) |v| toJs(@typeInfo(T).optional.child, env, v) else env.createNull(),
+
+        .optional => |opt| if (value) |v| toJs(opt.child, env, v) else env.createNull(),
+
         .@"enum" => env.createString(@tagName(value)),
+
         .pointer => |info| {
             if (info.size == .slice and info.child == u8) return env.createString(value);
             if (info.size == .slice) {
@@ -65,8 +72,9 @@ pub fn toJs(comptime T: type, env: Env, value: T) !Val {
                     return env.createString(slice);
                 }
             }
-            @compileError("napi-zig: unsupported pointer type: " ++ @typeName(T));
+            @compileError("napi-zig: unsupported pointer type for toJs: " ++ @typeName(T));
         },
+
         .array => |info| {
             const arr = try env.createArrayWithLength(@intCast(info.len));
             for (0..info.len) |i| {
@@ -74,6 +82,7 @@ pub fn toJs(comptime T: type, env: Env, value: T) !Val {
             }
             return arr;
         },
+
         .@"struct" => |info| {
             if (T == Val) return value;
             if (@hasDecl(T, "toJs")) return value.toJs(env);
@@ -84,113 +93,108 @@ pub fn toJs(comptime T: type, env: Env, value: T) !Val {
                 }
                 return arr;
             }
+            // Plain struct → object. One create + N set_named_property calls.
+            // (`napi_define_properties` would batch but requires per-call
+            // descriptor allocation — net loss for small N.)
             const obj = try env.createObject();
             inline for (info.fields) |field| {
-                try obj.setNamedProperty(env, comptime util.snakeToCamel(field.name), try toJs(field.type, env, @field(value, field.name)));
+                const key = comptime util.snakeToCamel(field.name);
+                try obj.setNamedProperty(env, key, try toJs(field.type, env, @field(value, field.name)));
             }
             return obj;
         },
+
         .@"union" => {
             if (@hasDecl(T, "toJs")) return value.toJs(env);
-            @compileError("napi-zig: union requires a toJs method: " ++ @typeName(T));
+            @compileError("napi-zig: union requires a `pub fn toJs(self, env) !Val` method: " ++ @typeName(T));
         },
-        .void => env.createUndefined(),
+
         else => @compileError("napi-zig: unsupported type for toJs: " ++ @typeName(T)),
     };
 }
 
-// converts a JS value to a Zig type. called by Val.to(env, T).
+// JS → Zig
 //
-// - bool        <- Boolean
-// - integers    <- Number (up to 32 bits) or BigInt (33-64 unsigned)
-// - floats      <- Number
-// - ?T          <- null/undefined -> null, otherwise inner type
-// - enums       <- String (accepts camelCase or exact Zig field name)
-// - []const u8  <- String (allocated on env.arena)
-// - [N]T        <- Array (fixed-size)
-// - []T         <- Array (allocated on env.arena)
-// - tuples      <- Array (by index)
-// - structs     <- Object (camelCase, defaults respected) or custom via fromJs method
-// - Callback        <- Function (validated, wrapped)
-// - Val         <- passthrough
+// Type mapping mirrors `toJs`. Missing struct fields use Zig defaults
+// when present, otherwise throw `TypeError`. Unknown enum strings
+// throw `TypeError`. All allocations come from `env.allocator()`.
 pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
     return switch (@typeInfo(T)) {
         .bool => {
-            var result: bool = undefined;
-            try expect(env, value, c.napi_get_value_bool(env.raw, value.raw, &result), "expected boolean");
-            return result;
+            var out: bool = undefined;
+            try expect(env, value, c.napi_get_value_bool(env.handle, value.handle, &out), "expected boolean");
+            return out;
         },
+
         .int => |info| switch (info.signedness) {
             .signed => switch (info.bits) {
                 0...32 => {
-                    var result: i32 = undefined;
-                    try expect(env, value, c.napi_get_value_int32(env.raw, value.raw, &result), "expected number");
-                    return @intCast(result);
+                    var out: i32 = undefined;
+                    try expect(env, value, c.napi_get_value_int32(env.handle, value.handle, &out), "expected number");
+                    return @intCast(out);
                 },
                 33...64 => {
-                    var result: i64 = undefined;
-                    try expect(env, value, c.napi_get_value_int64(env.raw, value.raw, &result), "expected number");
-                    return @intCast(result);
+                    var out: i64 = undefined;
+                    try expect(env, value, c.napi_get_value_int64(env.handle, value.handle, &out), "expected number");
+                    return @intCast(out);
                 },
                 else => @compileError("napi-zig: integer too wide: " ++ @typeName(T)),
             },
             .unsigned => switch (info.bits) {
                 0...32 => {
-                    var result: u32 = undefined;
-                    try expect(env, value, c.napi_get_value_uint32(env.raw, value.raw, &result), "expected number");
-                    return @intCast(result);
+                    var out: u32 = undefined;
+                    try expect(env, value, c.napi_get_value_uint32(env.handle, value.handle, &out), "expected number");
+                    return @intCast(out);
                 },
                 33...64 => {
-                    var result: u64 = undefined;
+                    var out: u64 = undefined;
                     var lossless: bool = undefined;
-                    try expect(env, value, c.napi_get_value_bigint_uint64(env.raw, value.raw, &result, &lossless), "expected bigint");
-                    return @intCast(result);
+                    try expect(env, value, c.napi_get_value_bigint_uint64(env.handle, value.handle, &out, &lossless), "expected bigint");
+                    return @intCast(out);
                 },
                 else => @compileError("napi-zig: integer too wide: " ++ @typeName(T)),
             },
         },
+
         .float => {
-            var result: f64 = undefined;
-            try expect(env, value, c.napi_get_value_double(env.raw, value.raw, &result), "expected number");
-            return @floatCast(result);
+            var out: f64 = undefined;
+            try expect(env, value, c.napi_get_value_double(env.handle, value.handle, &out), "expected number");
+            return @floatCast(out);
         },
+
         .optional => |opt| {
-            const vtype = try value.typeOf(env);
-            if (vtype == .null or vtype == .undefined) return null;
+            const vt = try value.typeOf(env);
+            if (vt == .null or vt == .undefined) return null;
             return try fromJs(opt.child, env, value);
         },
+
         .@"enum" => |info| {
-            var buf: [256]u8 = undefined;
-            var len: usize = 0;
-            try expect(env, value, c.napi_get_value_string_utf8(env.raw, value.raw, &buf, buf.len, &len), "expected string");
-            const str = buf[0..len];
+            // small stack buffer covers virtually all enum names
+            var stack: [128]u8 = undefined;
+            var n: usize = 0;
+            try expect(env, value, c.napi_get_value_string_utf8(env.handle, value.handle, &stack, stack.len, &n), "expected string");
+            const str = stack[0..n];
             inline for (info.fields) |field| {
                 if (std.mem.eql(u8, str, comptime util.snakeToCamelSlice(field.name)) or
                     std.mem.eql(u8, str, field.name))
+                {
                     return @enumFromInt(field.value);
+                }
             }
-            var errbuf: [256]u8 = undefined;
-            if (std.fmt.bufPrintZ(&errbuf, "invalid enum value: '{s}'", .{str})) |msg| {
-                env.throwTypeError(msg);
-            } else |_| {
-                env.throwTypeError("invalid enum value");
-            }
-            return error.napi_error;
+            var ebuf: [192]u8 = undefined;
+            const msg = std.fmt.bufPrintZ(&ebuf, "invalid enum value for " ++ @typeName(T) ++ ": '{s}'", .{str}) catch "invalid enum value";
+            env.throwTypeError(msg);
+            return err.Error.InvalidArg;
         },
+
         .pointer => |info| {
             if (info.size == .slice and info.child == u8) {
-                const alloc = env.arena.allocator();
-                var slen: usize = 0;
-                try expect(env, value, c.napi_get_value_string_utf8(env.raw, value.raw, null, 0, &slen), "expected string");
-                const sbuf = try alloc.alloc(u8, slen + 1);
-                var written: usize = 0;
-                try check(c.napi_get_value_string_utf8(env.raw, value.raw, sbuf.ptr, sbuf.len, &written));
-                return sbuf[0..written];
+                return readString(env, value);
             }
             if (info.size == .slice) {
                 var len: u32 = undefined;
-                try expect(env, value, c.napi_get_array_length(env.raw, value.raw, &len), "expected array");
-                const slice = try env.arena.allocator().alloc(info.child, len);
+                try expect(env, value, c.napi_get_array_length(env.handle, value.handle, &len), "expected array");
+                const slice = try env.allocator().alloc(info.child, len);
                 for (slice, 0..) |*item, i| {
                     item.* = try fromJs(info.child, env, try value.getElement(env, @intCast(i)));
                 }
@@ -198,82 +202,94 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
             }
             @compileError("napi-zig: unsupported pointer type for fromJs: " ++ @typeName(T));
         },
+
         .array => |info| {
-            var result: T = undefined;
+            var out: T = undefined;
             for (0..info.len) |i| {
-                result[i] = try fromJs(info.child, env, try value.getElement(env, @intCast(i)));
+                out[i] = try fromJs(info.child, env, try value.getElement(env, @intCast(i)));
             }
-            return result;
+            return out;
         },
+
         .@"struct" => |info| {
             if (T == Val) return value;
             if (T == Callback) {
-                const vtype = try value.typeOf(env);
-                if (vtype != .function) {
+                const vt = try value.typeOf(env);
+                if (vt != .function) {
                     var buf: [128]u8 = undefined;
-                    const got = jsTypeName(env, value);
-                    if (std.fmt.bufPrintZ(&buf, "expected function, got {s}", .{got})) |msg| {
-                        env.throwTypeError(msg);
-                    } else |_| {
-                        env.throwTypeError("expected function");
-                    }
-                    return error.napi_error;
+                    const msg = std.fmt.bufPrintZ(&buf, "expected function, got {s}", .{jsTypeName(env, value)}) catch "expected function";
+                    env.throwTypeError(msg);
+                    return err.Error.FunctionExpected;
                 }
                 return .{ .val = value };
             }
             if (@hasDecl(T, "fromJs")) return T.fromJs(env, value);
             if (info.is_tuple) {
-                var result: T = undefined;
+                var out: T = undefined;
                 inline for (info.fields, 0..) |field, i| {
-                    @field(result, field.name) = try fromJs(field.type, env, try value.getElement(env, @intCast(i)));
+                    @field(out, field.name) = try fromJs(field.type, env, try value.getElement(env, @intCast(i)));
                 }
-                return result;
+                return out;
             }
-            var result: T = undefined;
+            // Plain struct: one get_named_property per field, treat
+            // undefined as "missing" for fields with defaults.
+            var out: T = undefined;
             inline for (info.fields) |field| {
-                const js_key = comptime util.snakeToCamel(field.name);
-                const has = try value.hasNamedProperty(env, js_key);
-                if (has) {
-                    const prop = try value.getNamedProperty(env, js_key);
-                    if (field.default_value_ptr != null and (try prop.typeOf(env)) == .undefined) {
-                        @field(result, field.name) = field.defaultValue().?;
+                const key = comptime util.snakeToCamel(field.name);
+                const prop = try value.getNamedProperty(env, key);
+                const vt = try prop.typeOf(env);
+                if (vt == .undefined) {
+                    if (field.default_value_ptr) |_| {
+                        @field(out, field.name) = field.defaultValue().?;
                     } else {
-                        @field(result, field.name) = try fromJs(field.type, env, prop);
+                        env.throwTypeError("missing required field: " ++ key);
+                        return err.Error.InvalidArg;
                     }
-                } else if (field.default_value_ptr != null) {
-                    @field(result, field.name) = field.defaultValue().?;
                 } else {
-                    env.throwTypeError("missing required field: " ++ js_key);
-                    return error.napi_error;
+                    @field(out, field.name) = try fromJs(field.type, env, prop);
                 }
             }
-            return result;
+            return out;
         },
+
         .@"union" => {
             if (@hasDecl(T, "fromJs")) return T.fromJs(env, value);
-            @compileError("napi-zig: union requires a fromJs method: " ++ @typeName(T));
+            @compileError("napi-zig: union requires a `pub fn fromJs(env, val) !@This()` method: " ++ @typeName(T));
         },
+
         else => @compileError("napi-zig: unsupported type for fromJs: " ++ @typeName(T)),
     };
 }
 
-// checks a napi status and throws a TypeError with "expected X, got Y" on failure.
+// Reads a JS string into an arena-allocated UTF-8 slice.
+// Two N-API calls (probe + read). Stack-buffer fast path for short
+// strings would be a perf win if napi_get_value_string_utf8 reported
+// truncation distinctly from "fit exactly", but it doesn't, so we
+// keep this correct and simple.
+fn readString(env: Env, value: Val) ![]const u8 {
+    var len: usize = 0;
+    try expect(env, value, c.napi_get_value_string_utf8(env.handle, value.handle, null, 0, &len), "expected string");
+    const buf = try env.allocator().alloc(u8, len + 1);
+    var written: usize = 0;
+    try check(c.napi_get_value_string_utf8(env.handle, value.handle, buf.ptr, buf.len, &written));
+    return buf[0..written];
+}
+
 fn expect(env: Env, value: Val, status: c.napi_status, comptime expected: [*:0]const u8) !void {
     if (status == .ok) return;
     var buf: [128]u8 = undefined;
-    const got = jsTypeName(env, value);
-    if (std.fmt.bufPrintZ(&buf, "{s}, got {s}", .{ expected, got })) |msg| {
-        env.throwTypeError(msg);
+    if (std.fmt.bufPrintZ(&buf, "{s}, got {s}", .{ expected, jsTypeName(env, value) })) |msg| {
+        env.throwTypeError(msg.ptr);
     } else |_| {
         env.throwTypeError(expected);
     }
-    return error.napi_error;
+    return err.check(status);
 }
 
 fn jsTypeName(env: Env, value: Val) [*:0]const u8 {
-    var vtype: c.napi_valuetype = undefined;
-    if (c.napi_typeof(env.raw, value.raw, &vtype) != .ok) return "unknown";
-    return switch (vtype) {
+    var vt: c.napi_valuetype = undefined;
+    if (c.napi_typeof(env.handle, value.handle, &vt) != .ok) return "unknown";
+    return switch (vt) {
         .undefined => "undefined",
         .null => "null",
         .boolean => "boolean",
