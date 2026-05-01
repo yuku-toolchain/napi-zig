@@ -12,27 +12,14 @@ const Env = env_mod.Env;
 const Val = val_mod.Val;
 const CallInfo = val_mod.CallInfo;
 
-// We pin to v8: the highest stable Node-API version. v9 is experimental.
+// pinned to v8, the highest stable node-api version.
 pub const NAPI_MODULE_VERSION: u32 = 8;
 
-// One rule for what a `pub` declaration becomes:
-//
-//   fn(...)                       → JS function
-//   fn(env, ...)                  → JS function with Env injected
-//   fn(env, info)                 → JS function with raw arg access
-//   primitive / string / struct   → JS property (field-by-field)
-//   napi.class("Name", T)         → JS class (constructor + methods)
-//   namespace struct              → nested JS object (recursive)
-//   type / opaque pointer         → skipped
-//
-// A "namespace struct" is a struct *type declaration* whose members
-// include at least one exportable item (function, constant, or another
-// namespace). They become nested objects: `addon.crypto.hash(...)`.
 const Kind = enum { func, constant, namespace, class, skip };
 
 pub fn registerModule(comptime Module: type) void {
-    // When the user module is pulled into a host executable (e.g. the
-    // dts-emit helper), skip emitting the C entry points entirely.
+    // skip emitting c entry points when the module is pulled into a
+    // host executable (e.g. dts_emit). lib targets only.
     if (builtin.output_mode != .Lib) return;
 
     const Init = ModuleInit(Module);
@@ -60,9 +47,8 @@ fn ModuleInit(comptime Module: type) type {
     };
 }
 
-/// Recursively register every exportable `pub` declaration of `Module`
-/// onto `target`, generating JS functions, properties, and nested
-/// namespace objects as appropriate.
+/// recursively register every exportable pub declaration of `Module`
+/// onto `target`.
 pub fn registerInto(env: Env, target: Val, comptime Module: type) !void {
     const decls = @typeInfo(Module).@"struct".decls;
     inline for (decls) |decl| {
@@ -99,12 +85,8 @@ inline fn registerNamespace(env: Env, target: Val, comptime Module: type, compti
     try target.setNamedProperty(env, js_name, obj);
 }
 
-// ── Standard function bridge ──────────────────────────────────────────
-//
-// Wraps `Module.name` as a `napi_callback`. Optionally injects `Env`
-// as the first argument (recognized by type identity); converts every
-// remaining parameter from a JS argument; converts the return value
-// (or error) back.
+// wrap `Module.name` as a napi_callback. injects Env if it's the first
+// param, converts the rest from js, converts the return back.
 fn FnBridge(comptime Module: type, comptime name: []const u8) type {
     const Fn = @TypeOf(@field(Module, name));
     const params = @typeInfo(Fn).@"fn".params;
@@ -131,10 +113,7 @@ fn FnBridge(comptime Module: type, comptime name: []const u8) type {
     };
 }
 
-// ── Raw function bridge ───────────────────────────────────────────────
-//
-// For functions with signature `fn(Env, CallInfo) !Val`, full manual
-// control over argument extraction (variadic, mixed-shape, etc).
+// raw mode: fn(Env, CallInfo) !Val. user extracts args themselves.
 fn RawBridge(comptime Module: type, comptime name: []const u8) type {
     return struct {
         fn call(raw_env: c.napi_env, raw_info: c.napi_callback_info) callconv(.c) ?c.napi_value {
@@ -150,8 +129,6 @@ fn RawBridge(comptime Module: type, comptime name: []const u8) type {
         }
     };
 }
-
-// ── Classification ────────────────────────────────────────────────────
 
 fn classify(comptime Module: type, comptime name: []const u8) Kind {
     const T = @TypeOf(@field(Module, name));
@@ -200,8 +177,6 @@ fn isRawFn(comptime Fn: type) bool {
     const second = if (params[1].type) |T| T == CallInfo else false;
     return first and second;
 }
-
-// ── Tests ─────────────────────────────────────────────────────────────
 
 const testing = std.testing;
 

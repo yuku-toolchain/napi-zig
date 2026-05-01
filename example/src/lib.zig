@@ -1,14 +1,4 @@
-//! Showcase addon, exercises every major capability of napi-zig:
-//!
-//!   - plain functions          (add, double)
-//!   - env-injected functions   (greet, parse)
-//!   - struct args              (compile)
-//!   - enums                    (log)
-//!   - nested namespaces        (crypto.*)
-//!   - classes                  (Counter)
-//!   - workers / Promises       (asyncFib)
-//!   - threadsafe callbacks     (startWorkers)
-//!   - constants                (version, max_buffer)
+//! kitchen-sink napi-zig example exercising every major capability.
 
 const std = @import("std");
 const napi = @import("napi-zig");
@@ -17,12 +7,8 @@ comptime {
     napi.module(@This());
 }
 
-// ── constants ─────────────────────────────────────────────────────────
-
 pub const version: []const u8 = "0.1.0";
 pub const max_buffer: u32 = 1 << 20;
-
-// ── plain functions ───────────────────────────────────────────────────
 
 pub fn add(a: i32, b: i32) i32 {
     return a + b;
@@ -32,8 +18,6 @@ pub fn double(x: f64) f64 {
     return x * 2;
 }
 
-// ── env-injected functions ────────────────────────────────────────────
-
 pub fn greet(env: napi.Env, name: []const u8) ![]const u8 {
     return std.fmt.allocPrint(env.allocator(), "Hello, {s}!", .{name});
 }
@@ -41,8 +25,6 @@ pub fn greet(env: napi.Env, name: []const u8) ![]const u8 {
 pub fn parse(env: napi.Env, input: []const u8) ![]const u8 {
     return std.ascii.allocUpperString(env.allocator(), input);
 }
-
-// ── struct args & defaults ────────────────────────────────────────────
 
 const CompileOptions = struct {
     file_path: []const u8,
@@ -56,15 +38,11 @@ pub fn compile(env: napi.Env, opts: CompileOptions) ![]const u8 {
     });
 }
 
-// ── enums ─────────────────────────────────────────────────────────────
-
 const Level = enum { debug, info, warning, error_level };
 
 pub fn log(env: napi.Env, level: Level, message: []const u8) ![]const u8 {
     return std.fmt.allocPrint(env.allocator(), "[{s}] {s}", .{ @tagName(level), message });
 }
-
-// ── nested namespace ──────────────────────────────────────────────────
 
 pub const crypto = struct {
     pub fn hash(env: napi.Env, data: []const u8) ![]const u8 {
@@ -81,8 +59,6 @@ pub const crypto = struct {
         return std.mem.eql(u8, expected, &hex);
     }
 };
-
-// ── class ─────────────────────────────────────────────────────────────
 
 pub const Counter = napi.class("Counter", struct {
     value: i32,
@@ -110,8 +86,6 @@ pub const Counter = napi.class("Counter", struct {
     }
 });
 
-// ── workers (async) ───────────────────────────────────────────────────
-
 const FibWork = struct {
     n: i32,
     result: i32 = 0,
@@ -134,8 +108,6 @@ pub fn asyncFib(env: napi.Env, n: i32) !napi.Val {
     return env.runWorker("fib", FibWork{ .n = n });
 }
 
-// ── raw mode (variadic) ───────────────────────────────────────────────
-
 pub fn sum(env: napi.Env, info: napi.CallInfo) !napi.Val {
     const args = try info.args(env, 16);
     const argc = try info.argCount(env);
@@ -143,8 +115,6 @@ pub fn sum(env: napi.Env, info: napi.CallInfo) !napi.Val {
     for (0..argc) |i| total += try args[i].to(env, f64);
     return env.toJs(total);
 }
-
-// ── callbacks (synchronous) ───────────────────────────────────────────
 
 pub fn forEach(env: napi.Env, items: []napi.Val, cb: napi.Callback) !void {
     for (items, 0..) |item, i| {

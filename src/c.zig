@@ -1,8 +1,4 @@
-// Raw N-API bindings. Hand-translated from `node_api.h`.
-//
-// Everything in this file is opaque or `extern fn`. Higher-level code
-// in `env.zig`, `val.zig`, and `convert.zig` wraps these. Most user
-// code never imports this module directly.
+// raw n-api bindings. hand-translated from node_api.h.
 
 pub const napi_env = *opaque {};
 pub const napi_value = *opaque {};

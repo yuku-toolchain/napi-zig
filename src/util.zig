@@ -1,6 +1,4 @@
-// snake_case → camelCase. Used to translate Zig identifier conventions
-// (snake_case) into JavaScript identifier conventions (camelCase) at
-// the boundary, so user code stays idiomatic on both sides.
+// translate zig snake_case identifiers to js camelCase at the boundary.
 
 pub fn snakeToCamel(comptime input: []const u8) [:0]const u8 {
     return comptime blk: {

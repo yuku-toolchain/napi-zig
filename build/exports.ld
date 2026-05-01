@@ -1,7 +1,4 @@
-/* Linux/FreeBSD: limit exported symbols to the two N-API entry points.
- * Everything else (Zig stdlib, user code, etc.) becomes local. Keeps the
- * .node binary small and prevents accidental symbol collisions when
- * multiple addons are loaded into the same process. */
+/* limit exports to the two n-api entry points on linux/freebsd. */
 {
     global:
         napi_register_module_v1;

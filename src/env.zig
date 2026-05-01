@@ -9,13 +9,8 @@ const Deferred = val_mod.Deferred;
 
 const check = err.check;
 
-// Per-thread arena, reused across calls. Reset (not freed) between
-// invocations so steady-state allocation cost is zero. The first call
-// on a thread initializes the arena; subsequent calls just rewind it.
-//
-// If a single call drove the arena above the retain limit, the arena
-// is fully freed and re-created, bounds long-tail growth without
-// punishing the common case.
+// per-thread arena, reset between calls so steady-state cost is zero.
+// over the retain limit it is fully freed to bound long-tail growth.
 const RETAIN_LIMIT: usize = 1 << 20;
 
 threadlocal var tls_arena: ?std.heap.ArenaAllocator = null;
@@ -36,29 +31,21 @@ pub fn releaseArena(a: *std.heap.ArenaAllocator) void {
     }
 }
 
-/// The Node-API environment handle.
-///
-/// Carries a per-call allocator. The allocator is backed by a
-/// thread-local arena that is reset (not freed) between invocations,
-/// so calls that don't allocate pay nothing.
+/// node-api environment handle. carries a per-call arena allocator.
 pub const Env = struct {
     handle: c.napi_env,
     arena: *std.heap.ArenaAllocator,
 
-    /// The per-call allocator. Memory is freed automatically when
-    /// the function returns.
+    /// per-call allocator. freed when the function returns.
     pub fn allocator(self: Env) std.mem.Allocator {
         return self.arena.allocator();
     }
 
-    // ── Conversion entry point ─────────────────────────────────────────
-
-    /// Convert any Zig value to a JS value. The Zig type is inferred.
+    /// convert any zig value to a js value (type inferred).
     pub fn toJs(self: Env, value: anytype) !Val {
         return convert.toJs(@TypeOf(value), self, value);
     }
 
-    // ── Primitives ────────────────────────────────────────────────────
 
     pub fn createBoolean(self: Env, value: bool) !Val {
         var out: c.napi_value = undefined;
@@ -102,8 +89,6 @@ pub const Env = struct {
         return .{ .handle = out };
     }
 
-    // ── Strings ───────────────────────────────────────────────────────
-
     pub fn createString(self: Env, str: []const u8) !Val {
         var out: c.napi_value = undefined;
         try check(c.napi_create_string_utf8(self.handle, str.ptr, str.len, &out));
@@ -115,8 +100,6 @@ pub const Env = struct {
         try check(c.napi_create_string_utf8(self.handle, str, c.NAPI_AUTO_LENGTH, &out));
         return .{ .handle = out };
     }
-
-    // ── Singletons ────────────────────────────────────────────────────
 
     pub fn createNull(self: Env) !Val {
         var out: c.napi_value = undefined;
@@ -136,8 +119,6 @@ pub const Env = struct {
         return .{ .handle = out };
     }
 
-    // ── Containers ────────────────────────────────────────────────────
-
     pub fn createObject(self: Env) !Val {
         var out: c.napi_value = undefined;
         try check(c.napi_create_object(self.handle, &out));
@@ -156,8 +137,6 @@ pub const Env = struct {
         return .{ .handle = out };
     }
 
-    // ── Symbols / Dates / Externals ───────────────────────────────────
-
     pub fn createSymbol(self: Env, description: ?Val) !Val {
         var out: c.napi_value = undefined;
         try check(c.napi_create_symbol(self.handle, if (description) |d| d.handle else null, &out));
@@ -170,15 +149,12 @@ pub const Env = struct {
         return .{ .handle = out };
     }
 
-    /// Wraps an opaque Zig pointer in a JS `external` value, with an
-    /// optional finalizer invoked when the value is GC'd.
+    /// wrap an opaque zig pointer in a js external value with optional finalizer.
     pub fn createExternal(self: Env, ptr: ?*anyopaque, finalize: ?c.napi_finalize, hint: ?*anyopaque) !Val {
         var out: c.napi_value = undefined;
         try check(c.napi_create_external(self.handle, ptr, finalize, hint, &out));
         return .{ .handle = out };
     }
-
-    // ── Functions ─────────────────────────────────────────────────────
 
     pub fn createFunction(self: Env, name: ?[*:0]const u8, cb: c.napi_callback) !Val {
         return self.createFunctionWithData(name, cb, null);
@@ -189,8 +165,6 @@ pub const Env = struct {
         try check(c.napi_create_function(self.handle, name, if (name) |_| c.NAPI_AUTO_LENGTH else 0, cb, data, &out));
         return .{ .handle = out };
     }
-
-    // ── Buffers ───────────────────────────────────────────────────────
 
     pub const ArrayBuffer = struct { val: Val, data: []u8 };
 
@@ -226,8 +200,6 @@ pub const Env = struct {
         return .{ .handle = out };
     }
 
-    // ── Exceptions ────────────────────────────────────────────────────
-
     pub fn throwValue(self: Env, value: Val) !void {
         try check(c.napi_throw(self.handle, value.handle));
     }
@@ -244,9 +216,8 @@ pub const Env = struct {
         _ = c.napi_throw_range_error(self.handle, null, msg);
     }
 
-    /// Construct a JS `Error` object without throwing it. Useful for
-    /// rejecting a Promise with an Error from a context where throwing
-    /// wouldn't propagate (workers, threadsafe callbacks).
+    /// build a js error without throwing. used to reject promises from
+    /// contexts where throw doesn't propagate (workers, threadsafe).
     pub fn createError(self: Env, message: []const u8) !Val {
         const msg_val = try self.createString(message);
         var out: c.napi_value = undefined;
@@ -259,8 +230,6 @@ pub const Env = struct {
         _ = c.napi_is_exception_pending(self.handle, &result);
         return result;
     }
-
-    // ── References / Promises ─────────────────────────────────────────
 
     pub fn createReference(self: Env, value: Val) !Ref {
         var out: c.napi_ref = undefined;
@@ -280,15 +249,9 @@ pub const Env = struct {
         return .{ .promise = .{ .handle = p }, .deferred = .{ .handle = d } };
     }
 
-    // ── Workers ───────────────────────────────────────────────────────
-
-    /// Run a worker on a background thread, returning a JS Promise.
-    ///
-    /// `Context` must be a struct with two methods:
-    ///   - `pub fn compute(self: *@This()) void` runs on a worker thread.
-    ///   - `pub fn resolve(self: *@This(), env: Env) !T` runs on the main
-    ///     thread; its return value (or error) becomes the promise result.
-    ///     `T` may be any convertible Zig type, `napi.Val`, or `void`.
+    /// run a worker on a background thread, return a js promise.
+    /// context must declare `compute(*Self) void` (worker thread) and
+    /// `resolve(*Self, Env) !T` (main thread, value becomes promise).
     pub fn runWorker(self: Env, comptime name: [*:0]const u8, context: anytype) !Val {
         const T = @TypeOf(context);
         const State = WorkerState(T);
@@ -312,8 +275,6 @@ pub const Env = struct {
 
         return p.promise;
     }
-
-    // ── Runtime info ──────────────────────────────────────────────────
 
     pub fn getVersion(self: Env) !u32 {
         var out: u32 = undefined;
@@ -374,9 +335,7 @@ fn WorkerState(comptime T: type) type {
     };
 }
 
-// Best-effort rejection used by errdefer paths and worker error returns.
-// Constructs a real JS Error so the consumer's `.catch(e)` sees `e.message`
-// rather than an opaque undefined.
+// best-effort rejection with a real js error so .catch(e) sees e.message.
 fn rejectWith(env: Env, deferred: Deferred, message: []const u8) void {
     const reason = env.createError(message) catch return;
     deferred.reject(env, reason) catch {};

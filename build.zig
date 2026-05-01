@@ -13,19 +13,8 @@ pub const Repository = struct {
     url: []const u8,
 };
 
-/// `.dts` controls TypeScript declaration emission for the addon.
-///
-/// - `.none`         , don't emit a `.d.ts`. (Default.)
-/// - `.{ .file = … }`, copy a hand-written `.d.ts`. **Recommended for
-///                      libraries published to npm**, gives you full
-///                      TypeScript expressiveness (overloads, conditional
-///                      types, JSDoc, etc).
-/// - `.auto`         , generate one automatically by walking your module
-///                      at comptime. Useful for prototypes and internal
-///                      addons. The output is a starting point; expect
-///                      `unknown` wherever you used `napi.Val` or
-///                      `napi.Callback`. Tighten those Zig signatures
-///                      or switch to `.file` to fix.
+/// .d.ts emission mode. `.none` (default), `.{ .file = path }` for
+/// a hand-written file, or `.auto` to generate from the zig source.
 pub const Dts = union(enum) {
     none,
     auto,
@@ -48,9 +37,8 @@ pub const LibOptions = struct {
     optimize: std.builtin.OptimizeMode,
     imports: []const Import = &.{},
     npm: ?NpmConfig = null,
-    /// Windows host binary the addon will be loaded into. Defaults to
-    /// `"node.exe"`. Set to `"electron.exe"` for Electron, etc. Only
-    /// affects the Windows import-library generation; ignored elsewhere.
+    /// windows host binary the addon loads into (`"electron.exe"` etc).
+    /// only affects windows import-library generation.
     host_exe: []const u8 = "node.exe",
 };
 
@@ -73,9 +61,8 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(tests).step);
 }
 
-/// Build a `.node` shared library for the current platform, and
-/// (optionally, behind `-Dnpm=true`) cross-compile binding packages
-/// for every platform listed in the npm config.
+/// build a .node for the current platform. with -Dnpm=true also
+/// cross-compiles every platform listed in the npm config.
 pub fn addLib(b: *std.Build, napi_dep: *std.Build.Dependency, options: LibOptions) void {
     const napi_module = napi_dep.module("napi");
     const node_api_def = napi_dep.path("build/node_api.def");
@@ -101,12 +88,11 @@ pub fn addLib(b: *std.Build, napi_dep: *std.Build.Dependency, options: LibOption
     });
     b.getInstallStep().dependOn(&install.step);
 
-    // .d.ts for local development
     if (options.npm) |npm| {
         installDts(b, napi_dep, napi_module, options, npm.dts, .lib, b.fmt("{s}.d.ts", .{options.name}));
     }
 
-    // npm release mode (cross-compile + scaffold)
+    // npm release mode (cross-compile and scaffold)
     if (options.npm) |npm| {
         const do_npm = b.option(bool, "npm", "Cross-compile and generate npm packages") orelse false;
         if (do_npm) addNpmRelease(b, napi_dep, napi_module, options, npm, node_api_def);
@@ -129,8 +115,8 @@ fn installDts(
             b.getInstallStep().dependOn(&step.step);
         },
         .auto => {
-            // Build a host-targeted helper that imports the user module
-            // and prints its generated .d.ts to a file.
+            // host-targeted helper that imports the user module and
+            // prints its generated .d.ts to a file.
             const host = b.graph.host;
             const user_host_mod = b.createModule(.{
                 .root_source_file = options.root,
@@ -199,7 +185,7 @@ fn addNpmRelease(
     });
     b.getInstallStep().dependOn(&install_wf.step);
 
-    // Cross-compile .node for each platform.
+    // cross-compile a .node for each platform.
     for (npm.platforms) |platform| {
         const target = b.resolveTargetQuery(platform.zigTarget());
 
@@ -229,34 +215,29 @@ fn addNpmRelease(
         b.getInstallStep().dependOn(&node_install.step);
     }
 
-    // .d.ts inside the npm package
     installDts(b, napi_dep, napi_module, options, npm.dts, .{ .custom = b.fmt("npm/{s}", .{options.name}) }, "index.d.ts");
 }
 
 fn configureLinkerFlags(b: *std.Build, lib: *std.Build.Step.Compile, target: std.Build.ResolvedTarget, node_api_def: std.Build.LazyPath, host_exe: []const u8, napi_dep: *std.Build.Dependency) void {
     lib.root_module.red_zone = false;
     lib.root_module.unwind_tables = .none;
-    // Drop unreferenced sections, meaningful saving on small addons.
+    // drop unreferenced sections, meaningful saving on small addons.
     lib.link_gc_sections = true;
 
     switch (target.result.os.tag) {
         .macos => {
             lib.linker_allow_shlib_undefined = true;
-            // (Symbol-export limiting on macOS requires `-exported_symbols_list`,
-            // which Zig 0.17's Compile API doesn't expose directly. Skipped.)
         },
         .linux, .freebsd => {
             lib.root_module.link_libc = true;
-            // Limit exported symbols to the two N-API entry points.
-            // Smaller binaries; no accidental symbol collisions when
-            // multiple addons load into the same process.
+            // limit exports to the two n-api entry points. smaller binaries,
+            // no symbol collisions across addons in the same process.
             lib.setVersionScript(napi_dep.path("build/exports.ld"));
         },
         .windows => {
-            // Windows PE/COFF needs all symbols resolved at link time.
-            // Generate an import library from node_api.def so the linker
-            // knows these N-API symbols come from the host (node.exe,
-            // electron.exe, etc.) at runtime.
+            // pe/coff needs all symbols resolved at link time. generate
+            // an import library from node_api.def so the linker knows the
+            // n-api symbols come from the host exe at runtime.
             const machine = switch (target.result.cpu.arch) {
                 .x86_64 => "i386:x86-64",
                 .aarch64 => "arm64",

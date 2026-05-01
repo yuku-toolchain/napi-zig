@@ -7,13 +7,11 @@ const env_mod = @import("env.zig");
 const Env = env_mod.Env;
 const check = err.check;
 
-/// A handle to a JS value. The `handle` field is the underlying
-/// `napi_value` and is valid only within the call that produced it
-/// (or until the surrounding handle scope closes). Treat as opaque.
+/// opaque handle to a js value, valid only within the current call.
 pub const Val = struct {
     handle: c.napi_value,
 
-    /// Convert this JS value to any supported Zig type.
+    /// convert this js value to any supported zig type.
     pub fn to(self: Val, env: Env, comptime T: type) !T {
         return convert.fromJs(T, env, self);
     }
@@ -29,8 +27,6 @@ pub const Val = struct {
         try check(c.napi_strict_equals(env.handle, self.handle, other.handle, &out));
         return out;
     }
-
-    // ── Type checks ───────────────────────────────────────────────────
 
     pub fn isArray(self: Val, env: Env) !bool {
         var out: bool = undefined;
@@ -68,8 +64,6 @@ pub const Val = struct {
         return out;
     }
 
-    // ── Property access ───────────────────────────────────────────────
-
     pub fn getProperty(self: Val, env: Env, key: Val) !Val {
         var out: c.napi_value = undefined;
         try check(c.napi_get_property(env.handle, self.handle, key.handle, &out));
@@ -96,8 +90,6 @@ pub const Val = struct {
         return out;
     }
 
-    // ── Array access ──────────────────────────────────────────────────
-
     pub fn getElement(self: Val, env: Env, index: u32) !Val {
         var out: c.napi_value = undefined;
         try check(c.napi_get_element(env.handle, self.handle, index, &out));
@@ -113,8 +105,6 @@ pub const Val = struct {
         try check(c.napi_get_array_length(env.handle, self.handle, &out));
         return out;
     }
-
-    // ── Buffer access ─────────────────────────────────────────────────
 
     pub fn getArrayBufferData(self: Val, env: Env) ![]u8 {
         var data: ?*anyopaque = null;
@@ -143,22 +133,17 @@ pub const Val = struct {
     }
 };
 
-/// A JS function handle that has been validated as callable.
-///
-/// Created by accepting `napi.Callback` as a parameter, the conversion
-/// validates the JS value is a function, throwing `TypeError` otherwise.
+/// js function handle, validated as callable.
 pub const Callback = struct {
     val: Val,
 
-    /// Call the function with `undefined` as `this`. Args are converted
-    /// from a Zig tuple, pass `.{}` for no args, `.{ "x", 42 }` to mix
-    /// types, or a `[]const Val` slice for dynamic arrays.
+    /// call with `undefined` as `this`. args is a tuple or `[]const Val`.
     pub fn call(self: Callback, env: Env, args: anytype) !Val {
         const undef = try env.createUndefined();
         return self.invoke(env, undef, args);
     }
 
-    /// Call the function with a specific `this` binding.
+    /// call with a specific `this` binding.
     pub fn callWith(self: Callback, env: Env, this: Val, args: anytype) !Val {
         return self.invoke(env, this, args);
     }
@@ -166,13 +151,12 @@ pub const Callback = struct {
     fn invoke(self: Callback, env: Env, this: Val, args: anytype) !Val {
         const T = @TypeOf(args);
 
-        // Slice of pre-built Vals, passthrough. Val is a single-field
-        // wrapper over napi_value, so the pointers are layout-compatible.
+        // val is a single-field wrapper over napi_value, so the pointers
+        // are layout-compatible.
         if (T == []const Val or T == []Val) {
             return self.callRaw(env, this, if (args.len > 0) @ptrCast(args.ptr) else null, args.len);
         }
 
-        // Tuple of mixed Zig values, auto-convert each into a stack array.
         const info = @typeInfo(T);
         if (info == .@"struct" and info.@"struct".is_tuple) {
             const fields = info.@"struct".fields;
@@ -193,10 +177,7 @@ pub const Callback = struct {
         return .{ .handle = result };
     }
 
-    /// Wrap this callback as a thread-safe function callable from any
-    /// thread. `T` is the type of the value passed to each invocation
-    /// (use `void` for signal-only callbacks). The result must be
-    /// released with `release()` when no longer needed.
+    /// wrap as a thread-safe function. use `void` for signal-only callbacks.
     pub fn threadsafe(self: Callback, env: Env, comptime name: [*:0]const u8, comptime T: type) !ThreadsafeFn(T) {
         var name_val: c.napi_value = undefined;
         try check(c.napi_create_string_utf8(env.handle, name, c.NAPI_AUTO_LENGTH, &name_val));
@@ -218,8 +199,7 @@ pub const Callback = struct {
     }
 };
 
-/// A thread-safe wrapper around a JS function, parameterized by the
-/// value type passed to each invocation. Use `void` for no data.
+/// thread-safe wrapper around a js function. T is the per-call payload.
 pub fn ThreadsafeFn(comptime T: type) type {
     return struct {
         handle: c.napi_threadsafe_function,
@@ -276,7 +256,7 @@ pub fn ThreadsafeFn(comptime T: type) type {
     };
 }
 
-/// A strong reference preventing GC of the underlying JS value.
+/// strong reference preventing gc of the wrapped js value.
 pub const Ref = struct {
     handle: c.napi_ref,
 
@@ -291,8 +271,7 @@ pub const Ref = struct {
     }
 };
 
-/// A handle for resolving or rejecting a Promise.
-/// Returned from `Env.createPromise`. Each handle may be used once.
+/// single-use handle for resolving or rejecting a promise.
 pub const Deferred = struct {
     handle: c.napi_deferred,
 
@@ -305,14 +284,11 @@ pub const Deferred = struct {
     }
 };
 
-/// Raw call info, for variadic functions or anything where you want
-/// direct control over argument extraction. Take this as the second
-/// parameter (after `Env`) when you want it.
+/// raw call info for variadic or dynamic-arity functions.
 pub const CallInfo = struct {
     handle: c.napi_callback_info,
 
-    /// Extract up to `max` arguments. Missing slots are filled with
-    /// `undefined`. `max` is comptime so the buffer lives on the stack.
+    /// extract up to `max` args. missing slots are filled with `undefined`.
     pub fn args(self: CallInfo, env: Env, comptime max: usize) ![max]Val {
         if (max == 0) return .{};
 
@@ -333,14 +309,14 @@ pub const CallInfo = struct {
         return out;
     }
 
-    /// Number of arguments actually passed.
+    /// number of args actually passed.
     pub fn argCount(self: CallInfo, env: Env) !usize {
         var n: usize = 0;
         try check(c.napi_get_cb_info(env.handle, self.handle, &n, null, null, null));
         return n;
     }
 
-    /// The `this` binding of the call.
+    /// the `this` binding of the call.
     pub fn this(self: CallInfo, env: Env) !Val {
         var out: c.napi_value = undefined;
         try check(c.napi_get_cb_info(env.handle, self.handle, null, null, &out, null));

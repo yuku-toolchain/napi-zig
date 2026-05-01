@@ -1,10 +1,6 @@
-// Shared call-site machinery for every C-callable bridge.
-//
-// Three bridges in napi-zig wrap a Zig function as a `napi_callback`:
-// the top-level function bridge (`module.zig`), the class constructor
-// bridge, and the class method bridge (`class.zig`). They share most
-// of their work, fetch arg info, build the args tuple, convert each
-// JS argument, unwrap the return. This module factors all of it out.
+// shared call-site machinery for the function, constructor, and method
+// bridges. each fetches cb_info, builds an args tuple, and unwraps a
+// return value, so all of that lives here.
 
 const std = @import("std");
 const c = @import("c.zig");
@@ -14,14 +10,9 @@ const Val = @import("val.zig").Val;
 
 const Env = env_mod.Env;
 
-/// Fetch the cb_info and fill `args[js_start..]` from the JS arguments.
-/// Returns `true` on success, `false` if a JS exception is now pending.
-///
-/// `args[0..js_start]` is left untouched, the caller fills it with any
-/// injected values (`Env`, `*Self`) after this returns.
-///
-/// Pass `&this_val` to `this_out` for class methods/constructors that
-/// need the JS receiver; pass `null` for plain functions.
+/// fetch cb_info and fill `args[js_start..]` from the js arguments.
+/// returns false if a js exception is now pending. caller fills any
+/// `args[0..js_start]` slots (Env, *Self) after this returns.
 pub fn invoke(
     comptime Fn: type,
     comptime js_start: usize,
@@ -61,10 +52,9 @@ pub fn invoke(
     return true;
 }
 
-/// Convert the result of `@call(.auto, fn, args)` to a `napi_value`,
-/// handling error unions, void returns, and `Val` passthrough. Returns
-/// `null` if the user fn errored or the conversion failed (a JS
-/// exception is pending in either case).
+/// convert the raw result of `@call` to a napi_value. handles error
+/// unions, void, and Val passthrough. returns null on any failure with
+/// a js exception already pending.
 pub fn returnResult(env: Env, comptime Payload: type, raw: anytype) ?c.napi_value {
     const Return = @TypeOf(raw);
     const value = if (@typeInfo(Return) == .error_union) (raw catch |e| {

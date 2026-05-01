@@ -9,22 +9,7 @@ const Callback = val_mod.Callback;
 
 const check = err.check;
 
-// Zig → JS
-//
-// Type mapping:
-//   bool / void / ?T               → Boolean / undefined / null-or-T
-//   integers up to i32/u32         → Number
-//   integers up to i53/u53         → Number (via f64)
-//   integers i54..i64 / u54..u64   → BigInt
-//   f16 / f32 / f64                → Number
-//   enum                           → String (tag name, snake → camel)
-//   []const u8                     → String
-//   []T / [N]T                     → Array
-//   tuple struct                   → Array
-//   struct with `toJs(env)` method → custom
-//   plain struct                   → Object (snake_case fields → camelCase)
-//   union                          → must define `toJs(env)` method
-//   Val                            → passthrough
+// zig to js. structs may opt out of field-by-field with a `toJs` method.
 pub fn toJs(comptime T: type, env: Env, value: T) !Val {
     return switch (@typeInfo(T)) {
         .void => env.createUndefined(),
@@ -93,9 +78,6 @@ pub fn toJs(comptime T: type, env: Env, value: T) !Val {
                 }
                 return arr;
             }
-            // Plain struct → object. One create + N set_named_property calls.
-            // (`napi_define_properties` would batch but requires per-call
-            // descriptor allocation, net loss for small N.)
             const obj = try env.createObject();
             inline for (info.fields) |field| {
                 const key = comptime util.snakeToCamel(field.name);
@@ -113,11 +95,7 @@ pub fn toJs(comptime T: type, env: Env, value: T) !Val {
     };
 }
 
-// JS → Zig
-//
-// Type mapping mirrors `toJs`. Missing struct fields use Zig defaults
-// when present, otherwise throw `TypeError`. Unknown enum strings
-// throw `TypeError`. All allocations come from `env.allocator()`.
+// js to zig. mirror of toJs. allocations come from env.allocator().
 pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
     return switch (@typeInfo(T)) {
         .bool => {
@@ -231,8 +209,7 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
                 }
                 return out;
             }
-            // Plain struct: one get_named_property per field, treat
-            // undefined as "missing" for fields with defaults.
+            // undefined means "missing" so default-valued fields can be omitted.
             var out: T = undefined;
             inline for (info.fields) |field| {
                 const key = comptime util.snakeToCamel(field.name);
@@ -261,11 +238,8 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
     };
 }
 
-// Reads a JS string into an arena-allocated UTF-8 slice.
-// Two N-API calls (probe + read). Stack-buffer fast path for short
-// strings would be a perf win if napi_get_value_string_utf8 reported
-// truncation distinctly from "fit exactly", but it doesn't, so we
-// keep this correct and simple.
+// probe length, then read. napi_get_value_string_utf8 doesn't distinguish
+// "fit exactly" from "truncated", so a stack fast path can't be correct.
 fn readString(env: Env, value: Val) ![]const u8 {
     var len: usize = 0;
     try expect(env, value, c.napi_get_value_string_utf8(env.handle, value.handle, null, 0, &len), "expected string");

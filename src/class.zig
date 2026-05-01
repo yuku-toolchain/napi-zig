@@ -1,27 +1,5 @@
-// JS class wrapping.
-//
-//     pub const Counter = napi.class("Counter", struct {
-//         value: i32,
-//
-//         pub fn init(start: i32) @This() {
-//             return .{ .value = start };
-//         }
-//
-//         pub fn increment(self: *@This()) i32 {
-//             self.value += 1;
-//             return self.value;
-//         }
-//     });
-//
-//     // in JS: new Counter(10).increment() → 11
-//
-// `init` becomes the constructor. Every other `pub fn` whose first
-// parameter is `*Self` (or `*const Self`) becomes a method. An
-// optional `pub fn deinit(self: *Self) void` is invoked when the JS
-// instance is garbage collected.
-//
-// Both `init` and methods may take `Env` as their first non-self
-// parameter, it's injected automatically and doesn't consume a JS arg.
+// js class wrapping. init becomes the constructor, every pub fn taking
+// *Self becomes a method, optional deinit runs on gc.
 
 const std = @import("std");
 const c = @import("c.zig");
@@ -35,10 +13,8 @@ const Env = env_mod.Env;
 const Val = val_mod.Val;
 const check = err.check;
 
-/// Wrap a Zig struct as a JS class.
-///
-/// `js_name` is the constructor name visible to JS. `T` must declare
-/// a `pub fn init(...)` returning `T` or `!T`.
+/// wrap a zig struct as a js class. T must declare `pub fn init(...) T`
+/// (or `!T`). js_name is the constructor name visible to js.
 pub fn class(comptime js_name: [*:0]const u8, comptime T: type) type {
     if (!@hasDecl(T, "init")) {
         @compileError("napi.class: '" ++ @typeName(T) ++ "' must declare `pub fn init(...)`");
@@ -49,12 +25,12 @@ pub fn class(comptime js_name: [*:0]const u8, comptime T: type) type {
     };
 }
 
-/// Returns true if `T` is a wrapper produced by `napi.class`.
+/// true if `T` is a wrapper produced by `napi.class`.
 pub fn isClass(comptime T: type) bool {
     return @typeInfo(T) == .@"struct" and @hasDecl(T, "__napi_class_name");
 }
 
-/// Define the JS class on `target` under the given field name.
+/// define the js class on `target` under the given field name.
 pub fn register(env: Env, target: Val, comptime field_name: []const u8, comptime Wrapper: type) !void {
     const T = Wrapper.__napi_class_inner;
     const methods = comptime collectMethods(T);
@@ -83,8 +59,6 @@ pub fn register(env: Env, target: Val, comptime field_name: []const u8, comptime
     try target.setNamedProperty(env, comptime util.snakeToCamel(field_name), .{ .handle = class_val });
 }
 
-// ── Method enumeration ────────────────────────────────────────────────
-
 pub fn collectMethods(comptime T: type) []const []const u8 {
     comptime {
         var names: []const []const u8 = &.{};
@@ -105,8 +79,6 @@ pub fn collectMethods(comptime T: type) []const []const u8 {
         return names;
     }
 }
-
-// ── Constructor bridge ────────────────────────────────────────────────
 
 fn ConstructorBridge(comptime T: type) type {
     const Init = @TypeOf(@field(T, "init"));
@@ -162,12 +134,10 @@ fn ConstructorBridge(comptime T: type) type {
     };
 }
 
-// ── Method bridge ─────────────────────────────────────────────────────
-
 fn MethodBridge(comptime T: type, comptime method_name: []const u8) type {
     const Method = @TypeOf(@field(T, method_name));
     const params = @typeInfo(Method).@"fn".params;
-    // params[0] = *Self (validated by collectMethods); params[1] = optional Env.
+    // params[0] is *Self, params[1] is optional Env.
     const inject_env = params.len > 1 and params[1].type.? == Env;
     const js_start: usize = if (inject_env) 2 else 1;
     const Return = @typeInfo(Method).@"fn".return_type orelse void;
@@ -199,8 +169,6 @@ fn MethodBridge(comptime T: type, comptime method_name: []const u8) type {
     };
 }
 
-// ── Tests ─────────────────────────────────────────────────────────────
-
 const testing = std.testing;
 
 test "isClass detects class wrappers" {
@@ -231,7 +199,7 @@ test "collectMethods gathers self-receiving fns and skips init/deinit" {
         pub fn b(_: *const @This()) i32 {
             return 0;
         }
-        pub fn c(_: i32) void {} // no self → skipped
+        pub fn c(_: i32) void {} // no self, skipped
         pub fn _hidden(_: *@This()) void {}
     };
     const ms = comptime collectMethods(T);

@@ -1,6 +1,4 @@
-// End-to-end verification of the showcase addon. Loads the built
-// .node, exercises every exported feature, and exits non-zero if
-// anything regresses. Run with `bun verify.ts`.
+// end-to-end verification of the showcase addon. exits non-zero on regression.
 
 const m = require("./zig-out/lib/showcase.node");
 
@@ -14,19 +12,15 @@ const eq = (label: string, actual: unknown, expected: unknown): void => {
   }
 };
 
-// constants
 eq("version", m.version, "0.1.0");
 eq("maxBuffer", m.maxBuffer, 1 << 20);
 
-// plain functions
 eq("add(2, 3)", m.add(2, 3), 5);
 eq("double(2.5)", m.double(2.5), 5);
 
-// env-injected
 eq("greet", m.greet("world"), "Hello, world!");
 eq("parse", m.parse("hi"), "HI");
 
-// struct args + defaults
 eq(
   "compile",
   m.compile({ filePath: "main.zig", lineCount: 100 }),
@@ -38,11 +32,9 @@ eq(
   "main.zig: 100 lines (verbose=true)",
 );
 
-// enums (snake_case + camelCase both accepted)
 eq("log", m.log("warning", "disk full"), "[warning] disk full");
 eq("log camelCase", m.log("errorLevel", "boom"), "[error_level] boom");
 
-// nested namespace
 eq(
   "crypto.hash",
   m.crypto.hash("hi"),
@@ -54,7 +46,6 @@ eq(
   true,
 );
 
-// classes
 const c = new m.Counter(10);
 eq("Counter init+get", c.get(), 10);
 eq("Counter increment", c.increment(), 11);
@@ -62,10 +53,8 @@ eq("Counter addN", c.addN(5), 16);
 c.reset();
 eq("Counter reset", c.get(), 0);
 
-// raw mode
 eq("sum variadic", m.sum(1, 2, 3, 4, 5), 15);
 
-// callbacks
 const collected: [number, number][] = [];
 m.forEach([10, 20, 30], (item: number, i: number) => collected.push([i, item]));
 eq("forEach", collected, [
@@ -74,7 +63,6 @@ eq("forEach", collected, [
   [2, 30],
 ]);
 
-// workers
 const fib = await m.asyncFib(30);
 eq("asyncFib(30)", fib, 832040);
 
@@ -83,3 +71,5 @@ if (failed > 0) {
   process.exit(1);
 }
 console.log("\nall checks passed");
+
+export {};
