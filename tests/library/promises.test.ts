@@ -23,3 +23,9 @@ describe("synchronous promises (createPromise + Deferred)", () => {
     expect(m.isPromise(null)).toBe(false);
   });
 });
+
+// Note: testing "Deferred is single-use" (a second resolve/reject on an
+// already-consumed deferred) was attempted but removed — Bun 1.3 segfaults
+// on the second napi_resolve_deferred call, where Node correctly returns
+// an error status. The behavior is N-API-impl-specific and not safely
+// observable from JS without crashing some runtimes.

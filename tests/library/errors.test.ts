@@ -84,3 +84,55 @@ describe("explicit env.throw* + return error", () => {
     expect(caught?.message).toBe("explicit generic error");
   });
 });
+
+describe("Env.throwValue (throw an arbitrary JS value)", () => {
+  test("throwing a plain object surfaces it as the caught value", () => {
+    const payload = { code: "E_BAD", details: [1, 2] };
+    let caught: unknown;
+    try {
+      m.throwArbitraryValue(payload);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBe(payload);
+  });
+
+  test("throwing a string", () => {
+    let caught: unknown;
+    try {
+      m.throwArbitraryValue("string-as-thrown");
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBe("string-as-thrown");
+  });
+
+  test("throwing a number", () => {
+    let caught: unknown;
+    try {
+      m.throwArbitraryValue(42);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBe(42);
+  });
+
+  test("throwing a real Error instance preserves its identity", () => {
+    const err = new RangeError("custom-range");
+    let caught: unknown;
+    try {
+      m.throwArbitraryValue(err);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBe(err);
+    expect(caught).toBeInstanceOf(RangeError);
+    expect((caught as Error).message).toBe("custom-range");
+  });
+});
+
+describe("Env.isExceptionPending", () => {
+  test("false during a normal call (no exception in flight)", () => {
+    expect(m.isExceptionPendingNow()).toBe(false);
+  });
+});

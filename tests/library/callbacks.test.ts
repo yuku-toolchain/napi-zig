@@ -94,3 +94,22 @@ describe("exceptions thrown inside the JS callback propagate to the caller", () 
     expect(calls).toBe(2);
   });
 });
+
+describe("re-entrancy (JS callback invoking Zig that invokes JS)", () => {
+  test("zig fn calls JS callback, callback re-enters another zig fn, value flows back", () => {
+    // reentrant(cb, x) calls cb(x), expects an i32 back, returns y + 1.
+    // pass a callback that re-enters via roundtripI32, returning the
+    // same value. so reentrant(cb, 5) → cb(5) → roundtripI32(5)=5 → +1 → 6.
+    expect(m.reentrant((x: number) => m.roundtripI32(x), 5)).toBe(6);
+  });
+
+  test("nested re-entrancy three levels deep", () => {
+    const cb = (x: number) => m.roundtripI32(m.roundtripI32(m.roundtripI32(x)));
+    expect(m.reentrant(cb, 100)).toBe(101);
+  });
+
+  test("re-entrant zig fn called from inside the callback", () => {
+    const cb = (x: number) => m.reentrant((y: number) => y, x); // reentrant called from inside cb
+    expect(m.reentrant(cb, 0)).toBe(2); // 0 → cb → reentrant(0) = 1 → +1 = 2
+  });
+});

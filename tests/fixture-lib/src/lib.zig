@@ -814,3 +814,166 @@ pub fn nestedSliceSum(items: []const []const i32) i32 {
     };
     return total;
 }
+
+// direct Val method exposure for val-methods.test.ts
+
+pub fn valTypeOf(env: napi.Env, v: napi.Val) ![]const u8 {
+    const t = try v.typeOf(env);
+    const name = switch (t) {
+        .undefined => "undefined",
+        .null => "null",
+        .boolean => "boolean",
+        .number => "number",
+        .string => "string",
+        .symbol => "symbol",
+        .object => "object",
+        .function => "function",
+        .external => "external",
+        .bigint => "bigint",
+    };
+    return env.allocator().dupe(u8, name);
+}
+
+pub fn valStrictEquals(env: napi.Env, a: napi.Val, b: napi.Val) !bool {
+    return a.strictEquals(env, b);
+}
+
+pub fn valGetProperty(env: napi.Env, obj: napi.Val, key: napi.Val) !napi.Val {
+    return obj.getProperty(env, key);
+}
+
+pub fn valSetProperty(env: napi.Env, obj: napi.Val, key: napi.Val, value: napi.Val) !void {
+    return obj.setProperty(env, key, value);
+}
+
+pub fn valGetElement(env: napi.Env, arr: napi.Val, i: u32) !napi.Val {
+    return arr.getElement(env, i);
+}
+
+pub fn valSetElement(env: napi.Env, arr: napi.Val, i: u32, value: napi.Val) !void {
+    return arr.setElement(env, i, value);
+}
+
+pub fn valGetArrayLength(env: napi.Env, arr: napi.Val) !u32 {
+    return arr.getArrayLength(env);
+}
+
+pub fn valHasNamedProperty(env: napi.Env, obj: napi.Val, key: []const u8) !bool {
+    const kz = try env.allocator().dupeZ(u8, key);
+    return obj.hasNamedProperty(env, kz);
+}
+
+pub fn buildObjectFromKeys(env: napi.Env, keys: []const []const u8, values: []const i32) !napi.Val {
+    const obj = try env.createObject();
+    for (keys, values) |k, v| {
+        const kz = try env.allocator().dupeZ(u8, k);
+        try obj.setNamedProperty(env, kz, try env.toJs(v));
+    }
+    return obj;
+}
+
+pub fn buildArrayFromInts(env: napi.Env, items: []const i32) !napi.Val {
+    const arr = try env.createArrayWithLength(@intCast(items.len));
+    for (items, 0..) |v, i| {
+        try arr.setElement(env, @intCast(i), try env.toJs(v));
+    }
+    return arr;
+}
+
+pub fn getGlobalThis(env: napi.Env) !napi.Val {
+    return env.getGlobal();
+}
+
+// Ref lifecycle for refs.test.ts
+
+var _stored_ref: ?napi.Ref = null;
+
+pub fn storeRef(env: napi.Env, value: napi.Val) !void {
+    if (_stored_ref) |r| r.delete(env) catch {};
+    _stored_ref = try env.createReference(value);
+}
+
+pub fn fetchStoredRef(env: napi.Env) !napi.Val {
+    const r = _stored_ref orelse return error.NoStoredRef;
+    return r.value(env);
+}
+
+pub fn clearStoredRef(env: napi.Env) !void {
+    if (_stored_ref) |r| try r.delete(env);
+    _stored_ref = null;
+}
+
+// TypedArray creation for typed-arrays.test.ts
+
+pub fn makeUint8Array(env: napi.Env, len: u32, fill: u8) !napi.Val {
+    const ab = try env.createArrayBuffer(len);
+    @memset(ab.data, fill);
+    return env.createTypedArray(.uint8_array, len, ab.val, 0);
+}
+
+pub fn makeInt32Array(env: napi.Env, len: u32) !napi.Val {
+    const ab = try env.createArrayBuffer(len * 4);
+    const view: [*]i32 = @ptrCast(@alignCast(ab.data.ptr));
+    for (0..len) |i| view[i] = @intCast(i);
+    return env.createTypedArray(.int32_array, len, ab.val, 0);
+}
+
+pub fn makeFloat64Array(env: napi.Env, len: u32) !napi.Val {
+    const ab = try env.createArrayBuffer(len * 8);
+    const view: [*]f64 = @ptrCast(@alignCast(ab.data.ptr));
+    for (0..len) |i| view[i] = @as(f64, @floatFromInt(i)) * 0.5;
+    return env.createTypedArray(.float64_array, len, ab.val, 0);
+}
+
+pub fn makeBigInt64Array(env: napi.Env, len: u32) !napi.Val {
+    const ab = try env.createArrayBuffer(len * 8);
+    const view: [*]i64 = @ptrCast(@alignCast(ab.data.ptr));
+    for (0..len) |i| view[i] = @as(i64, @intCast(i)) * 1_000_000_000_000;
+    return env.createTypedArray(.bigint64_array, len, ab.val, 0);
+}
+
+pub fn isTypedArray(env: napi.Env, v: napi.Val) !bool {
+    return v.isTypedArray(env);
+}
+
+// Exceptions for exceptions.test.ts (extends errors.test.ts coverage)
+
+pub fn throwArbitraryValue(env: napi.Env, value: napi.Val) !void {
+    try env.throwValue(value);
+    return error.PendingException;
+}
+
+pub fn isExceptionPendingNow(env: napi.Env) bool {
+    return env.isExceptionPending();
+}
+
+// Re-entrancy for callbacks.test.ts
+
+pub fn reentrant(env: napi.Env, cb: napi.Callback, x: i32) !i32 {
+    const out = try cb.call(env, .{x});
+    const y = try out.to(env, i32);
+    return y + 1;
+}
+
+// Module-shape edge cases for module-shape.test.ts
+
+const Empty = struct {};
+
+pub fn acceptEmpty(_: Empty) i32 {
+    return 99;
+}
+
+pub fn returnsEmptyStruct() Empty {
+    return .{};
+}
+
+// underscore-prefixed pub fns are skipped by registerInto. this is used
+// (called from `usesHidden`) so the fn isn't dead-stripped — purely so
+// the export-skip behaviour is verifiable from the JS side.
+pub fn _hidden_fn() i32 {
+    return 777;
+}
+
+pub fn usesHidden() i32 {
+    return _hidden_fn();
+}
