@@ -13,12 +13,20 @@ pub const Repository = struct {
     url: []const u8,
 };
 
+/// .d.ts emission mode. `.none` (default), `.{ .file = path }` for
+/// a hand-written file, or `.auto` to generate from the zig source.
+pub const Dts = union(enum) {
+    none,
+    auto,
+    file: std.Build.LazyPath,
+};
+
 pub const NpmConfig = struct {
     scope: []const u8,
     repository: Repository,
     description: []const u8 = "",
     license: []const u8 = "MIT",
-    dts: ?std.Build.LazyPath = null,
+    dts: Dts = .none,
     platforms: []const Platform = Platform.defaults,
 };
 
@@ -29,6 +37,9 @@ pub const LibOptions = struct {
     optimize: std.builtin.OptimizeMode,
     imports: []const Import = &.{},
     npm: ?NpmConfig = null,
+    /// windows host binary the addon loads into (`"electron.exe"` etc).
+    /// only affects windows import-library generation.
+    host_exe: []const u8 = "node.exe",
 };
 
 pub fn build(b: *std.Build) void {
@@ -50,13 +61,8 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(tests).step);
 }
 
-/// build a .node shared library for the current platform.
-///
-/// installs to zig-out/lib/{name}.node for local development.
-///
-/// if `npm` config is provided and `-Dnpm=true` is passed, also cross-compiles
-/// for all target platforms and generates npm package scaffold in zig-out/npm/.
-/// use the napi-zig CLI to sync the output to your project's npm/ folder.
+/// build a .node for the current platform. with -Dnpm=true also
+/// cross-compiles every platform listed in the npm config.
 pub fn addLib(b: *std.Build, napi_dep: *std.Build.Dependency, options: LibOptions) void {
     const napi_module = napi_dep.module("napi");
     const node_api_def = napi_dep.path("build/node_api.def");
@@ -66,47 +72,85 @@ pub fn addLib(b: *std.Build, napi_dep: *std.Build.Dependency, options: LibOption
         .target = options.target,
         .optimize = options.optimize,
     });
-
     lib_mod.addImport("napi-zig", napi_module);
-    for (options.imports) |imp| {
-        lib_mod.addImport(imp.name, imp.module);
-    }
+    for (options.imports) |imp| lib_mod.addImport(imp.name, imp.module);
 
     const lib = b.addLibrary(.{
         .name = options.name,
         .root_module = lib_mod,
         .linkage = .dynamic,
     });
-
-    configureLinkerFlags(b, lib, options.target, node_api_def);
+    configureLinkerFlags(b, lib, options.target, node_api_def, options.host_exe, napi_dep);
 
     const install = b.addInstallArtifact(lib, .{
         .dest_dir = .{ .override = .lib },
         .dest_sub_path = b.fmt("{s}.node", .{options.name}),
     });
-
-    // connect to default install step so `zig build` builds the .node
     b.getInstallStep().dependOn(&install.step);
 
-    // install .d.ts to zig-out/lib/ for dev use
     if (options.npm) |npm| {
-        if (npm.dts) |dts_path| {
-            const install_dts = b.addInstallFileWithDir(dts_path, .lib, b.fmt("{s}.d.ts", .{options.name}));
-            b.getInstallStep().dependOn(&install_dts.step);
-        }
+        installDts(b, napi_dep, napi_module, options, npm.dts, .lib, b.fmt("{s}.d.ts", .{options.name}));
     }
 
-    // npm release mode
+    // npm release mode (cross-compile and scaffold)
     if (options.npm) |npm| {
         const do_npm = b.option(bool, "npm", "Cross-compile and generate npm packages") orelse false;
-        if (do_npm) {
-            addNpmRelease(b, napi_module, options, npm, node_api_def);
-        }
+        if (do_npm) addNpmRelease(b, napi_dep, napi_module, options, npm, node_api_def);
+    }
+}
+
+fn installDts(
+    b: *std.Build,
+    napi_dep: *std.Build.Dependency,
+    napi_module: *std.Build.Module,
+    options: LibOptions,
+    dts: Dts,
+    install_dir: std.Build.InstallDir,
+    sub_path: []const u8,
+) void {
+    switch (dts) {
+        .none => {},
+        .file => |path| {
+            const step = b.addInstallFileWithDir(path, install_dir, sub_path);
+            b.getInstallStep().dependOn(&step.step);
+        },
+        .auto => {
+            // host-targeted helper that imports the user module and
+            // prints its generated .d.ts to a file.
+            const host = b.graph.host;
+            const user_host_mod = b.createModule(.{
+                .root_source_file = options.root,
+                .target = host,
+                .optimize = .Debug,
+            });
+            user_host_mod.addImport("napi-zig", napi_module);
+            for (options.imports) |imp| user_host_mod.addImport(imp.name, imp.module);
+
+            const emit_mod = b.createModule(.{
+                .root_source_file = napi_dep.path("build/dts_emit.zig"),
+                .target = host,
+                .optimize = .Debug,
+            });
+            emit_mod.addImport("napi-zig", napi_module);
+            emit_mod.addImport("user-root", user_host_mod);
+
+            const exe = b.addExecutable(.{
+                .name = b.fmt("{s}-dts-emit", .{options.name}),
+                .root_module = emit_mod,
+            });
+
+            const run = b.addRunArtifact(exe);
+            const out = run.addOutputFileArg("index.d.ts");
+
+            const step = b.addInstallFileWithDir(out, install_dir, sub_path);
+            b.getInstallStep().dependOn(&step.step);
+        },
     }
 }
 
 fn addNpmRelease(
     b: *std.Build,
+    napi_dep: *std.Build.Dependency,
     napi_module: *std.Build.Module,
     options: LibOptions,
     npm: NpmConfig,
@@ -114,30 +158,22 @@ fn addNpmRelease(
 ) void {
     const wf = b.addWriteFiles();
 
-    // binding.js (platform loader, internal)
     _ = wf.add(
         b.fmt("npm/{s}/binding.js", .{options.name}),
         bindingJs(b.allocator, options.name, npm.scope),
     );
-
-    // root package.json
     _ = wf.add(
         b.fmt("npm/{s}/package.json", .{options.name}),
         rootPackageJson(b.allocator, options.name, npm),
     );
-
-    // default index.js
     _ = wf.add(
         b.fmt("npm/{s}/index.js", .{options.name}),
-        defaultIndexJs(b.allocator, options.name),
+        defaultIndexJs(b.allocator),
     );
 
-    // platform binding package.json files
     for (npm.platforms) |platform| {
         _ = wf.add(
-            b.fmt("npm/{s}/{s}/binding-{s}/package.json", .{
-                options.name, npm.scope, platform.suffix(),
-            }),
+            b.fmt("npm/{s}/{s}/binding-{s}/package.json", .{ options.name, npm.scope, platform.suffix() }),
             platformPackageJson(b.allocator, options.name, npm, platform),
         );
     }
@@ -149,7 +185,7 @@ fn addNpmRelease(
     });
     b.getInstallStep().dependOn(&install_wf.step);
 
-    // cross-compile .node for each platform
+    // cross-compile a .node for each platform.
     for (npm.platforms) |platform| {
         const target = b.resolveTargetQuery(platform.zigTarget());
 
@@ -158,48 +194,35 @@ fn addNpmRelease(
             .target = target,
             .optimize = .ReleaseFast,
         });
-
         lib_mod.addImport("napi-zig", napi_module);
-        for (options.imports) |imp| {
-            lib_mod.addImport(imp.name, imp.module);
-        }
+        for (options.imports) |imp| lib_mod.addImport(imp.name, imp.module);
 
         const lib = b.addLibrary(.{
             .name = options.name,
             .root_module = lib_mod,
             .linkage = .dynamic,
         });
-
-        configureLinkerFlags(b, lib, target, node_api_def);
+        configureLinkerFlags(b, lib, target, node_api_def, options.host_exe, napi_dep);
 
         const node_install = b.addInstallArtifact(lib, .{
             .dest_dir = .{ .override = .{
-                .custom = b.fmt("npm/{s}/{s}/binding-{s}", .{
-                    options.name, npm.scope, platform.suffix(),
-                }),
+                .custom = b.fmt("npm/{s}/{s}/binding-{s}", .{ options.name, npm.scope, platform.suffix() }),
             } },
             .dest_sub_path = b.fmt("{s}.node", .{options.name}),
             .pdb_dir = .disabled,
             .implib_dir = .disabled,
         });
-
         b.getInstallStep().dependOn(&node_install.step);
     }
 
-    // user-provided .d.ts
-    if (npm.dts) |dts_path| {
-        const install_dts = b.addInstallFileWithDir(
-            dts_path,
-            .{ .custom = b.fmt("npm/{s}", .{options.name}) },
-            "index.d.ts",
-        );
-        b.getInstallStep().dependOn(&install_dts.step);
-    }
+    installDts(b, napi_dep, napi_module, options, npm.dts, .{ .custom = b.fmt("npm/{s}", .{options.name}) }, "index.d.ts");
 }
 
-fn configureLinkerFlags(b: *std.Build, lib: *std.Build.Step.Compile, target: std.Build.ResolvedTarget, node_api_def: std.Build.LazyPath) void {
+fn configureLinkerFlags(b: *std.Build, lib: *std.Build.Step.Compile, target: std.Build.ResolvedTarget, node_api_def: std.Build.LazyPath, host_exe: []const u8, napi_dep: *std.Build.Dependency) void {
     lib.root_module.red_zone = false;
     lib.root_module.unwind_tables = .none;
+    // drop unreferenced sections, meaningful saving on small addons.
+    lib.link_gc_sections = true;
 
     switch (target.result.os.tag) {
         .macos => {
@@ -207,11 +230,14 @@ fn configureLinkerFlags(b: *std.Build, lib: *std.Build.Step.Compile, target: std
         },
         .linux, .freebsd => {
             lib.root_module.link_libc = true;
+            // limit exports to the two n-api entry points. smaller binaries,
+            // no symbol collisions across addons in the same process.
+            lib.setVersionScript(napi_dep.path("build/exports.ld"));
         },
         .windows => {
-            // windows PE/COFF requires all symbols resolved at link time.
-            // generate an import library from node_api.def so the linker knows
-            // these N-API symbols come from node.exe at runtime.
+            // pe/coff needs all symbols resolved at link time. generate
+            // an import library from node_api.def so the linker knows the
+            // n-api symbols come from the host exe at runtime.
             const machine = switch (target.result.cpu.arch) {
                 .x86_64 => "i386:x86-64",
                 .aarch64 => "arm64",
@@ -221,7 +247,7 @@ fn configureLinkerFlags(b: *std.Build, lib: *std.Build.Step.Compile, target: std
             dlltool.addArg("-d");
             dlltool.addFileArg(node_api_def);
             dlltool.addArg("-D");
-            dlltool.addArg("node.exe");
+            dlltool.addArg(host_exe);
             dlltool.addArg("-m");
             dlltool.addArg(machine);
             dlltool.addArg("-l");
@@ -236,7 +262,7 @@ fn rootPackageJson(alloc: std.mem.Allocator, name: []const u8, npm: NpmConfig) [
     var deps: []const u8 = "";
     for (npm.platforms, 0..) |platform, i| {
         deps = std.fmt.allocPrint(alloc, "{s}    \"{s}/binding-{s}\": \"0.0.0\"{s}\n", .{
-            deps, npm.scope, platform.suffix(),
+            deps,                                       npm.scope, platform.suffix(),
             if (i < npm.platforms.len - 1) "," else "",
         }) catch return "";
     }
@@ -271,13 +297,7 @@ fn rootPackageJson(alloc: std.mem.Allocator, name: []const u8, npm: NpmConfig) [
         \\{s}  }}
         \\}}
         \\
-    , .{
-        name,
-        desc_line,
-        repo_line,
-        npm.license,
-        deps,
-    }) catch "";
+    , .{ name, desc_line, repo_line, npm.license, deps }) catch "";
 }
 
 fn platformPackageJson(alloc: std.mem.Allocator, name: []const u8, npm: NpmConfig, platform: Platform) []const u8 {
@@ -307,14 +327,8 @@ fn platformPackageJson(alloc: std.mem.Allocator, name: []const u8, npm: NpmConfi
         \\}}
         \\
     , .{
-        npm.scope,
-        platform.suffix(),
-        repo_line,
-        platform.npmOs(),
-        platform.npmCpu(),
-        libc_line,
-        name,
-        name,
+        npm.scope,         platform.suffix(), repo_line, platform.npmOs(),
+        platform.npmCpu(), libc_line,         name,      name,
     }) catch "";
 }
 
@@ -387,8 +401,7 @@ fn bindingJs(alloc: std.mem.Allocator, name: []const u8, scope: []const u8) []co
     , .{ scope, name, scope, name }) catch "";
 }
 
-fn defaultIndexJs(alloc: std.mem.Allocator, name: []const u8) []const u8 {
-    _ = name;
+fn defaultIndexJs(alloc: std.mem.Allocator) []const u8 {
     return std.fmt.allocPrint(alloc,
         \\import binding from './binding.js';
         \\export default binding;

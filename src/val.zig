@@ -1,359 +1,291 @@
-const c = @import("c.zig");
-const convert = @import("convert.zig");
-const Env = @import("env.zig").Env;
 const std = @import("std");
+const c = @import("c.zig");
+const err = @import("error.zig");
+const convert = @import("convert.zig");
+const env_mod = @import("env.zig");
 
-/// A JavaScript value handle, wrapping a raw `napi_value`.
-///
-/// Convert to Zig types with `to(env, T)`. Access properties with
-/// `get*`/`set*`. Inspect with `typeOf`/`is*`.
-pub const Val = struct {
-    raw: c.napi_value,
+const Env = env_mod.Env;
+const check = err.check;
 
-    /// Converts this JS value to any supported Zig type.
-    ///
-    /// Supports bool, integers, floats, optionals, enums, `[]const u8`,
-    /// `[]T`, structs, `Callback`, and `Val` (passthrough). Slices and
-    /// strings are allocated on `env.arena`.
+/// opaque handle to a js value, valid only within the current call.
+/// extern layout guarantees `[]const Val` is castable to `[*]const napi_value`.
+pub const Val = extern struct {
+    handle: c.napi_value,
+
     pub fn to(self: Val, env: Env, comptime T: type) !T {
         return convert.fromJs(T, env, self);
     }
 
-    /// Returns the JS type of this value.
+    inline fn boolFn(self: Val, env: Env, comptime nf: anytype, args: anytype) !bool {
+        var out: bool = undefined;
+        try check(@call(.auto, nf, .{ env.handle, self.handle } ++ args ++ .{&out}));
+        return out;
+    }
+
+    inline fn valFn(self: Val, env: Env, comptime nf: anytype, args: anytype) !Val {
+        var out: c.napi_value = undefined;
+        try check(@call(.auto, nf, .{ env.handle, self.handle } ++ args ++ .{&out}));
+        return .{ .handle = out };
+    }
+
     pub fn typeOf(self: Val, env: Env) !c.napi_valuetype {
-        var result: c.napi_valuetype = undefined;
-        try check(c.napi_typeof(env.raw, self.raw, &result));
-        return result;
+        var out: c.napi_valuetype = undefined;
+        try check(c.napi_typeof(env.handle, self.handle, &out));
+        return out;
     }
 
-    /// Returns `true` if this value is a JS Array.
+    pub fn strictEquals(self: Val, env: Env, other: Val) !bool {
+        return self.boolFn(env, c.napi_strict_equals, .{other.handle});
+    }
     pub fn isArray(self: Val, env: Env) !bool {
-        var result: bool = undefined;
-        try check(c.napi_is_array(env.raw, self.raw, &result));
-        return result;
+        return self.boolFn(env, c.napi_is_array, .{});
     }
-
-    /// Returns `true` if this value is a JS ArrayBuffer.
     pub fn isArrayBuffer(self: Val, env: Env) !bool {
-        var result: bool = undefined;
-        try check(c.napi_is_arraybuffer(env.raw, self.raw, &result));
-        return result;
+        return self.boolFn(env, c.napi_is_arraybuffer, .{});
     }
-
-    /// Returns `true` if this value is a Node.js Buffer.
     pub fn isBuffer(self: Val, env: Env) !bool {
-        var result: bool = undefined;
-        try check(c.napi_is_buffer(env.raw, self.raw, &result));
-        return result;
+        return self.boolFn(env, c.napi_is_buffer, .{});
     }
-
-    /// Returns `true` if this value is a JS TypedArray.
     pub fn isTypedArray(self: Val, env: Env) !bool {
-        var result: bool = undefined;
-        try check(c.napi_is_typedarray(env.raw, self.raw, &result));
-        return result;
+        return self.boolFn(env, c.napi_is_typedarray, .{});
     }
-
-    /// Gets an object property by dynamic key.
-    pub fn getProperty(self: Val, env: Env, key: Val) !Val {
-        var result: c.napi_value = undefined;
-        try check(c.napi_get_property(env.raw, self.raw, key.raw, &result));
-        return .{ .raw = result };
+    pub fn isDate(self: Val, env: Env) !bool {
+        return self.boolFn(env, c.napi_is_date, .{});
     }
-
-    /// Gets an object property by compile-time string key.
-    pub fn getNamedProperty(self: Val, env: Env, key: [:0]const u8) !Val {
-        var result: c.napi_value = undefined;
-        try check(c.napi_get_named_property(env.raw, self.raw, key, &result));
-        return .{ .raw = result };
+    pub fn isPromise(self: Val, env: Env) !bool {
+        return self.boolFn(env, c.napi_is_promise, .{});
     }
-
-    /// Sets an object property by dynamic key.
-    pub fn setProperty(self: Val, env: Env, key: Val, value: Val) !void {
-        try check(c.napi_set_property(env.raw, self.raw, key.raw, value.raw));
-    }
-
-    /// Sets an object property by compile-time string key.
-    pub fn setNamedProperty(self: Val, env: Env, key: [:0]const u8, value: Val) !void {
-        try check(c.napi_set_named_property(env.raw, self.raw, key, value.raw));
-    }
-
-    /// Returns `true` if the object has a property with the given key.
     pub fn hasNamedProperty(self: Val, env: Env, key: [:0]const u8) !bool {
-        var result: bool = undefined;
-        try check(c.napi_has_named_property(env.raw, self.raw, key, &result));
-        return result;
+        return self.boolFn(env, c.napi_has_named_property, .{key.ptr});
     }
 
-    /// Gets an array element by index.
+    pub fn getProperty(self: Val, env: Env, key: Val) !Val {
+        return self.valFn(env, c.napi_get_property, .{key.handle});
+    }
+    pub fn getNamedProperty(self: Val, env: Env, key: [:0]const u8) !Val {
+        return self.valFn(env, c.napi_get_named_property, .{key.ptr});
+    }
     pub fn getElement(self: Val, env: Env, index: u32) !Val {
-        var result: c.napi_value = undefined;
-        try check(c.napi_get_element(env.raw, self.raw, index, &result));
-        return .{ .raw = result };
+        return self.valFn(env, c.napi_get_element, .{index});
     }
 
-    /// Sets an array element by index.
+    pub fn setProperty(self: Val, env: Env, key: Val, value: Val) !void {
+        try check(c.napi_set_property(env.handle, self.handle, key.handle, value.handle));
+    }
+
+    pub fn setNamedProperty(self: Val, env: Env, key: [:0]const u8, value: Val) !void {
+        try check(c.napi_set_named_property(env.handle, self.handle, key.ptr, value.handle));
+    }
+
     pub fn setElement(self: Val, env: Env, index: u32, value: Val) !void {
-        try check(c.napi_set_element(env.raw, self.raw, index, value.raw));
+        try check(c.napi_set_element(env.handle, self.handle, index, value.handle));
     }
 
-    /// Returns the length of a JS Array.
     pub fn getArrayLength(self: Val, env: Env) !u32 {
-        var result: u32 = undefined;
-        try check(c.napi_get_array_length(env.raw, self.raw, &result));
-        return result;
+        var out: u32 = undefined;
+        try check(c.napi_get_array_length(env.handle, self.handle, &out));
+        return out;
     }
 
-    /// Returns a Zig slice over the raw bytes of an ArrayBuffer.
     pub fn getArrayBufferData(self: Val, env: Env) ![]u8 {
-        var data: ?*anyopaque = null;
-        var len: usize = 0;
-        try check(c.napi_get_arraybuffer_info(env.raw, self.raw, &data, &len));
-        return if (data) |ptr| @as([*]u8, @ptrCast(ptr))[0..len] else &.{};
+        return bufferInfo(env, self, c.napi_get_arraybuffer_info);
+    }
+    pub fn getBufferData(self: Val, env: Env) ![]u8 {
+        return bufferInfo(env, self, c.napi_get_buffer_info);
     }
 
-    /// Returns a Zig slice over the raw bytes of a Node.js Buffer.
-    pub fn getBufferData(self: Val, env: Env) ![]u8 {
-        var data: ?*anyopaque = null;
-        var len: usize = 0;
-        try check(c.napi_get_buffer_info(env.raw, self.raw, &data, &len));
-        return if (data) |ptr| @as([*]u8, @ptrCast(ptr))[0..len] else &.{};
+    pub fn getExternalData(self: Val, env: Env) !?*anyopaque {
+        var out: ?*anyopaque = null;
+        try check(c.napi_get_value_external(env.handle, self.handle, &out));
+        return out;
+    }
+
+    pub fn getDateValue(self: Val, env: Env) !f64 {
+        var out: f64 = undefined;
+        try check(c.napi_get_date_value(env.handle, self.handle, &out));
+        return out;
     }
 };
 
-/// A JS callback function handle.
-///
-/// Validated on conversion from JS, throws TypeError if the value is
-/// not a function. Use `call` to invoke, `callWith` for a specific
-/// `this` binding, or `threadsafe` to call from background threads.
+fn bufferInfo(env: Env, val: Val, comptime nf: anytype) ![]u8 {
+    var data: ?*anyopaque = null;
+    var len: usize = 0;
+    try check(nf(env.handle, val.handle, &data, &len));
+    return if (data) |p| @as([*]u8, @ptrCast(p))[0..len] else &.{};
+}
+
+/// js function handle, validated as callable.
 pub const Callback = struct {
     val: Val,
 
-    /// Calls the function with `undefined` as `this`.
-    pub fn call(self: Callback, env: Env, args: []const Val) !Val {
-        const undef = try env.createUndefined();
-        return self.invoke(env, undef, args);
+    /// call with `undefined` as `this`. args is a tuple or `[]const Val`.
+    pub fn call(self: Callback, env: Env, args: anytype) !Val {
+        return self.callWith(env, try env.createUndefined(), args);
     }
 
-    /// Calls the function with a specific `this` binding.
-    pub fn callWith(self: Callback, env: Env, this: Val, args: []const Val) !Val {
-        return self.invoke(env, this, args);
+    /// call with a specific `this` binding.
+    pub fn callWith(self: Callback, env: Env, this: Val, args: anytype) !Val {
+        const T = @TypeOf(args);
+
+        if (T == []const Val or T == []Val) {
+            const argv: ?[*]const c.napi_value = if (args.len > 0) @ptrCast(args.ptr) else null;
+            return self.invoke(env, this, argv, args.len);
+        }
+
+        const info = @typeInfo(T);
+        if (info == .@"struct" and info.@"struct".is_tuple) {
+            const fields = info.@"struct".fields;
+            var argv: [fields.len]c.napi_value = undefined;
+            inline for (fields, 0..) |f, i| {
+                const v = @field(args, f.name);
+                argv[i] = (if (@TypeOf(v) == Val) v else try env.toJs(v)).handle;
+            }
+            return self.invoke(env, this, if (fields.len > 0) &argv else null, fields.len);
+        }
+
+        @compileError("Callback args must be a tuple or []const Val, got " ++ @typeName(T));
     }
 
-    fn invoke(self: Callback, env: Env, this: Val, args: []const Val) !Val {
-        var result: c.napi_value = undefined;
-        try check(c.napi_call_function(
-            env.raw,
-            this.raw,
-            self.val.raw,
-            args.len,
-            if (args.len > 0) @ptrCast(args.ptr) else null,
-            &result,
-        ));
-        return .{ .raw = result };
+    fn invoke(self: Callback, env: Env, this: Val, argv: ?[*]const c.napi_value, argc: usize) !Val {
+        var out: c.napi_value = undefined;
+        try check(c.napi_call_function(env.handle, this.handle, self.val.handle, argc, argv, &out));
+        return .{ .handle = out };
     }
 
-    /// Creates a threadsafe version of this function that can be called
-    /// from any thread. Pass the data type the callback will receive,
-    /// or `void` for no data. Call `release()` when done.
+    /// wrap as a thread-safe function. use `void` for signal-only callbacks.
     pub fn threadsafe(self: Callback, env: Env, comptime name: [*:0]const u8, comptime T: type) !ThreadsafeFn(T) {
-        var name_val: c.napi_value = undefined;
-        try check(c.napi_create_string_utf8(env.raw, name, c.NAPI_AUTO_LENGTH, &name_val));
-        var result: c.napi_threadsafe_function = undefined;
+        const name_val = try env.createString(std.mem.span(name));
+        var out: c.napi_threadsafe_function = undefined;
         try check(c.napi_create_threadsafe_function(
-            env.raw,
-            self.val.raw,
+            env.handle,
+            self.val.handle,
             null,
-            name_val,
+            name_val.handle,
             0,
             1,
             null,
             null,
             null,
             if (T == void) null else &ThreadsafeFn(T).callJs,
-            &result,
+            &out,
         ));
-        return .{ .raw = result };
+        return .{ .handle = out };
     }
 };
 
-/// A thread-safe wrapper around a JS function, parameterized by the
-/// data type passed to the callback. Use `void` for no data.
-///
-/// Created via `Callback.threadsafe(env, name, T)`. Must be released when done.
+/// thread-safe wrapper around a js function. T is the per-call payload.
 pub fn ThreadsafeFn(comptime T: type) type {
     return struct {
-        raw: c.napi_threadsafe_function,
+        handle: c.napi_threadsafe_function,
 
         const Self = @This();
-        pub const CallMode = c.napi_threadsafe_function_call_mode;
+        pub const Mode = c.napi_threadsafe_function_call_mode;
 
-        /// Queues a call to the JS function from any thread.
-        /// The value is converted to JS and passed as the callback argument.
-        pub fn call(self: Self, value: T, mode: CallMode) !void {
-            if (T == void) {
-                try check(c.napi_call_threadsafe_function(self.raw, null, mode));
-            } else {
-                const ptr = try std.heap.smp_allocator.create(T);
-                ptr.* = value;
-                if (c.napi_call_threadsafe_function(self.raw, ptr, mode) != .ok) {
-                    std.heap.smp_allocator.destroy(ptr);
-                    return error.napi_error;
-                }
-            }
+        pub fn call(self: Self, value: T, mode: Mode) !void {
+            if (T == void) return check(c.napi_call_threadsafe_function(self.handle, null, mode));
+
+            const ptr = try std.heap.smp_allocator.create(T);
+            errdefer std.heap.smp_allocator.destroy(ptr);
+            ptr.* = value;
+            try check(c.napi_call_threadsafe_function(self.handle, ptr, mode));
         }
 
-        /// Releases the function. Must be called when done.
         pub fn release(self: Self) !void {
-            try check(c.napi_release_threadsafe_function(self.raw, .release));
+            return check(c.napi_release_threadsafe_function(self.handle, .release));
         }
-
-        /// Aborts the function, rejecting any pending calls.
         pub fn abort(self: Self) !void {
-            try check(c.napi_release_threadsafe_function(self.raw, .abort));
+            return check(c.napi_release_threadsafe_function(self.handle, .abort));
         }
-
-        /// Indicates a new thread will use this function.
         pub fn acquire(self: Self) !void {
-            try check(c.napi_acquire_threadsafe_function(self.raw));
+            return check(c.napi_acquire_threadsafe_function(self.handle));
         }
-
-        /// Prevents this function from keeping the event loop alive.
         pub fn unref(self: Self, env: Env) !void {
-            try check(c.napi_unref_threadsafe_function(env.raw, self.raw));
+            return check(c.napi_unref_threadsafe_function(env.handle, self.handle));
         }
-
-        /// Allows this function to keep the event loop alive (default).
         pub fn ref(self: Self, env: Env) !void {
-            try check(c.napi_ref_threadsafe_function(env.raw, self.raw));
+            return check(c.napi_ref_threadsafe_function(env.handle, self.handle));
         }
 
-        // called on the main thread by Node.js to convert data and invoke the JS callback.
         fn callJs(raw_env: c.napi_env, js_callback: c.napi_value, _: ?*anyopaque, data: ?*anyopaque) callconv(.c) void {
             const typed: *T = @ptrCast(@alignCast(data orelse return));
             defer std.heap.smp_allocator.destroy(typed);
 
-            var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+            var arena = std.heap.ArenaAllocator.init(std.heap.smp_allocator);
             defer arena.deinit();
-            const env: Env = .{ .raw = raw_env, .arena = &arena };
+            const env: Env = .{ .handle = raw_env, .arena = &arena };
 
             const js_val = convert.toJs(T, env, typed.*) catch return;
             const undef = env.createUndefined() catch return;
-            var result: c.napi_value = undefined;
-            _ = c.napi_call_function(raw_env, undef.raw, js_callback, 1, @ptrCast(&js_val.raw), &result);
+            var out: c.napi_value = undefined;
+            _ = c.napi_call_function(raw_env, undef.handle, js_callback, 1, @ptrCast(&js_val.handle), &out);
         }
     };
 }
 
-/// A strong reference to a JS value, preventing garbage collection.
-/// Created via `Env.createReference`.
+/// strong reference preventing gc of the wrapped js value.
 pub const Ref = struct {
-    raw: c.napi_ref,
+    handle: c.napi_ref,
 
-    /// Releases the reference. Must be called when no longer needed.
     pub fn delete(self: Ref, env: Env) !void {
-        try check(c.napi_delete_reference(env.raw, self.raw));
+        try check(c.napi_delete_reference(env.handle, self.handle));
     }
 
-    /// Returns the referenced JS value.
     pub fn value(self: Ref, env: Env) !Val {
-        var result: c.napi_value = undefined;
-        try check(c.napi_get_reference_value(env.raw, self.raw, &result));
-        return .{ .raw = result };
+        var out: c.napi_value = undefined;
+        try check(c.napi_get_reference_value(env.handle, self.handle, &out));
+        return .{ .handle = out };
     }
 };
 
-/// A deferred handle for resolving or rejecting a Promise.
-/// Created via `Env.createPromise`, consumed on resolve/reject.
+/// single-use handle for resolving or rejecting a promise.
 pub const Deferred = struct {
-    raw: c.napi_deferred,
+    handle: c.napi_deferred,
 
-    /// Resolves the promise with the given JS value.
     pub fn resolve(self: Deferred, env: Env, value: Val) !void {
-        try check(c.napi_resolve_deferred(env.raw, self.raw, value.raw));
+        try check(c.napi_resolve_deferred(env.handle, self.handle, value.handle));
     }
 
-    /// Rejects the promise with the given JS value.
     pub fn reject(self: Deferred, env: Env, value: Val) !void {
-        try check(c.napi_reject_deferred(env.raw, self.raw, value.raw));
+        try check(c.napi_reject_deferred(env.handle, self.handle, value.handle));
     }
 };
 
-/// Raw function call info for extracting arguments and `this`.
+/// raw call info for variadic or dynamic-arity functions.
 pub const CallInfo = struct {
-    raw: c.napi_callback_info,
+    handle: c.napi_callback_info,
 
-    /// Extracts up to `max` arguments. Missing positions filled with `undefined`.
-    pub fn getArgs(self: CallInfo, env: Env, comptime max: usize) ![max]Val {
-        var arg_count: usize = max;
-        if (max > 0) {
-            var argv: [max]c.napi_value = undefined;
-            try check(c.napi_get_cb_info(env.raw, self.raw, &arg_count, &argv, null, null));
-            const undef = try env.createUndefined();
-            var args: [max]Val = undefined;
-            inline for (0..max) |i| {
-                args[i] = if (i < arg_count) .{ .raw = argv[i] } else undef;
+    /// extract up to `max` args. missing slots are filled with `undefined`.
+    pub fn args(self: CallInfo, env: Env, comptime max: usize) ![max]Val {
+        if (max == 0) return .{};
+
+        var argc: usize = max;
+        var argv: [max]c.napi_value = undefined;
+        try check(c.napi_get_cb_info(env.handle, self.handle, &argc, &argv, null, null));
+
+        var out: [max]Val = undefined;
+        var undef: ?Val = null;
+        inline for (0..max) |i| {
+            if (i < argc) {
+                out[i] = .{ .handle = argv[i] };
+            } else {
+                if (undef == null) undef = try env.createUndefined();
+                out[i] = undef.?;
             }
-            return args;
-        } else {
-            try check(c.napi_get_cb_info(env.raw, self.raw, &arg_count, null, null, null));
-            return .{};
         }
+        return out;
     }
 
-    /// Returns the number of arguments actually passed.
-    pub fn getArgCount(self: CallInfo, env: Env) !usize {
-        var count: usize = 0;
-        try check(c.napi_get_cb_info(env.raw, self.raw, &count, null, null, null));
-        return count;
+    /// number of args actually passed.
+    pub fn argCount(self: CallInfo, env: Env) !usize {
+        var n: usize = 0;
+        try check(c.napi_get_cb_info(env.handle, self.handle, &n, null, null, null));
+        return n;
     }
 
-    /// Returns the `this` binding of the call.
-    pub fn getThis(self: CallInfo, env: Env) !Val {
-        var result: c.napi_value = undefined;
-        try check(c.napi_get_cb_info(env.raw, self.raw, null, null, &result, null));
-        return .{ .raw = result };
+    /// the `this` binding of the call.
+    pub fn this(self: CallInfo, env: Env) !Val {
+        var out: c.napi_value = undefined;
+        try check(c.napi_get_cb_info(env.handle, self.handle, null, null, &out, null));
+        return .{ .handle = out };
     }
 };
-
-pub const NapiError = error{napi_error};
-
-pub fn check(status: c.napi_status) NapiError!void {
-    if (status != .ok) return error.napi_error;
-}
-
-const testing = @import("std").testing;
-
-test "check returns void on ok status" {
-    try check(.ok);
-}
-
-test "check returns error on invalid_arg" {
-    try testing.expectError(error.napi_error, check(.invalid_arg));
-}
-
-test "check returns error on pending_exception" {
-    try testing.expectError(error.napi_error, check(.pending_exception));
-}
-
-test "check returns error on generic_failure" {
-    try testing.expectError(error.napi_error, check(.generic_failure));
-}
-
-test "check returns error on all non ok statuses" {
-    const statuses = [_]c.napi_status{
-        .object_expected,
-        .string_expected,
-        .function_expected,
-        .number_expected,
-        .boolean_expected,
-        .array_expected,
-        .cancelled,
-        .queue_full,
-        .closing,
-        .would_deadlock,
-    };
-    for (statuses) |status| {
-        try testing.expectError(error.napi_error, check(status));
-    }
-}

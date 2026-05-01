@@ -6,40 +6,317 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  ZIG_GLOBAL_CACHE_DIR: ${{ github.workspace }}/.zig-cache-global
+  DISABLE_V8_COMPILE_CACHE: 1
+
 jobs:
   test:
-    name: Test on ${{ matrix.os }}
+    name: Build & test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        # windows-latest excluded, bun crashes on windows during `bun test`
+        # (upstream bun bug). re-add when fixed, node coverage on windows
+        # comes from node-abi + cross-install.
         os: [ubuntu-latest, macos-latest]
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Zig
-        uses: mlugg/setup-zig@v2
-        with:
-          version: 0.16.0-dev.2535+b5bd49460
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-zig
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - run: bun install --frozen-lockfile
 
-      - name: Type check
-        run: bun run type-check
+      # Type-check covers cli/ + the auto-generated fixture-lib/<name>.d.ts.
+      # The latter requires a prior zig build to materialize the file.
+      - name: Pre-build fixture-lib (for dts)
+        run: cd tests/fixture-lib && zig build
 
-      - name: Lint
-        run: bun run lint
+      - run: bun run type-check
+      - run: bun run lint
+      - run: zig build test
+      - run: bun test
+      - run: bun run build:cli
 
-      - name: Tests
-        run: zig build test
+  node-abi:
+    name: Node ${{ matrix.node }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [18, 20, 22, 24, 25]
 
-      - name: Build CLI
-        run: bun run build:cli
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-zig
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - run: node tests/smoke.mjs
+
+  deno-abi:
+    name: Deno (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # windows-latest excluded, deno + windows currently fails with an
+        # opaque exit 1 we haven't been able to reproduce or diagnose.
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-zig
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - run: deno run --allow-all tests/smoke.mjs
+
+  linux-arm64-abi:
+    name: Linux arm64 glibc (Node ${{ matrix.node }})
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-zig
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - run: node tests/smoke.mjs
+
+  musl-abi:
+    name: Linux ${{ matrix.arch }} musl (Alpine)
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-latest
+            target: x86_64-linux-musl
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            target: aarch64-linux-musl
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-zig
+        with:
+          cache-suffix: musl-${{ matrix.arch }}
+
+      - name: Cross-compile fixture-lib for ${{ matrix.target }}
+        run: cd tests/fixture-lib && zig build -Dtarget=${{ matrix.target }}
+
+      - name: Smoke-test inside node:24-alpine
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/work \
+            -w /work \
+            -e DISABLE_V8_COMPILE_CACHE=1 \
+            node:24-alpine \
+            node tests/smoke.mjs
+
+  freebsd-abi:
+    name: FreeBSD x64 (VM)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-zig
+        with:
+          cache-suffix: freebsd
+
+      - name: Cross-compile fixture-lib for x86_64-freebsd
+        run: cd tests/fixture-lib && zig build -Dtarget=x86_64-freebsd
+
+      - name: Boot FreeBSD VM and smoke-test
+        uses: cross-platform-actions/action@v0.27.0
+        with:
+          operating_system: freebsd
+          version: "14.1"
+          memory: 4G
+          cpu_count: 3
+          shell: bash
+          run: |
+            sudo pkg install -y node22
+            node tests/smoke.mjs
+
+  cross-compile:
+    name: Cross-compile package
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-zig
+        with:
+          cache-suffix: cross
+
+      - name: Cross-compile fixture-cli for every target
+        run: cd tests/fixture-cli && zig build -Dnpm=true --release=fast
+
+      - name: Upload npm package directory
+        uses: actions/upload-artifact@v4
+        with:
+          name: cross-compiled-pkg
+          path: tests/fixture-cli/zig-out/npm/
+
+  cross-install:
+    name: Install + load (${{ matrix.label }})
+    needs: cross-compile
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: linux-x64-gnu
+            runner: ubuntu-latest
+          - label: linux-arm64-gnu
+            runner: ubuntu-24.04-arm
+          - label: macos-arm64
+            runner: macos-latest
+          - label: windows-x64
+            runner: windows-latest
+          - label: windows-arm64
+            runner: windows-11-arm
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: cross-compiled-pkg
+          path: pkg-out/
+
+      - run: node tests/installed-smoke.mjs pkg-out/fcli
+
+  cross-install-musl:
+    name: Install + load (linux-${{ matrix.arch }}-musl)
+    needs: cross-compile
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: cross-compiled-pkg
+          path: pkg-out/
+
+      - name: Load + smoke-test inside node:24-alpine
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/work \
+            -w /work \
+            -e DISABLE_V8_COMPILE_CACHE=1 \
+            node:24-alpine \
+            node tests/installed-smoke.mjs pkg-out/fcli
+
+  cross-install-armv7:
+    name: Install + load (linux-arm-${{ matrix.libc }})
+    needs: cross-compile
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - libc: gnu
+            image: node:20-slim
+          - libc: musl
+            image: node:20-alpine
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: cross-compiled-pkg
+          path: pkg-out/
+
+      - name: Enable QEMU for foreign-arch containers
+        run: docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+
+      - name: Load + smoke-test inside ${{ matrix.image }} (armv7)
+        run: |
+          docker run --rm \
+            --platform linux/arm/v7 \
+            -v ${{ github.workspace }}:/work \
+            -w /work \
+            -e DISABLE_V8_COMPILE_CACHE=1 \
+            ${{ matrix.image }} \
+            node tests/installed-smoke.mjs pkg-out/fcli
+
+  cross-install-freebsd:
+    name: Install + load (freebsd-x64)
+    needs: cross-compile
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: cross-compiled-pkg
+          path: pkg-out/
+
+      - name: Load + smoke-test inside FreeBSD VM
+        uses: cross-platform-actions/action@v0.27.0
+        with:
+          operating_system: freebsd
+          version: "14.1"
+          memory: 4G
+          cpu_count: 3
+          shell: bash
+          run: |
+            sudo pkg install -y node22
+            node tests/installed-smoke.mjs pkg-out/fcli
+
+  done:
+    name: All required checks passed
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - test
+      - node-abi
+      - deno-abi
+      - linux-arm64-abi
+      - musl-abi
+      - freebsd-abi
+      - cross-compile
+      - cross-install
+      - cross-install-musl
+      - cross-install-armv7
+      - cross-install-freebsd
+
+    steps:
+      - name: Verify upstream results
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]] || [[ "${{ contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "one or more required jobs failed or were cancelled"
+            exit 1
+          fi
+          echo "all required jobs passed"

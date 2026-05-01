@@ -247,10 +247,10 @@ export async function bump(options: BumpOptions): Promise<void> {
 
     if (doPush) {
       const pushSpinner = ora("Pushing to remote...").start();
-      await runArgs("git", ["push"]);
-      if (doTag) {
-        await runArgs("git", ["push", "--tags"]);
-      }
+      // --follow-tags pushes the branch and any annotated tags reachable
+      // from it in a single round-trip; if no tag was created, it's a
+      // no-op for the tag set.
+      await runArgs("git", ["push", "--follow-tags"]);
       pushSpinner.succeed("Pushed");
     }
   } catch (e) {
