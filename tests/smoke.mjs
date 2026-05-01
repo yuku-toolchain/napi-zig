@@ -7,13 +7,18 @@ import assert from "node:assert/strict";
 const here = dirname(fileURLToPath(import.meta.url));
 const fixtureDir = join(here, "fixture-lib");
 
-const built = spawnSync("zig", ["build"], {
-  cwd: fixtureDir,
-  stdio: "inherit",
-});
-if (built.status !== 0) {
-  console.error("zig build failed");
-  process.exit(built.status ?? 1);
+// Skip the in-process zig build when CI has already pre-built the fixture.
+// Cross-runtime spawnSync semantics (esp. Deno on Windows) make in-process
+// builds unreliable; the CI flag side-steps that.
+if (!process.argv.includes("--skip-build")) {
+  const built = spawnSync("zig", ["build"], {
+    cwd: fixtureDir,
+    stdio: "inherit",
+  });
+  if (built.status !== 0) {
+    console.error("zig build failed");
+    process.exit(built.status ?? 1);
+  }
 }
 
 const require = createRequire(import.meta.url);
