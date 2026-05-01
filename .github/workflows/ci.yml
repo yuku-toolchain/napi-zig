@@ -272,6 +272,77 @@ jobs:
       - name: Smoke-test addon under Node (native arm64)
         run: node tests/smoke.mjs
 
+  macos-x64-abi:
+    name: macOS x64 (native, node ${{ matrix.node }})
+    runs-on: macos-13 # last GitHub-hosted x86_64 macos runner
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: master
+
+      - name: Cache zig artifacts
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ZIG_GLOBAL_CACHE_DIR }}
+          key: ${{ runner.os }}-zig-x64-${{ hashFiles('**/build.zig.zon', '**/build.zig') }}
+          restore-keys: |
+            ${{ runner.os }}-zig-x64-
+            ${{ runner.os }}-zig-
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Smoke-test addon under Node (native x64)
+        run: node tests/smoke.mjs
+
+  freebsd-abi:
+    name: FreeBSD x64 (VM)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: master
+
+      - name: Cache zig artifacts
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ZIG_GLOBAL_CACHE_DIR }}
+          key: ${{ runner.os }}-zig-freebsd-${{ hashFiles('**/build.zig.zon', '**/build.zig') }}
+          restore-keys: |
+            ${{ runner.os }}-zig-freebsd-
+            ${{ runner.os }}-zig-
+
+      - name: Cross-compile fixture-lib for x86_64-freebsd
+        run: cd tests/fixture-lib && zig build -Dtarget=x86_64-freebsd
+
+      - name: Boot FreeBSD VM and smoke-test
+        uses: cross-platform-actions/action@v0.27.0
+        with:
+          operating_system: freebsd
+          version: "14.1"
+          memory: 4G
+          cpu_count: 3
+          shell: bash
+          run: |
+            sudo pkg install -y node22
+            node tests/smoke.mjs
+
   done:
     # branch-protection target. one job to require, automatically updates as
     # upstream jobs are added or removed. fails if any required job failed
@@ -287,6 +358,8 @@ jobs:
       - cross-install
       - musl-abi
       - linux-arm64-abi
+      - macos-x64-abi
+      - freebsd-abi
     steps:
       - name: Verify upstream results
         run: |
