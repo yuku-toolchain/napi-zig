@@ -14,7 +14,18 @@ pub fn build(b: *std.Build) void {
             .scope = "@fixture",
             .repository = .{ .url = "https://example.com/fixture" },
             .description = "fixture for cli tests",
-            .platforms = &.{ .linux_x64_gnu, .macos_arm64, .windows_x64 },
+            // covers every target the cross-install matrix loads on.
+            // macos_x64 is intentionally omitted, github no longer offers
+            // a hosted x86_64 macos runner.
+            .platforms = &.{
+                .linux_x64_gnu,
+                .linux_arm64_gnu,
+                .linux_x64_musl,
+                .linux_arm64_musl,
+                .macos_arm64,
+                .windows_x64,
+                .freebsd_x64,
+            },
         },
     });
 }

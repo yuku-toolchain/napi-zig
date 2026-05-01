@@ -98,23 +98,6 @@ jobs:
 
       - run: node tests/smoke.mjs
 
-  macos-x64-abi:
-    name: macOS x64 (Node ${{ matrix.node }})
-    runs-on: macos-13 # last GitHub-hosted x86_64 macos runner
-    strategy:
-      fail-fast: false
-      matrix:
-        node: [22, 24]
-
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup-zig
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node }}
-
-      - run: node tests/smoke.mjs
-
   musl-abi:
     name: Linux ${{ matrix.arch }} musl (Alpine)
     runs-on: ${{ matrix.runner }}
@@ -193,13 +176,21 @@ jobs:
           path: tests/fixture-cli/zig-out/npm/
 
   cross-install:
-    name: Install + load (${{ matrix.os }})
+    name: Install + load (${{ matrix.label }})
     needs: cross-compile
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - label: linux-x64-gnu
+            runner: ubuntu-latest
+          - label: linux-arm64-gnu
+            runner: ubuntu-24.04-arm
+          - label: macos-arm64
+            runner: macos-latest
+          - label: windows-x64
+            runner: windows-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -214,6 +205,60 @@ jobs:
 
       - run: node tests/installed-smoke.mjs pkg-out/fcli
 
+  cross-install-musl:
+    name: Install + load (linux-${{ matrix.arch }}-musl)
+    needs: cross-compile
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: cross-compiled-pkg
+          path: pkg-out/
+
+      - name: Load + smoke-test inside node:24-alpine
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/work \
+            -w /work \
+            -e DISABLE_V8_COMPILE_CACHE=1 \
+            node:24-alpine \
+            node tests/installed-smoke.mjs pkg-out/fcli
+
+  cross-install-freebsd:
+    name: Install + load (freebsd-x64)
+    needs: cross-compile
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: cross-compiled-pkg
+          path: pkg-out/
+
+      - name: Load + smoke-test inside FreeBSD VM
+        uses: cross-platform-actions/action@v0.27.0
+        with:
+          operating_system: freebsd
+          version: "14.1"
+          memory: 4G
+          cpu_count: 3
+          shell: bash
+          run: |
+            sudo pkg install -y node22
+            node tests/installed-smoke.mjs pkg-out/fcli
+
   done:
     name: All required checks passed
     runs-on: ubuntu-latest
@@ -223,11 +268,12 @@ jobs:
       - node-abi
       - deno-abi
       - linux-arm64-abi
-      - macos-x64-abi
       - musl-abi
       - freebsd-abi
       - cross-compile
       - cross-install
+      - cross-install-musl
+      - cross-install-freebsd
 
     steps:
       - name: Verify upstream results
