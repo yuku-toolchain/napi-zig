@@ -22,6 +22,8 @@
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false,
 
+    "types": ["bun"],
+
     "rootDir": "./src",
     "outDir": "./dist"
   },
