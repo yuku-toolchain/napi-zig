@@ -1,5 +1,3 @@
-// public api surface
-
 pub const c = @import("c.zig");
 
 pub const Error = @import("error.zig").Error;
