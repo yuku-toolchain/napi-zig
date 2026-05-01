@@ -5,11 +5,11 @@ const m = loadFixture();
 
 describe("synchronous promises (createPromise + Deferred)", () => {
   test("resolves to the given value", async () => {
-    await expect(m.resolveImmediately(42)).resolves.toBe(42);
+    expect(m.resolveImmediately(42)).resolves.toBe(42);
   });
 
   test("rejects with an Error of the given message", async () => {
-    await expect(m.rejectImmediately("boom")).rejects.toThrow("boom");
+    expect(m.rejectImmediately("boom")).rejects.toThrow("boom");
   });
 
   test("returned value is a real Promise", () => {

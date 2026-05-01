@@ -10,10 +10,6 @@ const require = createRequire(import.meta.url);
 
 let cached: unknown | undefined;
 
-/**
- * Build (idempotently — zig caches) and load the test fixture addon.
- * Throws with stderr if the build fails.
- */
 export function loadFixture(): any {
   if (cached) return cached;
 

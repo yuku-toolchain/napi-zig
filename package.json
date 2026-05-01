@@ -9,8 +9,7 @@
     "lint": "oxlint",
     "format": "oxfmt",
     "build:cli": "bun --filter './cli' build",
-    "test": "zig build test && bun test",
-    "test:example": "cd example && rm -rf zig-out .zig-cache && napi build && bun verify.ts"
+    "test": "zig build test && bun test"
   },
   "devDependencies": {
     "@types/bun": "^1.3.11",

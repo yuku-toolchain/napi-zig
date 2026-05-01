@@ -9,7 +9,7 @@ comptime {
     napi.module(@This());
 }
 
-// ---- constants (exercises the `.constant` registration path) ----
+// constants (exercises the `.constant` registration path)
 
 pub const bool_true: bool = true;
 pub const bool_false: bool = false;
@@ -25,7 +25,7 @@ pub const comptime_int_value = 12345; // exercises .comptime_int branch
 pub const comptime_float_value = 1.5; // exercises .comptime_float branch
 pub const sentinel_string: *const [5:0]u8 = "hello"; // exercises .pointer .one [N:0]u8
 
-// ---- primitive round-trips ----
+// primitive round-trips
 
 pub fn roundtripBool(b: bool) bool {
     return b;
@@ -87,7 +87,7 @@ pub fn returnsSomeInt() ?i32 {
 
 pub fn returnsVoid() void {}
 
-// ---- strings ----
+// strings
 
 pub fn roundtripString(env: napi.Env, s: []const u8) ![]const u8 {
     return env.allocator().dupe(u8, s);
@@ -111,7 +111,7 @@ pub fn returnsLargeString(env: napi.Env, n: u32) ![]const u8 {
     return buf;
 }
 
-// ---- arrays ----
+// arrays
 
 pub fn sumI32Slice(arr: []const i32) i32 {
     var total: i32 = 0;
@@ -147,7 +147,7 @@ pub fn returnsTuple(env: napi.Env) !struct { i32, []const u8 } {
     return .{ 42, try env.allocator().dupe(u8, "hello") };
 }
 
-// ---- structs ----
+// structs
 
 const Point = struct { x: i32, y: i32 };
 
@@ -204,7 +204,7 @@ pub fn formatSettings(env: napi.Env, s: Settings) ![]const u8 {
     return std.fmt.allocPrint(env.allocator(), "{}/{d}", .{ s.debug, s.level });
 }
 
-// ---- enums ----
+// enums
 
 const Level = enum { debug, info, warning, error_level };
 
@@ -216,7 +216,7 @@ pub fn levelTagName(env: napi.Env, l: Level) ![]const u8 {
     return env.allocator().dupe(u8, @tagName(l));
 }
 
-// ---- namespaces ----
+// namespaces
 
 pub const math = struct {
     pub fn square(x: i32) i32 {
@@ -246,7 +246,7 @@ pub const constants_ns = struct {
     pub const greeting: []const u8 = "hello from namespace";
 };
 
-// ---- errors ----
+// errors
 
 pub fn throwIfTrue(b: bool) !i32 {
     if (b) return error.RequestedFailure;
@@ -273,7 +273,7 @@ pub fn throwGenericErrorExplicit(env: napi.Env) !void {
     return error.InvalidArg;
 }
 
-// ---- classes ----
+// classes
 
 // underscore-prefixed module-level vars are skipped by registerInto, so we
 // can use them as test probes that the JS side reads through wrapper fns.
@@ -363,7 +363,7 @@ pub const Validating = napi.class("Validating", struct {
     }
 });
 
-// ---- callbacks ----
+// callbacks
 
 pub fn forEach(env: napi.Env, items: []napi.Val, cb: napi.Callback) !void {
     for (items, 0..) |item, i| {
@@ -392,7 +392,7 @@ pub fn callbackWithSliceArgs(env: napi.Env, cb: napi.Callback) !napi.Val {
     return cb.call(env, slice);
 }
 
-// ---- raw mode (CallInfo) ----
+// raw mode (CallInfo)
 
 pub fn variadicSum(env: napi.Env, info: napi.CallInfo) !napi.Val {
     const args = try info.args(env, 16);
@@ -411,7 +411,7 @@ pub fn rawThisMarker(env: napi.Env, info: napi.CallInfo) !napi.Val {
     return this.getNamedProperty(env, "marker");
 }
 
-// ---- custom conversion ----
+// custom conversion
 
 const CustomPoint = struct {
     x: i32,
@@ -472,7 +472,7 @@ pub fn colorBrightness(c: Color) i32 {
     };
 }
 
-// ---- buffers ----
+// buffers
 
 pub fn createFilledBuffer(env: napi.Env, size: u32, fill: u8) !napi.Val {
     const buf = try env.createBuffer(size);
@@ -536,7 +536,7 @@ pub fn createExternalArrayBuffer(env: napi.Env, fill: u8) !napi.Val {
     return env.createExternalArrayBuffer(&_external_buf, _external_buf.len, externalFinalize, null);
 }
 
-// ---- misc: symbols, dates, externals, version ----
+// misc: symbols, dates, externals, version
 
 pub fn createSymbolWithDesc(env: napi.Env, desc: []const u8) !napi.Val {
     const desc_val = try env.toJs(desc);
@@ -584,7 +584,7 @@ pub fn nodeMajorVersion(env: napi.Env) !u32 {
     return v.major;
 }
 
-// ---- promises (synchronous) ----
+// promises (synchronous)
 
 pub fn resolveImmediately(env: napi.Env, value: i32) !napi.Val {
     const p = try env.createPromise();
@@ -603,7 +603,7 @@ pub fn isPromise(env: napi.Env, v: napi.Val) !bool {
     return v.isPromise(env);
 }
 
-// ---- workers (background async) ----
+// workers (background async)
 
 const I32Work = struct {
     input: i32,
@@ -696,7 +696,7 @@ pub fn asyncString(env: napi.Env) !napi.Val {
     return env.runWorker("string", StringWork{});
 }
 
-// ---- threadsafe functions ----
+// threadsafe functions
 
 pub fn signalOnce(env: napi.Env, cb: napi.Callback) !void {
     const tsfn = try cb.threadsafe(env, "tick", void);
