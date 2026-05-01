@@ -1,7 +1,5 @@
-// verifies that a cross-compiled napi-zig package, dropped onto disk
-// the way `npm install` would lay it out, actually loads under the host
-// OS and runtime. Argv: path to the package root (the dir holding
-// index.js + binding.js + <scope>/binding-<suffix>/<name>.node).
+// verifies that a cross-compiled package, laid out the way npm install
+// would lay it out, loads correctly on the host. argv[2]: package root.
 
 import { resolve, join } from "node:path";
 import { pathToFileURL } from "node:url";

@@ -53,8 +53,6 @@ describe("napi build (dev)", () => {
   test("optimize flag is forwarded to zig", async () => {
     const dir = stageCliFixture();
     cleanup.push(dir);
-    // pass --release=safe via the CLI option; test passes if the build
-    // succeeds (we don't introspect optimization mode in produced binary).
     await withCwd(dir, () => buildDev("safe"));
     expect(fileExists(join(dir, "zig-out", "lib", "fcli.node"))).toBe(true);
   }, 60000);

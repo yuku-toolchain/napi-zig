@@ -3,7 +3,7 @@ import { loadFixture } from "../helpers/addon";
 
 const m = loadFixture();
 
-describe("ThreadsafeFn(void) — signal-only callbacks", () => {
+describe("ThreadsafeFn(void) signal-only callbacks", () => {
   test("call from the same thread fires the callback once", async () => {
     let count = 0;
     const done = new Promise<void>((resolve) => {
@@ -29,7 +29,7 @@ describe("ThreadsafeFn(void) — signal-only callbacks", () => {
   });
 });
 
-describe("ThreadsafeFn(T) — payload callbacks across many threads", () => {
+describe("ThreadsafeFn(T) payload callbacks across many threads", () => {
   test("each spawned thread delivers its id; all are received exactly once", async () => {
     const N = 8;
     const seen = new Set<number>();

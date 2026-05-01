@@ -1,11 +1,6 @@
-// Type-level smoke test. By importing types from the auto-generated
-// .d.ts and exercising a representative slice with `strict` enabled, we
-// catch:
-//   - syntactic invalidity in the .d.ts (won't compile)
-//   - public consumer breakage (e.g. types tightened in a way that
-//     breaks valid call shapes)
-// Run via: `tsgo --noEmit -p tests/dts`. The compiler need only check;
-// nothing here runs at runtime.
+// type-level smoke test. consumes the auto-generated .d.ts under strict
+// tsgo and exercises a representative slice. run via:
+//   tsgo --noEmit -p tests/dts
 
 import type * as fx from "../fixture-lib/zig-out/lib/fixture";
 

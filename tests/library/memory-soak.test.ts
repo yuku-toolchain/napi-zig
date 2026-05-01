@@ -22,10 +22,6 @@ describe("memory soak", () => {
     settle();
     const afterBatch2 = process.memoryUsage().rss;
 
-    // batch 1 may grow as the allocator warms its pool, batch 2 should
-    // plateau. asserting plateau by absolute threshold avoids the
-    // ratio-of-tiny-numbers fragility a relative check has when both
-    // growths are small.
     expect(afterBatch2 - afterBatch1).toBeLessThan(20 * 1024 * 1024);
   }, 60_000);
 
@@ -38,9 +34,7 @@ describe("memory soak", () => {
     settle();
     const after = process.memoryUsage().rss;
 
-    // README claims `add(i32, i32)`-like calls "never go near the
-    // allocator." that should hold here too.
-    expect(after - baseline).toBeLessThan(10 * 1024 * 1024); // <10MiB
+    expect(after - baseline).toBeLessThan(10 * 1024 * 1024);
   }, 60_000);
 
   test("struct conversion path doesn't leak", () => {

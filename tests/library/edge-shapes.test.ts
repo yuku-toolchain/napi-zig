@@ -145,14 +145,60 @@ describe("nested slice [][]i32", () => {
   });
 });
 
+describe("enum as a struct field", () => {
+  test("camelCase enum value accepted in struct field", () => {
+    expect(m.formatWithEnum({ name: "n", level: "warning" })).toBe("n/warning");
+    expect(m.formatWithEnum({ name: "n", level: "errorLevel" })).toBe("n/error_level");
+  });
+
+  test("invalid enum value in struct field throws TypeError", () => {
+    expect(() => m.formatWithEnum({ name: "n", level: "nope" })).toThrow(TypeError);
+  });
+});
+
+describe("array of enums []Level", () => {
+  test("camelCase tags accepted in array elements", () => {
+    expect(m.sumLevels(["debug", "info", "warning", "errorLevel"])).toBe(0 + 1 + 2 + 3);
+  });
+
+  test("array of enums returned from Zig uses camelCase", () => {
+    expect(m.returnsLevelArray()).toEqual(["info", "warning", "errorLevel"]);
+  });
+
+  test("invalid tag inside array throws TypeError", () => {
+    expect(() => m.sumLevels(["debug", "bogus"])).toThrow(TypeError);
+  });
+});
+
+describe("tuple as a struct field", () => {
+  test("inline tuple field accepts a JS array", () => {
+    expect(m.formatWithTuple({ name: "n", point: [3, 4] })).toBe("n/3,4");
+  });
+
+  test("wrong tuple element type throws TypeError", () => {
+    expect(() => m.formatWithTuple({ name: "n", point: [3, "four"] as any })).toThrow(TypeError);
+  });
+});
+
+describe("tuple of structs", () => {
+  test("PointPair (struct{Point, Point}) accepts an array of two objects", () => {
+    expect(
+      m.pointPairSum([
+        { x: 1, y: 2 },
+        { x: 10, y: 20 },
+      ]),
+    ).toBe(33);
+  });
+});
+
 describe("BigInt overflow handling", () => {
   test("BigInt above i64 max throws (does not silently wrap)", () => {
-    const tooBig = (1n << 63n) + 1n; // > i64.max
+    const tooBig = (1n << 63n) + 1n;
     expect(() => m.roundtripI64(tooBig)).toThrow(RangeError);
   });
 
   test("BigInt below i64 min throws (does not silently wrap)", () => {
-    const tooSmall = -(1n << 63n) - 1n; // < i64.min
+    const tooSmall = -(1n << 63n) - 1n;
     expect(() => m.roundtripI64(tooSmall)).toThrow(RangeError);
   });
 

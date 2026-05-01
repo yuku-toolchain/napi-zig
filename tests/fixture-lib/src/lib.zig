@@ -336,7 +336,7 @@ pub const Greeter = napi.class("Greeter", struct {
     }
 });
 
-// no deinit defined — exercises the no-deinit GC path
+// no deinit, exercises the no-deinit gc path
 pub const Plain = napi.class("Plain", struct {
     value: i32,
 
@@ -349,7 +349,7 @@ pub const Plain = napi.class("Plain", struct {
     }
 });
 
-// init returning !T — exercises the rejection path
+// init returning !T, exercises the rejection path
 pub const Validating = napi.class("Validating", struct {
     value: i32,
 
@@ -967,9 +967,46 @@ pub fn returnsEmptyStruct() Empty {
     return .{};
 }
 
-// underscore-prefixed pub fns are skipped by registerInto. this is used
-// (called from `usesHidden`) so the fn isn't dead-stripped — purely so
-// the export-skip behaviour is verifiable from the JS side.
+const PointPair = struct { Point, Point };
+
+const WithEnum = struct {
+    name: []const u8,
+    level: Level,
+};
+
+const WithTuple = struct {
+    name: []const u8,
+    point: struct { i32, i32 },
+};
+
+pub fn formatWithEnum(env: napi.Env, w: WithEnum) ![]const u8 {
+    return std.fmt.allocPrint(env.allocator(), "{s}/{s}", .{ w.name, @tagName(w.level) });
+}
+
+pub fn formatWithTuple(env: napi.Env, w: WithTuple) ![]const u8 {
+    return std.fmt.allocPrint(env.allocator(), "{s}/{d},{d}", .{ w.name, w.point[0], w.point[1] });
+}
+
+pub fn sumLevels(items: []const Level) i32 {
+    var total: i32 = 0;
+    for (items) |l| total += @intFromEnum(l);
+    return total;
+}
+
+pub fn returnsLevelArray(env: napi.Env) ![]Level {
+    const arr = try env.allocator().alloc(Level, 3);
+    arr[0] = .info;
+    arr[1] = .warning;
+    arr[2] = .error_level;
+    return arr;
+}
+
+pub fn pointPairSum(p: PointPair) i32 {
+    return p[0].x + p[0].y + p[1].x + p[1].y;
+}
+
+// underscore-prefixed pub fns are skipped by registerInto. used by
+// `usesHidden` so the fn isn't dead-stripped, lets js verify the skip.
 pub fn _hidden_fn() i32 {
     return 777;
 }

@@ -39,7 +39,7 @@ describe("Env.createTypedArray", () => {
     expect(m.isTypedArray(m.makeUint8Array(2, 0))).toBe(true);
     expect(m.isTypedArray(new Int32Array(4))).toBe(true);
     expect(m.isTypedArray([1, 2, 3])).toBe(false);
-    expect(m.isTypedArray(Buffer.alloc(4))).toBe(true); // Node Buffer extends Uint8Array
+    expect(m.isTypedArray(Buffer.alloc(4))).toBe(true);
     expect(m.isTypedArray(new ArrayBuffer(4))).toBe(false);
   });
 

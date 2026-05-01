@@ -4,7 +4,6 @@ import { loadFixture } from "../helpers/addon";
 const m = loadFixture();
 
 afterEach(() => {
-  // each test stores into a single module-level slot; clear between runs.
   try {
     m.clearStoredRef();
   } catch {}
@@ -15,7 +14,6 @@ describe("Ref (createReference / value / delete)", () => {
     const obj = { kept: true };
     m.storeRef(obj);
     const fetched = m.fetchStoredRef();
-    // strong ref returns the same JS reference
     expect(fetched).toBe(obj);
   });
 
@@ -42,13 +40,9 @@ describe("Ref (createReference / value / delete)", () => {
   });
 
   test("ref keeps its target alive against GC", async () => {
-    // create an object only the Ref will point to, force GC, fetch it back.
     const marker = { alive: 42 };
     m.storeRef(marker);
 
-    // drop our local strong reference is moot here (marker is still in
-    // scope until end of test), but force a couple gc passes to make
-    // sure the Ref alone is sufficient to keep the JS object alive
     Bun.gc(true);
     await new Promise((r) => setImmediate(r));
     Bun.gc(true);

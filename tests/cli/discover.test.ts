@@ -84,7 +84,6 @@ describe("discoverPackages", () => {
         name: "@scope/binding-foo",
         version: "1.0.0",
       },
-      // binding-bar missing intentionally
     });
     await withCwd(root, () => {
       const pkgs = discoverPackages();
@@ -101,7 +100,6 @@ describe("discoverPackages", () => {
       },
       "npm/x/@s/binding-a/package.json": { name: "@s/binding-a", version: "1.0.0" },
     });
-    // create a stray file at npm/.DS_Store or similar
     writeJsonTree(root, { "npm/.junk": "x" });
     await withCwd(root, () => {
       const pkgs = discoverPackages();

@@ -33,12 +33,10 @@ describe("napi build --release", () => {
 
     await withCwd(dir, () => buildRelease("fast"));
 
-    // main package files
     expect(fileExists(join(dir, "npm", "fcli", "package.json"))).toBe(true);
     expect(fileExists(join(dir, "npm", "fcli", "index.js"))).toBe(true);
     expect(fileExists(join(dir, "npm", "fcli", "binding.js"))).toBe(true);
 
-    // per-platform binding directory
     const bindingDir = join(dir, "npm", "fcli", "@fixture", "binding-darwin-arm64");
     expect(fileExists(join(bindingDir, "package.json"))).toBe(true);
     expect(fileExists(join(bindingDir, "fcli.node"))).toBe(true);
@@ -93,35 +91,29 @@ describe("napi build --release", () => {
     expect(pkg.main).toBe("fcli.node");
   }, 120_000);
 
-  test("subsequent runs only update .node files; everything else is byte-identical", async () => {
+  test("subsequent runs only update .node files, everything else is byte-identical", async () => {
     const dir = stageCliFixture();
     cleanup.push(dir);
 
-    // first run
     await withCwd(dir, () => buildRelease("fast"));
     const npmRoot = join(dir, "npm");
     const initial = listAllFiles(npmRoot);
     const initialHashes: Record<string, string> = {};
     for (const f of initial) initialHashes[f] = sha256(join(npmRoot, f));
 
-    // touch one of the metadata files to ensure timestamps differ if they
-    // were rewritten. mtime is captured for comparison.
     const pkgPath = join(npmRoot, "fcli", "package.json");
     const initialMtime = statSync(pkgPath).mtimeMs;
 
-    // wait long enough that filesystem mtime would differ if rewritten
     await new Promise((r) => setTimeout(r, 50));
 
-    // second run
     await withCwd(dir, () => buildRelease("fast"));
 
     const second = listAllFiles(npmRoot);
-    expect(second).toEqual(initial); // no new/removed files
+    expect(second).toEqual(initial);
 
     for (const f of initial) {
       const newHash = sha256(join(npmRoot, f));
       if (f.endsWith(".node")) {
-        // .node may rebuild
         expect(newHash).toBeDefined();
       } else {
         expect(newHash).toBe(initialHashes[f]!);

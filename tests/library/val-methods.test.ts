@@ -50,7 +50,7 @@ describe("Val.strictEquals", () => {
   });
   test("different primitive", () => {
     expect(m.valStrictEquals(42, 43)).toBe(false);
-    expect(m.valStrictEquals(42, "42")).toBe(false); // no coercion
+    expect(m.valStrictEquals(42, "42")).toBe(false);
   });
   test("NaN !== NaN (JS rule)", () => {
     expect(m.valStrictEquals(NaN, NaN)).toBe(false);

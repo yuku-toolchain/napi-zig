@@ -36,7 +36,6 @@ describe("signed integers", () => {
   });
 
   test("i53 round-trips through f64", () => {
-    // i53 range: -(2^52) .. (2^52 - 1)
     expect(m.roundtripI53(0)).toBe(0);
     expect(m.roundtripI53(2 ** 31)).toBe(2 ** 31);
     expect(m.roundtripI53(2 ** 52 - 1)).toBe(2 ** 52 - 1);
@@ -58,7 +57,7 @@ describe("signed integers", () => {
   test("integer functions throw TypeError on wrong type", () => {
     expect(() => m.roundtripI32("hi")).toThrow(TypeError);
     expect(() => m.roundtripI32(true)).toThrow(TypeError);
-    expect(() => m.roundtripI64(1)).toThrow(TypeError); // expects bigint
+    expect(() => m.roundtripI64(1)).toThrow(TypeError);
   });
 });
 
@@ -79,7 +78,6 @@ describe("unsigned integers", () => {
   });
 
   test("u53 round-trips through f64", () => {
-    // u53 range: 0 .. (2^53 - 1) - i.e. up to MAX_SAFE_INTEGER
     expect(m.roundtripU53(0)).toBe(0);
     expect(m.roundtripU53(Number.MAX_SAFE_INTEGER)).toBe(Number.MAX_SAFE_INTEGER);
   });
@@ -111,7 +109,6 @@ describe("floats", () => {
     expect(m.roundtripF32(0)).toBe(0);
     expect(m.roundtripF32(1.5)).toBe(1.5);
     expect(m.roundtripF32(-1.5)).toBe(-1.5);
-    // 0.1 isn't exactly representable; round trip drops to f32 precision
     expect(m.roundtripF32(0.1)).toBeCloseTo(0.1, 6);
   });
 

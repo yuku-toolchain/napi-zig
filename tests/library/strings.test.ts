@@ -21,7 +21,6 @@ describe("strings", () => {
   test("string length is byte length, not codepoint count", () => {
     expect(m.stringByteLength("hello")).toBe(5);
     expect(m.stringByteLength("")).toBe(0);
-    // "é" is 2 bytes in UTF-8, "世" is 3, "🦀" is 4
     expect(m.stringByteLength("é")).toBe(2);
     expect(m.stringByteLength("世")).toBe(3);
     expect(m.stringByteLength("🦀")).toBe(4);
@@ -41,7 +40,6 @@ describe("strings", () => {
   });
 
   test("string at near-arena-page-boundary sizes", () => {
-    // common arena page sizes are 4KiB / 64KiB. Test around both.
     for (const n of [4095, 4096, 4097, 65535, 65536, 65537]) {
       const s = "x".repeat(n);
       expect(m.roundtripString(s)).toBe(s);

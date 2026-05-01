@@ -28,13 +28,12 @@ describe("Counter (basic class)", () => {
     const c = new m.Counter(0);
     expect(c.addN(7)).toBe(7);
     expect(c.addN(3)).toBe(10);
-    // raw snake_case form is not present
     expect((c as any).add_n).toBeUndefined();
   });
 
   test("*const Self method", () => {
     const c = new m.Counter(42);
-    expect(c.get()).toBe(42); // get takes *const Self
+    expect(c.get()).toBe(42);
   });
 
   test("void-return method", () => {
@@ -84,8 +83,6 @@ describe("constructor type errors", () => {
 
 describe("deinit fires on garbage collection", () => {
   beforeEach(async () => {
-    // collect any instances orphaned by earlier tests in this suite, then
-    // reset the counter, otherwise stale finalizers contaminate this test.
     Bun.gc(true);
     await new Promise((r) => setImmediate(r));
     Bun.gc(true);
@@ -99,7 +96,6 @@ describe("deinit fires on garbage collection", () => {
       c.increment();
     }
     Bun.gc(true);
-    // napi finalizers are queued on the event loop; let microtasks flush.
     await new Promise((r) => setImmediate(r));
     Bun.gc(true);
     await new Promise((r) => setImmediate(r));
