@@ -34,7 +34,25 @@ addon.add(2, 3); // 5
 
 ## Getting started
 
+### Quickstart, scaffold a new project
+
+```sh
+npx napi-zig@latest new my-addon
+```
+
+Prompts for the package manager (detected by default), wires up `build.zig`, `build.zig.zon`, `package.json`, a starter `src/lib.zig`, a `.github/workflows/publish.yml`, runs the install, fetches the Zig dependency, and produces an initial build:
+
+```sh
+cd my-addon
+node test.mjs    # add(2, 3) = 5
+                 # greet('world') = Hello, world!
+```
+
+From here, edit `src/lib.zig` and rerun `napi build`. When you're ready to ship, see [Release & publishing](#release--publishing).
+
 ### 1. Add napi-zig
+
+If you'd rather wire it up by hand:
 
 ```sh
 zig fetch --save git+https://github.com/yuku-toolchain/napi-zig.git/#HEAD
@@ -627,11 +645,19 @@ jobs:
 
 | Command                                         | Description                                    |
 | ----------------------------------------------- | ---------------------------------------------- |
+| `napi new [name]`                               | Scaffold a new project (prompts for missing)   |
 | `napi build`                                    | Build for current platform                     |
 | `napi build --release`                          | Cross-compile every platform                   |
 | `napi bump [version]`                           | Bump version, commit, tag, push                |
 | `napi publish`                                  | Publish all packages to npm (CI)               |
 | `napi npm-init --repo <repo> --workflow <file>` | Initial publish + configure trusted publishing |
+
+`napi new` options:
+
+| Option        | Default              | Description                            |
+| ------------- | -------------------- | -------------------------------------- |
+| `[name]`      | interactive          | Project name (also the addon name)     |
+| `--pm <pm>`   | detected             | `npm`, `yarn`, `pnpm`, or `bun`        |
 
 `napi bump` options:
 

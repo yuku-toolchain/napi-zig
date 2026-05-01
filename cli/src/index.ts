@@ -5,9 +5,17 @@ import { buildDev, buildRelease } from "./build";
 import { bump } from "./bump";
 import { publish } from "./publish";
 import { npmInit } from "./init";
+import { scaffoldNew } from "./new";
 import { CLI_VERSION } from "./utils";
 
 const cli = cac("napi-zig");
+
+cli
+  .command("new [name]", "Scaffold a new napi-zig project")
+  .option("--pm <pm>", "Package manager: npm, yarn, pnpm, bun (default: detected)")
+  .action((name: string | undefined, options: { pm?: string }) => {
+    return scaffoldNew({ name, pm: options.pm });
+  });
 
 cli
   .command("build", "Build for current platform")

@@ -1,13 +1,34 @@
 import { existsSync, readdirSync, statSync, mkdirSync, copyFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import ora from "ora";
-import { runInherit } from "./utils";
+import { run, runInherit } from "./utils";
 
-export async function buildDev(optimize: string | undefined): Promise<void> {
+export interface BuildDevOptions {
+  // Capture command output instead of streaming it. On failure, dump the
+  // captured stderr. Skips the per-file `info` lines too. Used by `napi new`
+  // for a quiet scaffold flow.
+  quiet?: boolean;
+}
+
+export async function buildDev(
+  optimize: string | undefined,
+  options?: BuildDevOptions,
+): Promise<void> {
   const optFlag = optimize ? ` --release=${optimize}` : "";
+  const quiet = options?.quiet ?? false;
 
   const spinner = ora("Building for current platform...").start();
-  await runInherit(`zig build${optFlag}`);
+  try {
+    if (quiet) await run(`zig build${optFlag}`);
+    else await runInherit(`zig build${optFlag}`);
+  } catch (e) {
+    spinner.fail("Build failed");
+    if (quiet) {
+      const stderr = String((e as { stderr?: string }).stderr ?? "");
+      if (stderr) console.error(stderr.trim());
+    }
+    throw e;
+  }
   spinner.succeed("Build complete");
 
   const libDir = join(process.cwd(), "zig-out", "lib");
@@ -21,13 +42,13 @@ export async function buildDev(optimize: string | undefined): Promise<void> {
 
     if (!existsSync(loaderPath)) {
       writeFileSync(loaderPath, `module.exports = require('./zig-out/lib/${file}');\n`);
-      ora().info(`Created ${name}.js`);
+      if (!quiet) ora().info(`Created ${name}.js`);
     }
 
     const dtsSource = join(libDir, `${name}.d.ts`);
     if (existsSync(dtsSource)) {
       copyFileSync(dtsSource, join(process.cwd(), `${name}.d.ts`));
-      ora().info(`Copied ${name}.d.ts`);
+      if (!quiet) ora().info(`Copied ${name}.d.ts`);
     }
   }
 }
