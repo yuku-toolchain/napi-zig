@@ -7,11 +7,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Pin zig's global cache to a workspace path so actions/cache can hit it
-  # uniformly across linux/macos/windows.
   ZIG_GLOBAL_CACHE_DIR: ${{ github.workspace }}/.zig-cache-global
-  # V8's compile cache can mask N-API ABI issues by reusing cached
-  # compilation across runs; disable it for deterministic smoke tests.
   DISABLE_V8_COMPILE_CACHE: 1
 
 jobs:
@@ -21,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # windows-latest is intentionally excluded: bun crashes on
+        # windows-latest is intentionally excluded, bun crashes on
         # windows during `bun test` (upstream bun bug). re-add the entry
         # once bun fixes it. node coverage on windows comes from
         # node-abi + cross-install.
@@ -52,8 +48,6 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # type-check covers cli/ + the auto-generated fixture-lib/<name>.d.ts.
-      # the latter requires a prior zig build to materialize the file.
       - name: Pre-build fixture-lib (for dts type-check)
         run: cd tests/fixture-lib && zig build
 
@@ -112,7 +106,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # windows-latest is intentionally excluded: deno + windows
+        # windows-latest is intentionally excluded, deno + windows
         # currently fails with an opaque exit 1 we haven't been able to
         # reproduce or diagnose. re-add when we can either reproduce
         # locally or surface the actual error in CI.

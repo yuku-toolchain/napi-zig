@@ -1,12 +1,3 @@
-// Memory soak. Calls allocating fns many times in two batches and checks
-// RSS doesn't grow unboundedly between batches. Catches leaks where the
-// per-call arena fails to release pages back to smp_allocator's pool.
-//
-// Two-batch pattern instead of absolute threshold: the first batch warms
-// up the allocator's freelist, the second batch should plateau. A stable
-// delta between batches is the strong signal; an absolute number isn't,
-// because RSS is noisy and includes V8 / runtime growth unrelated to us.
-
 import { describe, expect, test } from "bun:test";
 import { loadFixture } from "../helpers/addon";
 
@@ -38,8 +29,8 @@ describe("memory soak", () => {
     const ratio = batch1Growth === 0 ? 0 : batch2Growth / batch1Growth;
 
     // batch 2 should be much smaller than batch 1 (warm-up pays the
-    // first-allocation cost; steady-state should plateau). allow some
-    // slack — RSS is noisy. failure here = real linear growth.
+    // first-allocation cost, steady-state should plateau). allow some
+    // slack, RSS is noisy. failure here = real linear growth.
     expect(batch2Growth).toBeLessThan(20 * 1024 * 1024); // <20MiB drift
     expect(ratio).toBeLessThan(0.5); // batch 2 < half of batch 1
   }, 60_000);
