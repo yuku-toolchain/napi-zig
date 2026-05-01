@@ -1,0 +1,25 @@
+name: Setup Zig
+description: Install Zig (master) and restore the project's zig cache.
+
+inputs:
+  cache-suffix:
+    description: Extra segment appended to the cache key. Use to isolate caches that should not share content (e.g. cross-compile).
+    required: false
+    default: default
+
+runs:
+  using: composite
+  steps:
+    - name: Install Zig
+      uses: mlugg/setup-zig@v2
+      with:
+        version: master
+
+    - name: Restore zig cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ github.workspace }}/.zig-cache-global
+        key: ${{ runner.os }}-zig-${{ inputs.cache-suffix }}-${{ hashFiles('**/build.zig.zon', '**/build.zig') }}
+        restore-keys: |
+          ${{ runner.os }}-zig-${{ inputs.cache-suffix }}-
+          ${{ runner.os }}-zig-
