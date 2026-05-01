@@ -55,10 +55,13 @@ describe("napi build --release", () => {
     expect(Object.keys(main.optionalDependencies).sort()).toEqual([
       "@fixture/binding-darwin-arm64",
       "@fixture/binding-freebsd-x64",
+      "@fixture/binding-linux-arm-gnu",
+      "@fixture/binding-linux-arm-musl",
       "@fixture/binding-linux-arm64-gnu",
       "@fixture/binding-linux-arm64-musl",
       "@fixture/binding-linux-x64-gnu",
       "@fixture/binding-linux-x64-musl",
+      "@fixture/binding-win32-arm64",
       "@fixture/binding-win32-x64",
     ]);
     for (const v of Object.values(main.optionalDependencies)) {

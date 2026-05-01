@@ -20,10 +20,13 @@ pub fn build(b: *std.Build) void {
             .platforms = &.{
                 .linux_x64_gnu,
                 .linux_arm64_gnu,
+                .linux_arm_gnu,
                 .linux_x64_musl,
                 .linux_arm64_musl,
+                .linux_arm_musl,
                 .macos_arm64,
                 .windows_x64,
+                .windows_arm64,
                 .freebsd_x64,
             },
         },
