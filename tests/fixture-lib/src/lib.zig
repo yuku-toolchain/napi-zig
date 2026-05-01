@@ -272,3 +272,314 @@ pub fn throwGenericErrorExplicit(env: napi.Env) !void {
     env.throwError("explicit generic error");
     return error.InvalidArg;
 }
+
+// ---- classes ----
+
+// underscore-prefixed module-level vars are skipped by registerInto, so we
+// can use them as test probes that the JS side reads through wrapper fns.
+var _deinit_counter: u32 = 0;
+
+pub fn deinitCount() u32 {
+    return _deinit_counter;
+}
+
+pub fn resetDeinitCount() void {
+    _deinit_counter = 0;
+}
+
+pub const Counter = napi.class("Counter", struct {
+    value: i32,
+
+    pub fn init(start: i32) @This() {
+        return .{ .value = start };
+    }
+
+    pub fn increment(self: *@This()) i32 {
+        self.value += 1;
+        return self.value;
+    }
+
+    pub fn add_n(self: *@This(), n: i32) i32 {
+        self.value += n;
+        return self.value;
+    }
+
+    pub fn get(self: *const @This()) i32 {
+        return self.value;
+    }
+
+    pub fn reset(self: *@This()) void {
+        self.value = 0;
+    }
+
+    pub fn deinit(_: *@This()) void {
+        _deinit_counter += 1;
+    }
+});
+
+// `init` takes Env as first param. heap-allocates the name on smp_allocator
+// because the per-call arena is freed when init returns.
+pub const Greeter = napi.class("Greeter", struct {
+    name: []const u8,
+
+    pub fn init(_: napi.Env, name: []const u8) !@This() {
+        const owned = try std.heap.smp_allocator.dupe(u8, name);
+        return .{ .name = owned };
+    }
+
+    pub fn greet(self: *const @This(), env: napi.Env) ![]const u8 {
+        return std.fmt.allocPrint(env.allocator(), "Hello, {s}!", .{self.name});
+    }
+
+    pub fn deinit(self: *@This()) void {
+        std.heap.smp_allocator.free(self.name);
+    }
+});
+
+// no deinit defined — exercises the no-deinit GC path
+pub const Plain = napi.class("Plain", struct {
+    value: i32,
+
+    pub fn init(v: i32) @This() {
+        return .{ .value = v };
+    }
+
+    pub fn get(self: *const @This()) i32 {
+        return self.value;
+    }
+});
+
+// init returning !T — exercises the rejection path
+pub const Validating = napi.class("Validating", struct {
+    value: i32,
+
+    pub fn init(v: i32) !@This() {
+        if (v < 0) return error.NegativeNotAllowed;
+        return .{ .value = v };
+    }
+
+    pub fn get(self: *const @This()) i32 {
+        return self.value;
+    }
+});
+
+// ---- callbacks ----
+
+pub fn forEach(env: napi.Env, items: []napi.Val, cb: napi.Callback) !void {
+    for (items, 0..) |item, i| {
+        _ = try cb.call(env, .{ item, @as(u32, @intCast(i)) });
+    }
+}
+
+pub fn applyTwice(env: napi.Env, cb: napi.Callback, x: i32) !i32 {
+    const v1 = try cb.call(env, .{x});
+    const v1_int = try v1.to(env, i32);
+    const v2 = try cb.call(env, .{v1_int});
+    return v2.to(env, i32);
+}
+
+pub fn callWithThis(env: napi.Env, this: napi.Val, cb: napi.Callback) !napi.Val {
+    return cb.callWith(env, this, .{});
+}
+
+pub fn callbackWithSliceArgs(env: napi.Env, cb: napi.Callback) !napi.Val {
+    var args = [_]napi.Val{
+        try env.toJs(@as(i32, 1)),
+        try env.toJs(@as(i32, 2)),
+        try env.toJs(@as(i32, 3)),
+    };
+    const slice: []const napi.Val = &args;
+    return cb.call(env, slice);
+}
+
+// ---- raw mode (CallInfo) ----
+
+pub fn variadicSum(env: napi.Env, info: napi.CallInfo) !napi.Val {
+    const args = try info.args(env, 16);
+    const argc = try info.argCount(env);
+    var total: f64 = 0;
+    for (0..argc) |i| total += try args[i].to(env, f64);
+    return env.toJs(total);
+}
+
+pub fn rawArgCount(env: napi.Env, info: napi.CallInfo) !napi.Val {
+    return env.toJs(@as(u32, @intCast(try info.argCount(env))));
+}
+
+pub fn rawThisMarker(env: napi.Env, info: napi.CallInfo) !napi.Val {
+    const this = try info.this(env);
+    return this.getNamedProperty(env, "marker");
+}
+
+// ---- custom conversion ----
+
+const CustomPoint = struct {
+    x: i32,
+    y: i32,
+
+    pub fn toJs(self: @This(), env: napi.Env) !napi.Val {
+        const s = try std.fmt.allocPrint(env.allocator(), "{d},{d}", .{ self.x, self.y });
+        return env.toJs(s);
+    }
+
+    pub fn fromJs(env: napi.Env, val: napi.Val) !@This() {
+        const s = try val.to(env, []const u8);
+        const comma = std.mem.indexOfScalar(u8, s, ',') orelse return error.InvalidFormat;
+        return .{
+            .x = try std.fmt.parseInt(i32, s[0..comma], 10),
+            .y = try std.fmt.parseInt(i32, s[comma + 1 ..], 10),
+        };
+    }
+};
+
+pub fn roundtripCustomPoint(p: CustomPoint) CustomPoint {
+    return p;
+}
+
+const Rgb = struct { r: u8, g: u8, b: u8 };
+
+const Color = union(enum) {
+    rgb: Rgb,
+    hex: []const u8,
+
+    pub fn toJs(self: @This(), env: napi.Env) !napi.Val {
+        return switch (self) {
+            .rgb => |c| env.toJs(c),
+            .hex => |s| env.toJs(s),
+        };
+    }
+
+    pub fn fromJs(env: napi.Env, val: napi.Val) !@This() {
+        if (try val.typeOf(env) == .string) {
+            return .{ .hex = try val.to(env, []const u8) };
+        }
+        return .{ .rgb = try val.to(env, Rgb) };
+    }
+};
+
+pub fn rgbColor() Color {
+    return .{ .rgb = .{ .r = 255, .g = 128, .b = 0 } };
+}
+
+pub fn hexColor() Color {
+    return .{ .hex = "ff8000" };
+}
+
+pub fn colorBrightness(c: Color) i32 {
+    return switch (c) {
+        .rgb => |rgb| @as(i32, rgb.r) + @as(i32, rgb.g) + @as(i32, rgb.b),
+        .hex => |h| @intCast(h.len),
+    };
+}
+
+// ---- buffers ----
+
+pub fn createFilledBuffer(env: napi.Env, size: u32, fill: u8) !napi.Val {
+    const buf = try env.createBuffer(size);
+    @memset(buf.data, fill);
+    return buf.val;
+}
+
+pub fn createFilledArrayBuffer(env: napi.Env, size: u32, fill: u8) !napi.Val {
+    const buf = try env.createArrayBuffer(size);
+    @memset(buf.data, fill);
+    return buf.val;
+}
+
+pub fn bufferSum(env: napi.Env, b: napi.Val) !u32 {
+    const data = try b.getBufferData(env);
+    var sum: u32 = 0;
+    for (data) |byte| sum += byte;
+    return sum;
+}
+
+pub fn arrayBufferSum(env: napi.Env, ab: napi.Val) !u32 {
+    const data = try ab.getArrayBufferData(env);
+    var sum: u32 = 0;
+    for (data) |byte| sum += byte;
+    return sum;
+}
+
+pub fn writeIntoBuffer(env: napi.Env, b: napi.Val, value: u8) !u32 {
+    const data = try b.getBufferData(env);
+    @memset(data, value);
+    return @intCast(data.len);
+}
+
+pub fn isBuffer(env: napi.Env, v: napi.Val) !bool {
+    return v.isBuffer(env);
+}
+
+pub fn isArrayBuffer(env: napi.Env, v: napi.Val) !bool {
+    return v.isArrayBuffer(env);
+}
+
+// external array buffer with finalize. backed by a static buf so we don't
+// have to track size in the finalize callback.
+var _external_buf: [16]u8 = undefined;
+var _external_finalize_count: u32 = 0;
+
+pub fn externalFinalizeCount() u32 {
+    return _external_finalize_count;
+}
+
+pub fn resetExternalFinalizeCount() void {
+    _external_finalize_count = 0;
+}
+
+fn externalFinalize(_: napi.c.napi_env, _: ?*anyopaque, _: ?*anyopaque) callconv(.c) void {
+    _external_finalize_count += 1;
+}
+
+pub fn createExternalArrayBuffer(env: napi.Env, fill: u8) !napi.Val {
+    @memset(&_external_buf, fill);
+    return env.createExternalArrayBuffer(&_external_buf, _external_buf.len, externalFinalize, null);
+}
+
+// ---- misc: symbols, dates, externals, version ----
+
+pub fn createSymbolWithDesc(env: napi.Env, desc: []const u8) !napi.Val {
+    const desc_val = try env.toJs(desc);
+    return env.createSymbol(desc_val);
+}
+
+pub fn createSymbolWithoutDesc(env: napi.Env) !napi.Val {
+    return env.createSymbol(null);
+}
+
+pub fn isSymbol(env: napi.Env, v: napi.Val) !bool {
+    return (try v.typeOf(env)) == .symbol;
+}
+
+pub fn dateToMs(env: napi.Env, val: napi.Val) !f64 {
+    return val.getDateValue(env);
+}
+
+pub fn createDateMs(env: napi.Env, ms: f64) !napi.Val {
+    return env.createDate(ms);
+}
+
+pub fn isDate(env: napi.Env, v: napi.Val) !bool {
+    return v.isDate(env);
+}
+
+var _external_value: i32 = 99;
+
+pub fn makeExternal(env: napi.Env) !napi.Val {
+    return env.createExternal(&_external_value, null, null);
+}
+
+pub fn readExternalI32(env: napi.Env, ext: napi.Val) !i32 {
+    const ptr = try ext.getExternalData(env) orelse return error.NoData;
+    const typed: *i32 = @ptrCast(@alignCast(ptr));
+    return typed.*;
+}
+
+pub fn napiVersion(env: napi.Env) !u32 {
+    return env.getVersion();
+}
+
+pub fn nodeMajorVersion(env: napi.Env) !u32 {
+    const v = try env.getNodeVersion();
+    return v.major;
+}

@@ -36,7 +36,12 @@ pub fn invoke(
         const T = field.type;
         const js_i = i - js_start;
         if (js_i < argc) {
-            args[i] = convert.fromJs(T, env, .{ .handle = argv[js_i] }) catch return false;
+            args[i] = convert.fromJs(T, env, .{ .handle = argv[js_i] }) catch |e| {
+                // user-defined fromJs may return an error without throwing a
+                // js exception; in that case, surface the zig error name.
+                if (!env.isExceptionPending()) env.throwError(@errorName(e));
+                return false;
+            };
         } else if (@typeInfo(T) == .optional) {
             args[i] = null;
         } else if (@typeInfo(T) == .@"struct" and comptime isAllDefaults(T)) {

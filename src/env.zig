@@ -181,12 +181,14 @@ pub const Env = struct {
     }
 };
 
+var empty_buffer: [0]u8 = .{};
+
 fn makeBuffer(self: Env, comptime nf: anytype, len: usize) !Env.ArrayBuffer {
     var data: ?*anyopaque = null;
     var out: c.napi_value = undefined;
     try check(nf(self.handle, len, &data, &out));
-    const slice = if (data) |p| @as([*]u8, @ptrCast(p))[0..len] else &.{};
-    return .{ .val = .{ .handle = out }, .data = slice };
+    const ptr: [*]u8 = if (data) |p| @ptrCast(p) else &empty_buffer;
+    return .{ .val = .{ .handle = out }, .data = ptr[0..len] };
 }
 
 fn WorkerState(comptime T: type) type {

@@ -106,7 +106,7 @@ pub const napi_property_descriptor = extern struct {
 pub const NAPI_AUTO_LENGTH: usize = @as(usize, @bitCast(@as(isize, -1)));
 
 // callbacks / arg info
-pub extern fn napi_get_cb_info(env: napi_env, cbinfo: napi_callback_info, argc: *usize, argv: ?[*]napi_value, this_arg: ?*napi_value, data: ?*?*anyopaque) napi_status;
+pub extern fn napi_get_cb_info(env: napi_env, cbinfo: napi_callback_info, argc: ?*usize, argv: ?[*]napi_value, this_arg: ?*napi_value, data: ?*?*anyopaque) napi_status;
 
 // exceptions
 pub extern fn napi_throw(env: napi_env, @"error": napi_value) napi_status;

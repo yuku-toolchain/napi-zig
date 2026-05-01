@@ -19,8 +19,6 @@ describe("enums", () => {
   });
 
   test("Zig @tagName returns the snake_case form", () => {
-    // verifies that even though JS sees camelCase, the underlying Zig enum
-    // is the snake_case variant — i.e. fromJs hits the right tag.
     expect(m.levelTagName("errorLevel")).toBe("error_level");
     expect(m.levelTagName("info")).toBe("info");
   });
