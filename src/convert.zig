@@ -105,6 +105,10 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
                     var out: i64 = undefined;
                     var lossless: bool = undefined;
                     try expect(env, value, c.napi_get_value_bigint_int64(env.handle, value.handle, &out, &lossless), "expected bigint");
+                    if (!lossless) {
+                        env.throwRangeError("bigint out of range for " ++ @typeName(T));
+                        return err.Error.InvalidArg;
+                    }
                     break :blk narrow(T, env, out);
                 },
                 else => @compileError("napi-zig: integer too wide: " ++ @typeName(T)),
@@ -116,6 +120,10 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
                     var out: u64 = undefined;
                     var lossless: bool = undefined;
                     try expect(env, value, c.napi_get_value_bigint_uint64(env.handle, value.handle, &out, &lossless), "expected bigint");
+                    if (!lossless) {
+                        env.throwRangeError("bigint out of range for " ++ @typeName(T));
+                        return err.Error.InvalidArg;
+                    }
                     break :blk narrow(T, env, out);
                 },
                 else => @compileError("napi-zig: integer too wide: " ++ @typeName(T)),

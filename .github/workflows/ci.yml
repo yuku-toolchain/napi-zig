@@ -8,7 +8,7 @@ concurrency:
 
 jobs:
   test:
-    name: Test on ${{ matrix.os }}
+    name: Bun + Zig (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -22,7 +22,7 @@ jobs:
       - name: Setup Zig
         uses: mlugg/setup-zig@v2
         with:
-          version: 0.16.0-dev.2535+b5bd49460
+          version: master
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -38,8 +38,37 @@ jobs:
       - name: Lint
         run: bun run lint
 
-      - name: Tests
+      - name: Comptime tests
         run: zig build test
+
+      - name: Integration tests
+        run: bun test
 
       - name: Build CLI
         run: bun run build:cli
+
+  node-abi:
+    name: Node ${{ matrix.node }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: [18, 20, 22]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: master
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Smoke-test addon under Node
+        run: node tests/node-smoke.js

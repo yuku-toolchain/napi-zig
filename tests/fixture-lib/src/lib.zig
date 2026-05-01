@@ -731,3 +731,86 @@ pub fn fanOutWorkers(env: napi.Env, cb: napi.Callback, count: u32) !void {
     }
     try tsfn.release();
 }
+
+// edge-case conversion shapes
+
+pub fn joinStrings(env: napi.Env, items: []const []const u8, sep: []const u8) ![]const u8 {
+    return std.mem.join(env.allocator(), sep, items);
+}
+
+pub fn returnsStringArray(env: napi.Env) ![]const []const u8 {
+    const arr = try env.allocator().alloc([]const u8, 3);
+    arr[0] = "alpha";
+    arr[1] = "beta";
+    arr[2] = "gamma";
+    return arr;
+}
+
+pub fn sumPointXs(points: []const Point) i32 {
+    var total: i32 = 0;
+    for (points) |p| total += p.x;
+    return total;
+}
+
+pub fn returnsPointArray(env: napi.Env) ![]Point {
+    const arr = try env.allocator().alloc(Point, 2);
+    arr[0] = .{ .x = 1, .y = 2 };
+    arr[1] = .{ .x = 3, .y = 4 };
+    return arr;
+}
+
+pub fn sumOptionalI32Slice(items: []const ?i32) i32 {
+    var total: i32 = 0;
+    for (items) |maybe| {
+        if (maybe) |v| total += v;
+    }
+    return total;
+}
+
+const Inner = struct {
+    a: ?i32,
+    b: ?[]const u8,
+};
+
+const Outer = struct {
+    name: []const u8,
+    inner: ?Inner,
+};
+
+pub fn formatOuter(env: napi.Env, o: Outer) ![]const u8 {
+    if (o.inner) |inner| {
+        return std.fmt.allocPrint(env.allocator(), "{s}/{?d}/{?s}", .{ o.name, inner.a, inner.b });
+    }
+    return std.fmt.allocPrint(env.allocator(), "{s}/null", .{o.name});
+}
+
+pub fn maybeI32(present: bool) ?i32 {
+    return if (present) 42 else null;
+}
+
+pub fn maybeString(present: bool) ?[]const u8 {
+    return if (present) "hello" else null;
+}
+
+pub fn maybeVal(env: napi.Env, present: bool) !?napi.Val {
+    if (present) return try env.toJs(@as(i32, 42));
+    return null;
+}
+
+const Handlers = struct {
+    on_data: napi.Callback,
+    on_done: napi.Callback,
+};
+
+pub fn fireHandlers(env: napi.Env, handlers: Handlers, value: i32) !void {
+    _ = try handlers.on_data.call(env, .{value});
+    _ = try handlers.on_done.call(env, .{});
+}
+
+pub fn nestedSliceSum(items: []const []const i32) i32 {
+    var total: i32 = 0;
+    for (items) |inner| for (inner) |v| {
+        total += v;
+    };
+    return total;
+}
