@@ -39,7 +39,9 @@ pub fn toJs(comptime T: type, env: Env, value: T) !Val {
 
         .optional => |opt| if (value) |v| toJs(opt.child, env, v) else env.createNull(),
 
-        .@"enum" => env.createString(@tagName(value)),
+        .@"enum" => switch (value) {
+            inline else => |tag| env.createString(comptime util.snakeToCamel(@tagName(tag))),
+        },
 
         .pointer => |info| {
             if (info.size == .slice and info.child == u8) return env.createString(value);
@@ -97,17 +99,24 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
 
         .int => |info| switch (info.signedness) {
             .signed => switch (info.bits) {
-                0...32 => @intCast(try extract(i32, env, value, c.napi_get_value_int32, "expected number")),
-                33...64 => @intCast(try extract(i64, env, value, c.napi_get_value_int64, "expected number")),
+                0...32 => narrow(T, env, try extract(i32, env, value, c.napi_get_value_int32, "expected number")),
+                33...53 => narrow(T, env, try extract(i64, env, value, c.napi_get_value_int64, "expected number")),
+                54...64 => blk: {
+                    var out: i64 = undefined;
+                    var lossless: bool = undefined;
+                    try expect(env, value, c.napi_get_value_bigint_int64(env.handle, value.handle, &out, &lossless), "expected bigint");
+                    break :blk narrow(T, env, out);
+                },
                 else => @compileError("napi-zig: integer too wide: " ++ @typeName(T)),
             },
             .unsigned => switch (info.bits) {
-                0...32 => @intCast(try extract(u32, env, value, c.napi_get_value_uint32, "expected number")),
-                33...64 => blk: {
+                0...32 => narrow(T, env, try extract(u32, env, value, c.napi_get_value_uint32, "expected number")),
+                33...53 => narrow(T, env, try extract(i64, env, value, c.napi_get_value_int64, "expected number")),
+                54...64 => blk: {
                     var out: u64 = undefined;
                     var lossless: bool = undefined;
                     try expect(env, value, c.napi_get_value_bigint_uint64(env.handle, value.handle, &out, &lossless), "expected bigint");
-                    break :blk @intCast(out);
+                    break :blk narrow(T, env, out);
                 },
                 else => @compileError("napi-zig: integer too wide: " ++ @typeName(T)),
             },
@@ -178,6 +187,8 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
                 if (try prop.typeOf(env) == .undefined) {
                     if (field.defaultValue()) |dflt| {
                         @field(out, field.name) = dflt;
+                    } else if (@typeInfo(field.type) == .optional) {
+                        @field(out, field.name) = null;
                     } else {
                         env.throwTypeError("missing required field: " ++ key);
                         return err.Error.InvalidArg;
@@ -202,6 +213,28 @@ inline fn extract(comptime T: type, env: Env, value: Val, comptime nf: anytype, 
     var out: T = undefined;
     try expect(env, value, nf(env.handle, value.handle, &out), label);
     return out;
+}
+
+/// range-check before narrowing. throws JS RangeError instead of panicking
+/// on overflow, and rejects negative numbers for unsigned destinations.
+inline fn narrow(comptime T: type, env: Env, v: anytype) !T {
+    const Src = @TypeOf(v);
+    const dst_signed = @typeInfo(T).int.signedness == .signed;
+    const src_signed = @typeInfo(Src).int.signedness == .signed;
+
+    if (src_signed and !dst_signed and v < 0) {
+        env.throwRangeError("negative number for unsigned " ++ @typeName(T));
+        return err.Error.InvalidArg;
+    }
+    if (v > std.math.maxInt(T)) {
+        env.throwRangeError("integer out of range for " ++ @typeName(T));
+        return err.Error.InvalidArg;
+    }
+    if (dst_signed and v < std.math.minInt(T)) {
+        env.throwRangeError("integer out of range for " ++ @typeName(T));
+        return err.Error.InvalidArg;
+    }
+    return @intCast(v);
 }
 
 fn readCallback(env: Env, value: Val) !Callback {

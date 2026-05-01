@@ -1,0 +1,14 @@
+.{
+    .name = .fixture_lib,
+    .version = "0.0.0",
+    .fingerprint = 0xf13d6adb7c91dc6d,
+    .minimum_zig_version = "0.17.0",
+    .dependencies = .{
+        .napi_zig = .{ .path = "../.." },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}

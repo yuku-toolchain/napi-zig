@@ -48,6 +48,10 @@ fn ModuleInit(comptime Module: type) type {
 
 /// recursively register every exportable pub declaration of `Module` onto `target`.
 pub fn registerInto(env: Env, target: Val, comptime Module: type) !void {
+    // each decl drives a comptime snake_case→camelCase conversion plus
+    // type classification, which together blow past the default 1000-branch
+    // quota for modules with more than a handful of exports.
+    @setEvalBranchQuota(100_000);
     inline for (@typeInfo(Module).@"struct".decls) |decl| {
         if (decl.name[0] == '_') continue;
         switch (comptime classify(Module, decl.name)) {
