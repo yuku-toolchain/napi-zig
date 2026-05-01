@@ -18,13 +18,14 @@ jobs:
   test:
     name: Bun on (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    # bun has a known crash on windows, allow it to fail until upstream
-    # fixes it, but keep the cell in the matrix so we notice when it does.
-    continue-on-error: ${{ matrix.os == 'windows-latest' }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # windows-latest is intentionally excluded: bun crashes on
+        # windows during `bun test` (upstream bun bug). re-add the entry
+        # once bun fixes it. node coverage on windows comes from
+        # node-abi + cross-install.
+        os: [ubuntu-latest, macos-latest]
 
     steps:
       - name: Checkout code
@@ -108,14 +109,14 @@ jobs:
   deno-abi:
     name: Deno on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    # deno + windows currently fails with an opaque exit 1, we keep
-    # building it pre-step so any zig issue surfaces here instead of
-    # being swallowed inside smoke.mjs.
-    continue-on-error: ${{ matrix.os == 'windows-latest' }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # windows-latest is intentionally excluded: deno + windows
+        # currently fails with an opaque exit 1 we haven't been able to
+        # reproduce or diagnose. re-add when we can either reproduce
+        # locally or surface the actual error in CI.
+        os: [ubuntu-latest, macos-latest]
 
     steps:
       - name: Checkout code
