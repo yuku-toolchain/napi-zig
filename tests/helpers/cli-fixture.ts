@@ -14,7 +14,7 @@ export function stageCliFixture(): string {
   copyFileSync(join(cliFixtureRoot, "src", "lib.zig"), join(dir, "src", "lib.zig"));
 
   const realDir = realpathSync(dir);
-  const relPath = relative(realDir, napiRoot);
+  const relPath = relative(realDir, napiRoot).replaceAll("\\", "/");
   const zon = readFileSync(join(cliFixtureRoot, "build.zig.zon"), "utf-8");
   const rewritten = zon.replace(/\.path = "[^"]*"/, `.path = "${relPath}"`);
   writeFileSync(join(dir, "build.zig.zon"), rewritten);
