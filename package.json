@@ -4,7 +4,7 @@
     "cli"
   ],
   "scripts": {
-    "type-check": "bun --filter './cli' type-check",
+    "type-check": "bun --filter './cli' type-check && tsgo --noEmit -p tests/dts",
     "release": "bumpp -r --commit 'npm %s' --push --tag --yes --release 'patch'",
     "lint": "oxlint",
     "format": "oxfmt",

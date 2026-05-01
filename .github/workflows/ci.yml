@@ -51,6 +51,11 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      # type-check covers cli/ + the auto-generated fixture-lib/<name>.d.ts.
+      # the latter requires a prior zig build to materialize the file.
+      - name: Pre-build fixture-lib (for dts type-check)
+        run: cd tests/fixture-lib && zig build
+
       - name: Type check
         run: bun run type-check
 
