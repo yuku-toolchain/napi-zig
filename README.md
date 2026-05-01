@@ -741,14 +741,6 @@ pub const MyClass = napi.class("MyClass", struct { ... });
 
 Returns the comptime-generated TypeScript declaration string for `Module`. Used by the `.dts = .auto` build option; you don't normally call it directly.
 
-## Roadmap
-
-- WASM target via emnapi, same Zig source, runs in browsers and Deno
-- Class properties (getters/setters)
-- Static class methods
-- Symbol-keyed methods (`Symbol.iterator`, etc)
-- Benchmarks vs napi-rs and node-addon-api
-
 ## License
 
 MIT
