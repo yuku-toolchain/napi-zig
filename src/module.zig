@@ -29,9 +29,9 @@ pub fn registerModule(comptime Module: type) void {
 fn ModuleInit(comptime Module: type) type {
     return struct {
         fn init(raw_env: c.napi_env, exports: c.napi_value) callconv(.c) ?c.napi_value {
-            const arena = env_mod.borrowArena();
-            defer env_mod.releaseArena(arena);
-            const env: Env = .{ .handle = raw_env, .arena = arena };
+            var arena = std.heap.ArenaAllocator.init(std.heap.smp_allocator);
+            defer arena.deinit();
+            const env: Env = .{ .handle = raw_env, .arena = &arena };
 
             registerInto(env, .{ .handle = exports }, Module) catch {
                 if (!env.isExceptionPending()) env.throwError("napi-zig: module init failed");
@@ -99,9 +99,9 @@ fn FnBridge(comptime Module: type, comptime name: []const u8) type {
 
     return struct {
         fn call(raw_env: c.napi_env, raw_info: c.napi_callback_info) callconv(.c) ?c.napi_value {
-            const arena = env_mod.borrowArena();
-            defer env_mod.releaseArena(arena);
-            const env: Env = .{ .handle = raw_env, .arena = arena };
+            var arena = std.heap.ArenaAllocator.init(std.heap.smp_allocator);
+            defer arena.deinit();
+            const env: Env = .{ .handle = raw_env, .arena = &arena };
 
             var args: std.meta.ArgsTuple(Fn) = undefined;
             if (inject_env) args[0] = env;
@@ -116,9 +116,9 @@ fn FnBridge(comptime Module: type, comptime name: []const u8) type {
 fn RawBridge(comptime Module: type, comptime name: []const u8) type {
     return struct {
         fn call(raw_env: c.napi_env, raw_info: c.napi_callback_info) callconv(.c) ?c.napi_value {
-            const arena = env_mod.borrowArena();
-            defer env_mod.releaseArena(arena);
-            const env: Env = .{ .handle = raw_env, .arena = arena };
+            var arena = std.heap.ArenaAllocator.init(std.heap.smp_allocator);
+            defer arena.deinit();
+            const env: Env = .{ .handle = raw_env, .arena = &arena };
 
             const result = @field(Module, name)(env, CallInfo{ .handle = raw_info }) catch |e| {
                 if (!env.isExceptionPending()) env.throwError(@errorName(e));

@@ -244,9 +244,9 @@ pub fn ThreadsafeFn(comptime T: type) type {
             const typed: *T = @ptrCast(@alignCast(data orelse return));
             defer std.heap.smp_allocator.destroy(typed);
 
-            const arena = env_mod.borrowArena();
-            defer env_mod.releaseArena(arena);
-            const env: Env = .{ .handle = raw_env, .arena = arena };
+            var arena = std.heap.ArenaAllocator.init(std.heap.smp_allocator);
+            defer arena.deinit();
+            const env: Env = .{ .handle = raw_env, .arena = &arena };
 
             const js_val = convert.toJs(T, env, typed.*) catch return;
             const undef = env.createUndefined() catch return;

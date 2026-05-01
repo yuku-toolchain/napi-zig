@@ -9,28 +9,6 @@ const Deferred = val_mod.Deferred;
 
 const check = err.check;
 
-// per-thread arena, reset between calls so steady-state cost is zero.
-// over the retain limit it is fully freed to bound long-tail growth.
-const RETAIN_LIMIT: usize = 1 << 20;
-
-threadlocal var tls_arena: ?std.heap.ArenaAllocator = null;
-
-pub fn borrowArena() *std.heap.ArenaAllocator {
-    if (tls_arena == null) {
-        tls_arena = std.heap.ArenaAllocator.init(std.heap.smp_allocator);
-    }
-    return &tls_arena.?;
-}
-
-pub fn releaseArena(a: *std.heap.ArenaAllocator) void {
-    if (a.queryCapacity() > RETAIN_LIMIT) {
-        a.deinit();
-        a.* = std.heap.ArenaAllocator.init(std.heap.smp_allocator);
-    } else {
-        _ = a.reset(.retain_capacity);
-    }
-}
-
 /// node-api environment handle. carries a per-call arena allocator.
 pub const Env = struct {
     handle: c.napi_env,
@@ -311,9 +289,9 @@ fn WorkerState(comptime T: type) type {
             const state: *Self = @ptrCast(@alignCast(data));
             defer std.heap.smp_allocator.destroy(state);
 
-            const arena = borrowArena();
-            defer releaseArena(arena);
-            const env: Env = .{ .handle = raw_env, .arena = arena };
+            var arena = std.heap.ArenaAllocator.init(std.heap.smp_allocator);
+            defer arena.deinit();
+            const env: Env = .{ .handle = raw_env, .arena = &arena };
 
             _ = c.napi_delete_async_work(raw_env, state.work);
 

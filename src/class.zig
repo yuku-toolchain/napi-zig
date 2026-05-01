@@ -97,9 +97,9 @@ fn ConstructorBridge(comptime T: type) type {
 
     return struct {
         fn call(raw_env: c.napi_env, raw_info: c.napi_callback_info) callconv(.c) ?c.napi_value {
-            const arena = env_mod.borrowArena();
-            defer env_mod.releaseArena(arena);
-            const env: Env = .{ .handle = raw_env, .arena = arena };
+            var arena = std.heap.ArenaAllocator.init(std.heap.smp_allocator);
+            defer arena.deinit();
+            const env: Env = .{ .handle = raw_env, .arena = &arena };
 
             var this_val: c.napi_value = undefined;
             var args: std.meta.ArgsTuple(Init) = undefined;
@@ -148,9 +148,9 @@ fn MethodBridge(comptime T: type, comptime method_name: []const u8) type {
 
     return struct {
         fn call(raw_env: c.napi_env, raw_info: c.napi_callback_info) callconv(.c) ?c.napi_value {
-            const arena = env_mod.borrowArena();
-            defer env_mod.releaseArena(arena);
-            const env: Env = .{ .handle = raw_env, .arena = arena };
+            var arena = std.heap.ArenaAllocator.init(std.heap.smp_allocator);
+            defer arena.deinit();
+            const env: Env = .{ .handle = raw_env, .arena = &arena };
 
             var this_val: c.napi_value = undefined;
             var args: std.meta.ArgsTuple(Method) = undefined;
