@@ -44,9 +44,6 @@ jobs:
       - run: bun test
       - run: bun run build:cli
 
-  # ---------------------------------------------------------------------------
-  # ABI: smoke-test the host-built addon under each runtime + version.
-  # ---------------------------------------------------------------------------
   node-abi:
     name: Node ${{ matrix.node }} (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -71,7 +68,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # windows-latest excluded: deno + windows currently fails with an
+        # windows-latest excluded, deno + windows currently fails with an
         # opaque exit 1 we haven't been able to reproduce or diagnose.
         os: [ubuntu-latest, macos-latest]
 
@@ -84,11 +81,6 @@ jobs:
 
       - run: deno run --allow-all tests/smoke.mjs
 
-  # ---------------------------------------------------------------------------
-  # Per-platform native runtime checks. Each closes a gap in
-  # `Platform.defaults` that node-abi can't reach (different libc, different
-  # arch, different OS).
-  # ---------------------------------------------------------------------------
   linux-arm64-abi:
     name: Linux arm64 glibc (Node ${{ matrix.node }})
     runs-on: ubuntu-24.04-arm
@@ -181,11 +173,6 @@ jobs:
             sudo pkg install -y node22
             node tests/smoke.mjs
 
-  # ---------------------------------------------------------------------------
-  # End-to-end "what users get from `npm install`": cross-compile every
-  # platform on one host, then load the resulting binary on each platform
-  # the way binding.js would at install time.
-  # ---------------------------------------------------------------------------
   cross-compile:
     name: Cross-compile package
     runs-on: ubuntu-latest
@@ -227,9 +214,6 @@ jobs:
 
       - run: node tests/installed-smoke.mjs pkg-out/fcli
 
-  # ---------------------------------------------------------------------------
-  # Single branch-protection target. Auto-tracks added/removed jobs above.
-  # ---------------------------------------------------------------------------
   done:
     name: All required checks passed
     runs-on: ubuntu-latest

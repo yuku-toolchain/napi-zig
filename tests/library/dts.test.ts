@@ -1,10 +1,3 @@
-// Sanity checks against the auto-generated .d.ts. Loads the file the
-// fixture-lib build emits to zig-out/lib and verifies that:
-//   - representative function/class/namespace/constant shapes are present
-//   - snake_case → camelCase happened consistently
-//   - enum tag unions use the camelCase form
-// Catches accidental drift in the dts.zig emitter.
-
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
