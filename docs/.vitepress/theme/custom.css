@@ -1,176 +1,182 @@
 /*
- * Catppuccin palette for VitePress.
- * Latte (light) and Mocha (dark), with Peach as the brand accent.
- * Pairs with the catppuccin-latte / catppuccin-mocha Shiki themes.
+ * Serious systems-language palette.
+ * Light: warm cream paper (echoes ziglang.org).
+ * Dark: deep near-black terminal (echoes the Vesper Shiki theme).
+ * Accent: Zig amber #f7a41d, applied as a darker variant for body links
+ * on light to keep contrast readable.
  */
 
 :root {
   /* Surfaces */
-  --vp-c-bg: #eff1f5;
-  --vp-c-bg-alt: #e6e9ef;
+  --vp-c-bg: #fbfbf2;
+  --vp-c-bg-alt: #f5f1e3;
   --vp-c-bg-elv: #ffffff;
-  --vp-c-bg-soft: #e6e9ef;
+  --vp-c-bg-soft: #f0ebd8;
 
   /* Text */
-  --vp-c-text-1: #4c4f69;
-  --vp-c-text-2: #5c5f77;
-  --vp-c-text-3: #6c6f85;
+  --vp-c-text-1: #1a1714;
+  --vp-c-text-2: #4a4239;
+  --vp-c-text-3: #6b6157;
 
   /* Lines */
-  --vp-c-divider: #ccd0da;
-  --vp-c-gutter: #dce0e8;
-  --vp-c-border: #bcc0cc;
+  --vp-c-divider: #e8e1cf;
+  --vp-c-gutter: #ece5d2;
+  --vp-c-border: #d6cdb5;
 
-  /* Brand: Catppuccin Peach */
-  --vp-c-brand-1: #d8590b;
-  --vp-c-brand-2: #e25d0c;
-  --vp-c-brand-3: #fe640b;
-  --vp-c-brand-soft: rgba(254, 100, 11, 0.14);
+  /* Brand: Zig amber, darkened for accessible link contrast on cream. */
+  --vp-c-brand-1: #b56600;
+  --vp-c-brand-2: #c47000;
+  --vp-c-brand-3: #f7a41d;
+  --vp-c-brand-soft: rgba(247, 164, 29, 0.16);
 
-  /* Semantic colors mapped onto Catppuccin */
-  --vp-c-tip-1: #1e7a56;
-  --vp-c-tip-2: #279067;
-  --vp-c-tip-3: #40a02b;
-  --vp-c-tip-soft: rgba(64, 160, 43, 0.14);
+  /* Semantic */
+  --vp-c-tip-1: #2f7a3e;
+  --vp-c-tip-2: #2f7a3e;
+  --vp-c-tip-3: #3a8c4a;
+  --vp-c-tip-soft: rgba(47, 122, 62, 0.12);
 
-  --vp-c-note-1: #1e66f5;
-  --vp-c-note-2: #2378f5;
-  --vp-c-note-3: #1e66f5;
-  --vp-c-note-soft: rgba(30, 102, 245, 0.14);
+  --vp-c-note-1: #1f5fa8;
+  --vp-c-note-2: #1f5fa8;
+  --vp-c-note-3: #2470c5;
+  --vp-c-note-soft: rgba(31, 95, 168, 0.12);
 
-  --vp-c-warning-1: #b07a07;
-  --vp-c-warning-2: #c2870c;
-  --vp-c-warning-3: #df8e1d;
-  --vp-c-warning-soft: rgba(223, 142, 29, 0.16);
+  --vp-c-warning-1: #8a5a00;
+  --vp-c-warning-2: #8a5a00;
+  --vp-c-warning-3: #c98a17;
+  --vp-c-warning-soft: rgba(201, 138, 23, 0.14);
 
-  --vp-c-danger-1: #c33044;
-  --vp-c-danger-2: #d32d4a;
-  --vp-c-danger-3: #d20f39;
-  --vp-c-danger-soft: rgba(210, 15, 57, 0.14);
+  --vp-c-danger-1: #a8222d;
+  --vp-c-danger-2: #a8222d;
+  --vp-c-danger-3: #c0303c;
+  --vp-c-danger-soft: rgba(192, 48, 60, 0.12);
 
-  --vp-c-important-1: #8839ef;
-  --vp-c-important-2: #9747f1;
-  --vp-c-important-3: #8839ef;
-  --vp-c-important-soft: rgba(136, 57, 239, 0.14);
+  --vp-c-important-1: #6b4cb6;
+  --vp-c-important-2: #6b4cb6;
+  --vp-c-important-3: #7a5bc7;
+  --vp-c-important-soft: rgba(122, 91, 199, 0.12);
 
   /* Code */
-  --vp-code-bg: rgba(124, 127, 147, 0.1);
-  --vp-code-color: #d8590b;
-  --vp-code-block-bg: #e6e9ef;
-  --vp-code-block-divider-color: #bcc0cc;
-  --vp-code-line-highlight-color: rgba(254, 100, 11, 0.08);
+  --vp-code-bg: rgba(26, 23, 20, 0.06);
+  --vp-code-color: #b56600;
+  --vp-code-block-bg: #f6f1e0;
+  --vp-code-block-divider-color: #e8e1cf;
+  --vp-code-line-highlight-color: rgba(247, 164, 29, 0.1);
 
-  /* Selection */
-  --vp-c-mute: #ccd0da;
-  --vp-c-mute-dark: #bcc0cc;
+  --vp-c-mute: #ece5d2;
+  --vp-c-mute-dark: #d6cdb5;
 
   /* Buttons */
   --vp-button-brand-border: var(--vp-c-brand-3);
-  --vp-button-brand-text: #ffffff;
+  --vp-button-brand-text: #1a1714;
   --vp-button-brand-bg: var(--vp-c-brand-3);
-  --vp-button-brand-hover-border: var(--vp-c-brand-2);
-  --vp-button-brand-hover-text: #ffffff;
-  --vp-button-brand-hover-bg: var(--vp-c-brand-2);
-  --vp-button-brand-active-border: var(--vp-c-brand-1);
-  --vp-button-brand-active-text: #ffffff;
-  --vp-button-brand-active-bg: var(--vp-c-brand-1);
+  --vp-button-brand-hover-border: #ffb340;
+  --vp-button-brand-hover-text: #1a1714;
+  --vp-button-brand-hover-bg: #ffb340;
+  --vp-button-brand-active-border: #d98e0e;
+  --vp-button-brand-active-text: #1a1714;
+  --vp-button-brand-active-bg: #d98e0e;
 
   /* Custom block backgrounds */
-  --vp-custom-block-tip-bg: rgba(64, 160, 43, 0.08);
-  --vp-custom-block-warning-bg: rgba(223, 142, 29, 0.1);
-  --vp-custom-block-danger-bg: rgba(210, 15, 57, 0.08);
-  --vp-custom-block-info-bg: rgba(30, 102, 245, 0.08);
+  --vp-custom-block-tip-bg: rgba(47, 122, 62, 0.08);
+  --vp-custom-block-warning-bg: rgba(201, 138, 23, 0.1);
+  --vp-custom-block-danger-bg: rgba(192, 48, 60, 0.08);
+  --vp-custom-block-info-bg: rgba(31, 95, 168, 0.08);
 }
 
 .dark {
-  /* Surfaces */
-  --vp-c-bg: #1e1e2e;
-  --vp-c-bg-alt: #181825;
-  --vp-c-bg-elv: #313244;
-  --vp-c-bg-soft: #181825;
+  /* Surfaces: dark but not pitch-black; elevations brighten upward. */
+  --vp-c-bg: #171717;
+  --vp-c-bg-alt: #1c1c1c;
+  --vp-c-bg-elv: #262626;
+  --vp-c-bg-soft: #1f1f1f;
 
   /* Text */
-  --vp-c-text-1: #cdd6f4;
-  --vp-c-text-2: #bac2de;
-  --vp-c-text-3: #a6adc8;
+  --vp-c-text-1: #ededed;
+  --vp-c-text-2: #b4afaa;
+  --vp-c-text-3: #8a857f;
 
   /* Lines */
-  --vp-c-divider: #313244;
-  --vp-c-gutter: #11111b;
-  --vp-c-border: #45475a;
+  --vp-c-divider: #2a2a2a;
+  --vp-c-gutter: #111111;
+  --vp-c-border: #333333;
 
-  /* Brand: Catppuccin Peach (Mocha) */
-  --vp-c-brand-1: #fab387;
-  --vp-c-brand-2: #f7b58a;
-  --vp-c-brand-3: #fab387;
-  --vp-c-brand-soft: rgba(250, 179, 135, 0.16);
+  /* Brand: pure Zig amber on dark. */
+  --vp-c-brand-1: #f7a41d;
+  --vp-c-brand-2: #ffb340;
+  --vp-c-brand-3: #f7a41d;
+  --vp-c-brand-soft: rgba(247, 164, 29, 0.18);
 
   /* Semantic */
-  --vp-c-tip-1: #a6e3a1;
-  --vp-c-tip-2: #a6e3a1;
-  --vp-c-tip-3: #a6e3a1;
-  --vp-c-tip-soft: rgba(166, 227, 161, 0.14);
+  --vp-c-tip-1: #6cc26a;
+  --vp-c-tip-2: #6cc26a;
+  --vp-c-tip-3: #6cc26a;
+  --vp-c-tip-soft: rgba(108, 194, 106, 0.14);
 
-  --vp-c-note-1: #89b4fa;
-  --vp-c-note-2: #89b4fa;
-  --vp-c-note-3: #89b4fa;
-  --vp-c-note-soft: rgba(137, 180, 250, 0.14);
+  --vp-c-note-1: #7eb6ff;
+  --vp-c-note-2: #7eb6ff;
+  --vp-c-note-3: #7eb6ff;
+  --vp-c-note-soft: rgba(126, 182, 255, 0.14);
 
-  --vp-c-warning-1: #f9e2af;
-  --vp-c-warning-2: #f9e2af;
-  --vp-c-warning-3: #f9e2af;
-  --vp-c-warning-soft: rgba(249, 226, 175, 0.14);
+  --vp-c-warning-1: #ffc799;
+  --vp-c-warning-2: #ffc799;
+  --vp-c-warning-3: #ffc799;
+  --vp-c-warning-soft: rgba(255, 199, 153, 0.14);
 
-  --vp-c-danger-1: #f38ba8;
-  --vp-c-danger-2: #f38ba8;
-  --vp-c-danger-3: #f38ba8;
-  --vp-c-danger-soft: rgba(243, 139, 168, 0.14);
+  --vp-c-danger-1: #ff8080;
+  --vp-c-danger-2: #ff8080;
+  --vp-c-danger-3: #ff8080;
+  --vp-c-danger-soft: rgba(255, 128, 128, 0.14);
 
-  --vp-c-important-1: #cba6f7;
-  --vp-c-important-2: #cba6f7;
-  --vp-c-important-3: #cba6f7;
-  --vp-c-important-soft: rgba(203, 166, 247, 0.14);
+  --vp-c-important-1: #c4a8f5;
+  --vp-c-important-2: #c4a8f5;
+  --vp-c-important-3: #c4a8f5;
+  --vp-c-important-soft: rgba(196, 168, 245, 0.14);
 
-  /* Code */
-  --vp-code-bg: rgba(49, 50, 68, 0.6);
-  --vp-code-color: #fab387;
-  --vp-code-block-bg: #181825;
-  --vp-code-block-divider-color: #313244;
-  --vp-code-line-highlight-color: rgba(250, 179, 135, 0.08);
+  /* Code: slightly darker than page so blocks still settle in. */
+  --vp-code-bg: rgba(237, 237, 237, 0.06);
+  --vp-code-color: #ffc799;
+  --vp-code-block-bg: #111111;
+  --vp-code-block-divider-color: #2a2a2a;
+  --vp-code-line-highlight-color: rgba(247, 164, 29, 0.08);
 
-  /* Mute */
-  --vp-c-mute: #313244;
-  --vp-c-mute-dark: #45475a;
+  --vp-c-mute: #262626;
+  --vp-c-mute-dark: #333333;
 
-  /* Buttons */
-  --vp-button-brand-text: #1e1e2e;
-  --vp-button-brand-hover-text: #1e1e2e;
-  --vp-button-brand-active-text: #1e1e2e;
+  /* Buttons: amber accent reads on the dark gray. */
+  --vp-button-brand-text: #171717;
+  --vp-button-brand-hover-text: #171717;
+  --vp-button-brand-active-text: #171717;
 
   /* Custom block backgrounds */
-  --vp-custom-block-tip-bg: rgba(166, 227, 161, 0.08);
-  --vp-custom-block-warning-bg: rgba(249, 226, 175, 0.08);
-  --vp-custom-block-danger-bg: rgba(243, 139, 168, 0.08);
-  --vp-custom-block-info-bg: rgba(137, 180, 250, 0.08);
+  --vp-custom-block-tip-bg: rgba(108, 194, 106, 0.08);
+  --vp-custom-block-warning-bg: rgba(255, 199, 153, 0.08);
+  --vp-custom-block-danger-bg: rgba(255, 128, 128, 0.08);
+  --vp-custom-block-info-bg: rgba(126, 182, 255, 0.08);
 }
 
-/*
- * Inline code: small pill that lifts off the text without competing with
- * fenced code blocks.
- */
+/* Inline code: tight pill, monospaced, slightly weighted. */
 :not(pre) > code {
-  border-radius: 4px;
-  padding: 0.15em 0.4em;
-  font-size: 0.9em;
+  border-radius: 3px;
+  padding: 0.12em 0.38em;
+  font-size: 0.88em;
   font-weight: 500;
+  letter-spacing: -0.005em;
 }
 
-/* Soften code-block borders to match Catppuccin's flat surfaces. */
+/* Code blocks: square-ish corners feel more terminal than rounded. */
 div[class*="language-"] {
-  border-radius: 8px;
+  border-radius: 4px;
 }
 
-/* Focus rings in brand color. */
+/* Sharper, less playful focus rings. */
 :focus-visible {
   outline-color: var(--vp-c-brand-3);
+  outline-offset: 2px;
+}
+
+/* Subtle slab feel for headings: tighten letter-spacing slightly. */
+.vp-doc h1,
+.vp-doc h2,
+.vp-doc h3 {
+  letter-spacing: -0.018em;
 }

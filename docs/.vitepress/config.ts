@@ -9,8 +9,8 @@ export default defineConfig({
   lastUpdated: true,
 
   head: [
-    ["meta", { name: "theme-color", media: "(prefers-color-scheme: light)", content: "#eff1f5" }],
-    ["meta", { name: "theme-color", media: "(prefers-color-scheme: dark)", content: "#1e1e2e" }],
+    ["meta", { name: "theme-color", media: "(prefers-color-scheme: light)", content: "#fbfbf2" }],
+    ["meta", { name: "theme-color", media: "(prefers-color-scheme: dark)", content: "#171717" }],
     ["meta", { property: "og:type", content: "website" }],
     ["meta", { property: "og:title", content: "napi-zig" }],
     [
@@ -24,8 +24,8 @@ export default defineConfig({
 
   markdown: {
     theme: {
-      light: "catppuccin-latte",
-      dark: "catppuccin-mocha",
+      light: "vitesse-light",
+      dark: "vesper",
     },
   },
 
