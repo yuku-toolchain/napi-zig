@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { buildRelease } from "../../cli/src/build";
 import { stageCliFixture } from "../helpers/cli-fixture";
 import { fileExists, readJson, rmTemp, sha256 } from "../helpers/fs";
