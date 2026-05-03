@@ -59,6 +59,8 @@ npm/<name>/
 
 This is the publishable tree. `napi publish` ships every directory under `npm/` to npm. The tree is reconciled on every release build: policy fields come from `build.zig`, your version and user-edited fields are preserved. See [Cross-compiling](/cross-compiling#what-every-release-build-does) for the full rules.
 
+If `build.zig` calls `addLib` more than once, each addon gets its own `npm/<name>/` subtree alongside the others. See [Multiple addons in one repo](/publishing#multiple-addons-in-one-repo).
+
 ## Where to put your code
 
 - **One file is fine.** Keep adding to `src/lib.zig` until it feels too large.

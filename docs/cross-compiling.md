@@ -29,6 +29,8 @@ npm/<name>/
 
 `<name>` is your addon's name. `<scope>` is the npm scope from the `.scope` field of the `.npm` block in `build.zig`. Every per-platform binding lives under that scope.
 
+Calling `addLib` more than once in `build.zig` is supported; each addon gets its own `npm/<name>/` subtree and is reconciled independently. See [Multiple addons in one repo](/publishing#multiple-addons-in-one-repo).
+
 ## What every release build does
 
 `napi build --release` is the only command you need during release. It cross-compiles, then reconciles `npm/` against the policy in `build.zig`. Re-run it as often as you like; you cannot drift `npm/` out of sync with `build.zig`.

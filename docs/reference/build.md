@@ -2,6 +2,8 @@
 
 `napi_zig.addLib` is the only `build.zig` API you need. It registers your addon as a Zig artifact, applies the right linker flags for each OS, sets up the `.d.ts` install, and (with `-Dnpm=true`) builds the cross-compile graph and generates the npm package skeleton.
 
+You can call it more than once in the same `build.zig` to ship multiple addons from one repo. Each call writes its own `zig-out/lib/<name>.node` and its own `npm/<name>/` tree, and the CLI (`napi build`, `napi build --release`, `napi bump`, `napi publish`, `napi npm-init`) picks up every one. Give each addon its own `.scope`; per-platform binding package names are derived from the scope, so two addons sharing a scope would publish under the same binding names.
+
 ```zig
 const std = @import("std");
 const napi_zig = @import("napi_zig");

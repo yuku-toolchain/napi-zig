@@ -94,7 +94,7 @@ This:
 
 `--repo` is `owner/name` of your GitHub repository. `--workflow` is the workflow filename in `.github/workflows/`.
 
-You only run `napi npm-init` once per package. From here on, the CI pipeline takes over.
+`napi npm-init` is idempotent: it skips any package that already exists on npm and only sets up new ones. After the first run the CI pipeline takes over for releases. You only need to run `napi npm-init` again if you later add another addon to `build.zig` (see [Multiple addons in one repo](#multiple-addons-in-one-repo) below).
 
 ## The release loop
 
@@ -171,6 +171,21 @@ For each package in `npm/`:
 3. Attaches a [provenance attestation](https://docs.npmjs.com/generating-provenance-statements) (auto in CI).
 
 Per-platform binding packages are published before the main package, so users who install during the small window between publishes always get a working set.
+
+`napi publish` runs over every addon in `npm/`, so a repo with multiple `addLib` calls in `build.zig` publishes them all in the same CI run.
+
+## Multiple addons in one repo
+
+You can ship more than one addon from the same repository: call `addLib` once per addon in `build.zig` (each with its own `.name` and `.scope`). Every command in this guide already iterates per-addon: `napi build --release` cross-compiles every one, `napi bump` bumps every one in lockstep, `napi publish` publishes every one. See [`addLib` reference](/reference/build) for the constraints on `.scope`.
+
+When you add a new addon to an existing repo:
+
+```sh
+napi build --release
+napi npm-init --repo <owner>/<name> --workflow publish.yml
+```
+
+`napi npm-init` skips packages that are already on npm and only publishes initial versions and configures trusted publishing for the new ones. From the next `napi bump` onwards, the new addon ships alongside the existing ones.
 
 ## Provenance
 
