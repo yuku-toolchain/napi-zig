@@ -42,10 +42,40 @@ pub fn asyncParse(env: napi.Env, source: []const u8) !napi.Val {
 
 The worker is then responsible for freeing `owned` (typically in `resolve`, after the result is read out).
 
-## What about `std.heap.GeneralPurposeAllocator`?
+## Returning data you allocated yourself
 
-Use it for development if you want allocation tracking. For production, prefer `smp_allocator` for shared state and let the per-call arena handle scratch. The arena is faster than a GPA for the common case (allocate a few small things, throw it all away) and avoids the bookkeeping cost.
+There is one footgun. `defer` fires before your function returns to the bridge, and the bridge is what serializes your return value into a JS handle. So this is **broken**:
 
-## What about `defer`?
+```zig
+pub fn bad(n: u32) ![]u8 {
+    const buf = try std.heap.smp_allocator.alloc(u8, n);
+    defer std.heap.smp_allocator.free(buf); // fires before the bridge reads `buf`
+    @memset(buf, 'x');
+    return buf;                              // dangling slice
+}
+```
 
-`defer` works exactly the way it does in regular Zig. The bridge does not change anything about Zig's control flow; it only constructs the arena, calls your function, and then tears down. If you allocate from a long-lived allocator inside a function, free it with `defer` as you would in any Zig code.
+Two correct patterns:
+
+**Use the arena.** Easiest. The arena outlives the conversion step, so a slice allocated on `env.allocator()` is still valid when the bridge serializes it.
+
+```zig
+pub fn good(env: napi.Env, n: u32) ![]u8 {
+    const buf = try env.allocator().alloc(u8, n);
+    @memset(buf, 'x');
+    return buf;
+}
+```
+
+**Convert to a `Val` yourself, then free.** `env.toJs([]const u8, ...)` copies the bytes into V8 (via `napi_create_string_utf8`). Once you hold the `Val`, your source buffer is safe to free.
+
+```zig
+pub fn good(env: napi.Env, n: u32) !napi.Val {
+    const buf = try std.heap.smp_allocator.alloc(u8, n);
+    defer std.heap.smp_allocator.free(buf); // fires after toJs, safe
+    @memset(buf, 'x');
+    return env.toJs(buf);
+}
+```
+
+The same applies to any owned type: structs containing slices, arrays of strings, etc. If you want to free with `defer`, return a `napi.Val` you constructed via `env.toJs` rather than the raw Zig value.

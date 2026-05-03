@@ -1014,3 +1014,88 @@ pub fn _hidden_fn() i32 {
 pub fn usesHidden() i32 {
     return _hidden_fn();
 }
+
+// defer + allocator interaction
+//
+// these exercise the doc claim that user `defer` works exactly like in
+// regular zig inside an exported function, and that long-lived allocators
+// (smp_allocator, debug_allocator) can be used alongside the per-call arena.
+
+var defer_log: [16]u8 = undefined;
+var defer_log_len: usize = 0;
+
+pub fn deferLifoOrder() []const u8 {
+    defer_log_len = 0;
+    {
+        defer {
+            defer_log[defer_log_len] = 'A';
+            defer_log_len += 1;
+        }
+        defer {
+            defer_log[defer_log_len] = 'B';
+            defer_log_len += 1;
+        }
+        defer {
+            defer_log[defer_log_len] = 'C';
+            defer_log_len += 1;
+        }
+    }
+    return defer_log[0..defer_log_len];
+}
+
+var defer_run_count: u32 = 0;
+
+pub fn resetDeferCounter() void {
+    defer_run_count = 0;
+}
+
+pub fn deferCounter() u32 {
+    return defer_run_count;
+}
+
+pub fn deferRunsOnEveryReturnPath(branch: i32) i32 {
+    defer defer_run_count += 1;
+    if (branch == 0) return -1;
+    if (branch == 1) return 1;
+    return 99;
+}
+
+pub fn deferReleasesSmpAllocation(n: u32) !u32 {
+    const buf = try std.heap.smp_allocator.alloc(u8, n);
+    defer std.heap.smp_allocator.free(buf);
+    @memset(buf, 0xAB);
+    var sum: u32 = 0;
+    for (buf) |b| sum +%= b;
+    return sum;
+}
+
+// allocate on smp_allocator, build the JS Val via env.toJs (which copies
+// bytes into V8), then defer-free the source buffer. proves the user can
+// own a long-lived allocation inside a fn, return its content to JS, and
+// release it via defer without UAF (because the bridge sees the Val, not
+// the raw slice).
+pub fn returnSliceWithDeferredFree(env: napi.Env, n: u32, fill: u8) !napi.Val {
+    const buf = try std.heap.smp_allocator.alloc(u8, n);
+    defer std.heap.smp_allocator.free(buf);
+    @memset(buf, fill);
+    return env.toJs(buf);
+}
+
+// debug_allocator inside an addon function: alloc, free, then deinit
+// to verify the leak check. returns 0 on Check.ok, 1 on Check.leak.
+// always 0 in this happy-path version, but the `dbg.deinit()` switch
+// proves the user's leak-detection pattern actually runs to completion.
+pub fn debugAllocatorRoundTrip(n: u32) !u8 {
+    var dbg: std.heap.DebugAllocator(.{}) = .init;
+    errdefer _ = dbg.deinit();
+    {
+        const allocator = dbg.allocator();
+        const buf = try allocator.alloc(u8, n);
+        defer allocator.free(buf);
+        @memset(buf, 0xCD);
+    }
+    return switch (dbg.deinit()) {
+        .ok => 0,
+        .leak => 1,
+    };
+}
