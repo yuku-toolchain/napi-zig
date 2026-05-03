@@ -12,7 +12,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .npm = .{
             .scope = "@fixture",
-            .repository = .{ .url = "https://example.com/fixture" },
             .description = "fixture for cli tests",
             // covers every target the cross-install matrix loads on.
             // macos_x64 is intentionally omitted, github no longer offers

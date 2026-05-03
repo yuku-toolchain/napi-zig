@@ -12,7 +12,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .npm = .{
             .scope = "@fixture",
-            .repository = .{ .url = "https://example.com/fixture" },
             .description = "fixture for library tests",
             .dts = .auto,
             // platforms only matter for `-Dnpm=true` (release mode); we

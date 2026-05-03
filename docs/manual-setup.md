@@ -56,7 +56,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .npm = .{
             .scope = "@myscope",
-            .repository = .{ .url = "https://github.com/myorg/myrepo" },
         },
     });
 }

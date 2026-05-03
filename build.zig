@@ -8,11 +8,6 @@ pub const Import = struct {
     module: *std.Build.Module,
 };
 
-pub const Repository = struct {
-    type: []const u8 = "git",
-    url: []const u8,
-};
-
 /// .d.ts emission mode. `.none` (default), `.{ .file = path }` for
 /// a hand-written file, or `.auto` to generate from the zig source.
 pub const Dts = union(enum) {
@@ -23,7 +18,6 @@ pub const Dts = union(enum) {
 
 pub const NpmConfig = struct {
     scope: []const u8,
-    repository: Repository,
     description: []const u8 = "",
     license: []const u8 = "MIT",
     dts: Dts = .none,
@@ -272,19 +266,11 @@ fn rootPackageJson(alloc: std.mem.Allocator, name: []const u8, npm: NpmConfig) [
     else
         "";
 
-    const repo_line = std.fmt.allocPrint(alloc,
-        \\  "repository": {{
-        \\    "type": "{s}",
-        \\    "url": "{s}"
-        \\  }},
-        \\
-    , .{ npm.repository.type, npm.repository.url }) catch "";
-
     return std.fmt.allocPrint(alloc,
         \\{{
         \\  "name": "{s}",
         \\  "version": "0.0.0",
-        \\{s}{s}  "license": "{s}",
+        \\{s}  "license": "{s}",
         \\  "type": "module",
         \\  "main": "index.js",
         \\  "types": "index.d.ts",
@@ -297,7 +283,7 @@ fn rootPackageJson(alloc: std.mem.Allocator, name: []const u8, npm: NpmConfig) [
         \\{s}  }}
         \\}}
         \\
-    , .{ name, desc_line, repo_line, npm.license, deps }) catch "";
+    , .{ name, desc_line, npm.license, deps }) catch "";
 }
 
 fn platformPackageJson(alloc: std.mem.Allocator, name: []const u8, npm: NpmConfig, platform: Platform) []const u8 {
@@ -306,19 +292,11 @@ fn platformPackageJson(alloc: std.mem.Allocator, name: []const u8, npm: NpmConfi
     else
         "";
 
-    const repo_line = std.fmt.allocPrint(alloc,
-        \\  "repository": {{
-        \\    "type": "{s}",
-        \\    "url": "{s}"
-        \\  }},
-        \\
-    , .{ npm.repository.type, npm.repository.url }) catch "";
-
     return std.fmt.allocPrint(alloc,
         \\{{
         \\  "name": "{s}/binding-{s}",
         \\  "version": "0.0.0",
-        \\{s}  "os": ["{s}"],
+        \\  "os": ["{s}"],
         \\  "cpu": ["{s}"],
         \\{s}  "main": "{s}.node",
         \\  "files": [
@@ -327,8 +305,9 @@ fn platformPackageJson(alloc: std.mem.Allocator, name: []const u8, npm: NpmConfi
         \\}}
         \\
     , .{
-        npm.scope,         platform.suffix(), repo_line, platform.npmOs(),
-        platform.npmCpu(), libc_line,         name,      name,
+        npm.scope,         platform.suffix(), platform.npmOs(),
+        platform.npmCpu(), libc_line,         name,
+        name,
     }) catch "";
 }
 

@@ -155,6 +155,20 @@ function printNextSteps(name: string, pm: Pm): void {
   console.log(`  ${col(build)}    # rebuild after edits`);
   console.log(`  ${col(release)}    # cross-compile every platform`);
   console.log(`  ${col(npmInit)}    # first-time publish + OIDC`);
+  console.log();
+  console.log("Before publishing:");
+  console.log(
+    `  - Per-platform bindings are published as @${name}/binding-<os>-<arch>, so you need`,
+  );
+  console.log(
+    `    an npm scope @${name} that you own. Create the org at https://www.npmjs.com/org/create`,
+  );
+  console.log(`    (recommended: match the org name to the package name) or change the scope`);
+  console.log(
+    `    in build.zig (the ${bold(".scope")} field under ${bold(".npm")}) to one you already own.`,
+  );
+  console.log(`  - Init git, push to a GitHub repo, and make sure publish.yml is on the`);
+  console.log(`    default branch before running ${bold("napi bump")} (it tags + pushes).`);
 }
 
 function runScript(pm: Pm, name: string): string {
@@ -277,7 +291,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .npm = .{
             .scope = "@${name}",
-            .repository = .{ .url = "https://github.com/your-username/${name}" },
             .dts = .auto,
         },
     });
@@ -331,6 +344,7 @@ function gitignoreContent(name: string): string {
   return `node_modules
 zig-out
 .zig-cache
+zig-pkg
 .DS_Store
 *.tgz
 
@@ -370,7 +384,9 @@ Edit \`src/lib.zig\`, rerun \`${build}\`, run \`${test}\`.
 
 ## Publish
 
-Update \`.npm.scope\` and \`.npm.repository.url\` in \`build.zig\` to your real npm scope and GitHub repository, then:
+Per-platform binaries are published as \`@${name}/binding-<os>-<arch>\`, so before publishing you need an npm scope \`@${name}\` that you own. Create the org at [npmjs.com/org/create](https://www.npmjs.com/org/create) (recommended: match the org name to the package name) or change the scope in \`build.zig\` (the \`.scope\` field inside the \`.npm\` block) to a user scope or org you already own.
+
+Then commit, create the GitHub repository, and push before cutting a release. \`napi bump\` creates a git tag and pushes it, and the push is what triggers the publish workflow on GitHub Actions.
 
 \`\`\`sh
 ${release}
@@ -402,6 +418,8 @@ jobs:
         with: { version: master }
       - uses: actions/setup-node@v4
         with: { node-version: 24, registry-url: https://registry.npmjs.org }
+      - name: Update npm
+        run: npm install -g npm@latest
 ${setup}      - run: ${install}
       - run: ${exec} napi-zig build --release
       - run: ${exec} napi-zig publish

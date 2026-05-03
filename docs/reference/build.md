@@ -17,7 +17,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .npm = .{
             .scope = "@myscope",
-            .repository = .{ .url = "https://github.com/myorg/myrepo" },
         },
     });
 }
@@ -51,20 +50,12 @@ Pass via `.imports = &.{ .{ .name = "parser", .module = parser } }`. See [Projec
 | Option         | Default             | Description                                                              |
 | -------------- | ------------------- | ------------------------------------------------------------------------ |
 | `.scope`       | required            | npm scope (e.g. `"@myscope"`).                                           |
-| `.repository`  | required            | `.url` required, `.type` defaults to `"git"`.                            |
 | `.description` | `""`                | Package description.                                                     |
 | `.license`     | `"MIT"`             | License identifier.                                                      |
 | `.dts`         | `.none`             | `.{ .file = path }`, `.auto`, or `.none`. See [TypeScript](/typescript). |
 | `.platforms`   | `Platform.defaults` | Cross-compilation targets.                                               |
 
-## `Repository`
-
-```zig
-pub const Repository = struct {
-    type: []const u8 = "git",
-    url: []const u8,
-};
-```
+`repository` is intentionally not part of `NpmConfig`. The first release build writes the main `package.json` once; add a `"repository"` field there yourself if you want one and it will be preserved on every subsequent build.
 
 ## `Dts`
 

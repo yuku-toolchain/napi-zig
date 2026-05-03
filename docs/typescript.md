@@ -5,7 +5,6 @@ The build can ship a `.d.ts` next to your `.node` binary so JavaScript users get
 ```zig
 .npm = .{
     .scope = "@myscope",
-    .repository = .{ .url = "https://github.com/myorg/myrepo" },
     .dts = .{ .file = b.path("src/index.d.ts") },
 },
 ```

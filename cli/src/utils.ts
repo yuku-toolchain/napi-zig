@@ -49,6 +49,41 @@ export async function packageExistsOnNpm(name: string): Promise<boolean> {
   }
 }
 
+export async function ensureNpmScope(scope: string): Promise<void> {
+  const scopeName = scope.replace(/^@/, "");
+
+  let username: string;
+  try {
+    const r = await execAsync("npm whoami", { timeout: 15000 });
+    username = r.stdout.trim();
+  } catch {
+    ora().fail("Not logged in to npm. Run 'npm login' first.");
+    process.exit(1);
+  }
+
+  // a user's own scope auto-exists; only org scopes need the npm org check.
+  if (scopeName === username) return;
+
+  const spinner = ora(`Verifying npm scope @${scopeName}...`).start();
+  try {
+    await execAsync(`npm org ls "${scopeName}" --json`, { timeout: 15000 });
+    spinner.succeed(`Scope @${scopeName} verified`);
+  } catch (e: unknown) {
+    spinner.fail(`Scope @${scopeName} not found or not accessible to ${username}`);
+    const stderr = String((e as { stderr?: string }).stderr ?? "").trim();
+    if (stderr) console.error(stderr.split("\n").slice(0, 3).join("\n"));
+    console.error();
+    console.error(`Per-platform bindings publish under the scope @${scopeName}, so the scope must`);
+    console.error(`exist on npm before publishing. Two options:`);
+    console.error();
+    console.error(`  1. Create the org at https://www.npmjs.com/org/create?orgname=${scopeName}`);
+    console.error(`     (it's fine and recommended to match the org name to the package name).`);
+    console.error(`  2. Change the scope in build.zig (the .scope field inside the .npm block)`);
+    console.error(`     to a scope you already own, then re-run 'napi build --release'.`);
+    process.exit(1);
+  }
+}
+
 export function requireNpmVersion(minMajor: number, minMinor: number, feature: string): void {
   try {
     const version = execFileSync("npm", ["--version"], { encoding: "utf-8" }).trim();

@@ -1,6 +1,13 @@
 import ora from "ora";
 import { discoverPackages } from "./npm";
-import { packageExistsOnNpm, requireNpmVersion, run, runInherit, sleep } from "./utils";
+import {
+  ensureNpmScope,
+  packageExistsOnNpm,
+  requireNpmVersion,
+  run,
+  runInherit,
+  sleep,
+} from "./utils";
 
 export interface NpmInitOptions {
   repo: string;
@@ -12,6 +19,15 @@ export async function npmInit(options: NpmInitOptions): Promise<void> {
   const bindings = packages.filter((p) => !p.main);
   const main = packages.find((p) => p.main);
   const ordered = [...bindings, ...(main ? [main] : [])];
+
+  const scopes = new Set<string>();
+  for (const p of ordered) {
+    if (p.name.startsWith("@")) {
+      const scope = p.name.split("/")[0];
+      if (scope) scopes.add(scope);
+    }
+  }
+  for (const s of scopes) await ensureNpmScope(s);
 
   // check which packages are new
   const checkSpinner = ora("Checking which packages need publishing...").start();
