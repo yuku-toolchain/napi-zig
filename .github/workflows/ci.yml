@@ -236,32 +236,10 @@ jobs:
             node:24-alpine \
             node tests/installed-smoke.mjs pkg-out/fcli
 
-  probe-armv7-on-arm64:
-    name: Probe armv7 native exec on arm64 runner
-    runs-on: ubuntu-24.04-arm
-    steps:
-      - name: Check kernel + CPU AArch32 support
-        run: |
-          echo "=== uname ==="
-          uname -a
-          echo "=== /proc/cpuinfo (Features line) ==="
-          grep -m1 Features /proc/cpuinfo || true
-          echo "=== binfmt registrations ==="
-          ls /proc/sys/fs/binfmt_misc/ || true
-      - name: Try running an armv7 binary directly (no QEMU registered)
-        run: |
-          docker run --rm --platform linux/arm/v7 arm32v7/alpine:latest sh -c '
-            uname -m
-            echo "hello from $(uname -m)"
-          '
-      - name: Try running armv7 node (the actual workload)
-        run: |
-          docker run --rm --platform linux/arm/v7 node:20-alpine node -e 'console.log(process.arch, process.platform)'
-
   cross-install-armv7:
     name: Install + load (linux-arm-${{ matrix.libc }})
     needs: cross-compile
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     strategy:
       fail-fast: false
       matrix:
@@ -278,9 +256,6 @@ jobs:
         with:
           name: cross-compiled-pkg
           path: pkg-out/
-
-      - name: Enable QEMU for foreign-arch containers
-        run: docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
 
       - name: Load + smoke-test inside ${{ matrix.image }} (armv7)
         run: |

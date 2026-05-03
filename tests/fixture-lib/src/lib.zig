@@ -1081,6 +1081,26 @@ pub fn returnSliceWithDeferredFree(env: napi.Env, n: u32, fill: u8) !napi.Val {
     return env.toJs(buf);
 }
 
+// arena introspection: returns true iff the per-call arena has zero
+// backing pages allocated. used by tests to prove the lazy-arena claim
+// and the napi.Val zero-copy escape hatch.
+//
+// these two have the same body but different parameter types: the Val
+// variant should always report empty, the slice variant should always
+// report non-empty (because the bridge has to allocate to copy the
+// utf-8 bytes in).
+pub fn arenaIsEmptyWithVal(env: napi.Env, _: napi.Val) bool {
+    return env.arena.queryCapacity() == 0;
+}
+
+pub fn arenaIsEmptyWithSlice(env: napi.Env, _: []const u8) bool {
+    return env.arena.queryCapacity() == 0;
+}
+
+pub fn arenaIsEmptyWithI32(env: napi.Env, _: i32) bool {
+    return env.arena.queryCapacity() == 0;
+}
+
 // debug_allocator inside an addon function: alloc, free, then deinit
 // to verify the leak check. returns 0 on Check.ok, 1 on Check.leak.
 // always 0 in this happy-path version, but the `dbg.deinit()` switch
