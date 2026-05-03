@@ -69,7 +69,7 @@ async function resolvePackageManager(initial: string | undefined): Promise<Pm> {
   }
   const detected = await detect().catch(() => null);
   const fallback = parseUserAgent(getUserAgent());
-  const guessed: Pm = (detected?.name as AgentName | undefined ?? fallback ?? "npm") as Pm;
+  const guessed: Pm = ((detected?.name as AgentName | undefined) ?? fallback ?? "npm") as Pm;
   const initialIdx = Math.max(0, SUPPORTED_PMS.indexOf(guessed));
   const r = await prompts(
     {
@@ -135,7 +135,15 @@ function printNextSteps(name: string, pm: Pm): void {
   const test = runScript(pm, "test");
   const build = runScript(pm, "build");
   const release = runScript(pm, "release");
-  const npmInit = execLocal(pm, "napi", "npm-init", "--repo", "<owner>/<repo>", "--workflow", "publish.yml");
+  const npmInit = execLocal(
+    pm,
+    "napi",
+    "npm-init",
+    "--repo",
+    "<owner>/<repo>",
+    "--workflow",
+    "publish.yml",
+  );
   const pad = Math.max(test.length, build.length, release.length, npmInit.length);
   const col = (s: string) => s.padEnd(pad);
   console.log();
@@ -337,7 +345,15 @@ function readmeContent(name: string, pm: Pm): string {
   const release = runScript(pm, "release");
   const bump = runScript(pm, "bump");
   const test = runScript(pm, "test");
-  const npmInit = execLocal(pm, "napi", "npm-init", "--repo", "<owner>/<repo>", "--workflow", "publish.yml");
+  const npmInit = execLocal(
+    pm,
+    "napi",
+    "npm-init",
+    "--repo",
+    "<owner>/<repo>",
+    "--workflow",
+    "publish.yml",
+  );
 
   return `# ${name}
 

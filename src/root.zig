@@ -8,6 +8,7 @@ pub const dts = @import("dts.zig");
 pub const Error = @import("error.zig").Error;
 pub const Env = @import("env.zig").Env;
 pub const Val = val_mod.Val;
+pub const BigIntFit = val_mod.BigIntFit;
 pub const Callback = val_mod.Callback;
 pub const ThreadsafeFn = val_mod.ThreadsafeFn;
 pub const CallInfo = val_mod.CallInfo;

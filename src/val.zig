@@ -7,6 +7,15 @@ const env_mod = @import("env.zig");
 const Env = env_mod.Env;
 const check = err.check;
 
+/// result of reading a js bigint into a fixed-width zig int. `lossless`
+/// is false if the source bigint did not fit (sign or magnitude).
+pub fn BigIntFit(comptime T: type) type {
+    return struct {
+        value: T,
+        lossless: bool,
+    };
+}
+
 /// opaque handle to a js value, valid only within the current call.
 /// extern layout guarantees `[]const Val` is castable to `[*]const napi_value`.
 pub const Val = extern struct {
@@ -84,6 +93,31 @@ pub const Val = extern struct {
     pub fn getArrayLength(self: Val, env: Env) !u32 {
         var out: u32 = undefined;
         try check(c.napi_get_array_length(env.handle, self.handle, &out));
+        return out;
+    }
+
+    /// utf-8 byte length of a js string (excluding the null terminator).
+    /// does not allocate. errors if the value is not a string.
+    pub fn getStringLength(self: Val, env: Env) !usize {
+        var out: usize = 0;
+        try check(c.napi_get_value_string_utf8(env.handle, self.handle, null, 0, &out));
+        return out;
+    }
+
+    /// read a bigint as i64. `result.lossless` is false if the source
+    /// did not fit. errors only if the value is not a bigint.
+    pub fn getBigIntI64(self: Val, env: Env) !BigIntFit(i64) {
+        var out: BigIntFit(i64) = .{ .value = 0, .lossless = false };
+        try check(c.napi_get_value_bigint_int64(env.handle, self.handle, &out.value, &out.lossless));
+        return out;
+    }
+
+    /// read a bigint as u64. `result.lossless` is false if the source
+    /// was negative or larger than u64::max. errors only if the value
+    /// is not a bigint.
+    pub fn getBigIntU64(self: Val, env: Env) !BigIntFit(u64) {
+        var out: BigIntFit(u64) = .{ .value = 0, .lossless = false };
+        try check(c.napi_get_value_bigint_uint64(env.handle, self.handle, &out.value, &out.lossless));
         return out;
     }
 
