@@ -1,12 +1,11 @@
 import { existsSync, readdirSync, statSync, mkdirSync, copyFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import ora from "ora";
-import { run, runInherit } from "./utils";
+import { run } from "./utils";
 
 export interface BuildDevOptions {
-  // Capture command output instead of streaming it. On failure, dump the
-  // captured stderr. Skips the per-file `info` lines too. Used by `napi new`
-  // for a quiet scaffold flow.
+  // Suppress the per-file `info` lines about created/copied loader and .d.ts
+  // files. Used by `napi new` for a quiet scaffold flow.
   quiet?: boolean;
 }
 
@@ -19,14 +18,11 @@ export async function buildDev(
 
   const spinner = ora("Building for current platform...").start();
   try {
-    if (quiet) await run(`zig build${optFlag}`);
-    else await runInherit(`zig build${optFlag}`);
+    await run(`zig build${optFlag}`);
   } catch (e) {
     spinner.fail("Build failed");
-    if (quiet) {
-      const stderr = String((e as { stderr?: string }).stderr ?? "");
-      if (stderr) console.error(stderr.trim());
-    }
+    const stderr = String((e as { stderr?: string }).stderr ?? "");
+    if (stderr) console.error(stderr.trim());
     throw e;
   }
   spinner.succeed("Build complete");
@@ -57,7 +53,14 @@ export async function buildRelease(optimize: string): Promise<void> {
   const optFlag = ` --release=${optimize}`;
 
   const spinner = ora("Cross-compiling for all platforms...").start();
-  await runInherit(`zig build -Dnpm=true${optFlag}`);
+  try {
+    await run(`zig build -Dnpm=true${optFlag}`);
+  } catch (e) {
+    spinner.fail("Cross-compilation failed");
+    const stderr = String((e as { stderr?: string }).stderr ?? "");
+    if (stderr) console.error(stderr.trim());
+    throw e;
+  }
   spinner.succeed("Cross-compilation complete");
 
   const srcBase = join(process.cwd(), "zig-out", "npm");
