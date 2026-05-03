@@ -57,6 +57,23 @@ pub fn show(env: napi.Env, value: napi.Val) !napi.Val {
 | ---------------------- | -------- | ---------------------------------------------------------------- |
 | `getStringLength(env)` | `!usize` | UTF-8 byte length of a JS string. Does not allocate. Probe-only. |
 
+## BigInt access
+
+The auto-conversion path for `i54`..`i64` and `u54`..`u64` throws a `RangeError` when the source BigInt does not fit. To inspect the `lossless` flag yourself, take a `napi.Val` and use these methods:
+
+| Method              | Returns           | Purpose                                                                            |
+| ------------------- | ----------------- | ---------------------------------------------------------------------------------- |
+| `getBigIntI64(env)` | `!BigIntFit(i64)` | `{ value: i64, lossless: bool }`. `lossless = false` on overflow or sign mismatch. |
+| `getBigIntU64(env)` | `!BigIntFit(u64)` | `{ value: u64, lossless: bool }`. `lossless = false` if negative or `> u64::max`.  |
+
+```zig
+pub fn clamp(env: napi.Env, v: napi.Val) !i64 {
+    const r = try v.getBigIntI64(env);
+    if (r.lossless) return r.value;
+    return if (r.value > 0) std.math.maxInt(i64) else std.math.minInt(i64);
+}
+```
+
 ## Buffer access
 
 | Method                    | Returns | Purpose                                     |

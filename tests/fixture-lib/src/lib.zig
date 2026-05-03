@@ -1108,6 +1108,17 @@ pub fn stringLengthZeroAlloc(env: napi.Env, value: napi.Val) !u64 {
     return len;
 }
 
+// returning the BigIntFit struct directly: the bridge converts it to
+// `{ value: bigint, lossless: boolean }` in JS via the standard struct
+// conversion path.
+pub fn readBigIntI64(env: napi.Env, v: napi.Val) !napi.BigIntFit(i64) {
+    return v.getBigIntI64(env);
+}
+
+pub fn readBigIntU64(env: napi.Env, v: napi.Val) !napi.BigIntFit(u64) {
+    return v.getBigIntU64(env);
+}
+
 // debug_allocator inside an addon function: alloc, free, then deinit
 // to verify the leak check. returns 0 on Check.ok, 1 on Check.leak.
 // always 0 in this happy-path version, but the `dbg.deinit()` switch

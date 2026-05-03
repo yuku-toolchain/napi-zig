@@ -35,7 +35,7 @@ You usually never call them directly. They are listed here so you know what is h
 | Number           | `i1`..`i32`, `u1`..`u32`   |                                              |
 | Number           | `i33`..`i53`, `u33`..`u53` | via `i64`/`f64`                              |
 | Number           | `f16`, `f32`, `f64`        |                                              |
-| BigInt           | `i54`..`i64`, `u54`..`u64` |                                              |
+| BigInt           | `i54`..`i64`, `u54`..`u64` | strict, throws RangeError if lossy           |
 | null / undefined | `?T` returns `null`        |                                              |
 | String           | `[]const u8`               | allocated on `env.allocator()`               |
 | String           | `enum`                     | accepts camelCase or snake_case              |
@@ -52,6 +52,8 @@ Type mismatches throw a JS `TypeError` with the actual JS type:
 TypeError: expected number, got string
 TypeError: invalid enum value for Level: 'foo'
 ```
+
+A BigInt that does not fit the target Zig int throws `RangeError: bigint out of range for ...`. To handle lossy values yourself instead of erroring, take a `napi.Val` parameter and call [`getBigIntI64` / `getBigIntU64`](/reference/val#bigint-access).
 
 ## Structs
 
