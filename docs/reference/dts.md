@@ -21,4 +21,4 @@ What the walker does:
 - Nested namespaces become nested object types.
 - `napi.Val` and `napi.Callback` become `unknown` and `(...args: unknown[]) => unknown` respectively.
 
-For configuration and rules of thumb, see [TypeScript declarations](/guide/typescript).
+For configuration and rules of thumb, see [TypeScript declarations](/typescript).

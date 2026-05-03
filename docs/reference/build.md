@@ -44,18 +44,18 @@ pub const Import = struct {
 };
 ```
 
-Pass via `.imports = &.{ .{ .name = "parser", .module = parser } }`. See [Project layout: importing other Zig modules](/guide/project-layout#importing-other-zig-modules).
+Pass via `.imports = &.{ .{ .name = "parser", .module = parser } }`. See [Project layout: importing other Zig modules](/project-layout#importing-other-zig-modules).
 
 ## `NpmConfig`
 
-| Option         | Default             | Description                                                                    |
-| -------------- | ------------------- | ------------------------------------------------------------------------------ |
-| `.scope`       | required            | npm scope (e.g. `"@myscope"`).                                                 |
-| `.repository`  | required            | `.url` required, `.type` defaults to `"git"`.                                  |
-| `.description` | `""`                | Package description.                                                           |
-| `.license`     | `"MIT"`             | License identifier.                                                            |
-| `.dts`         | `.none`             | `.{ .file = path }`, `.auto`, or `.none`. See [TypeScript](/guide/typescript). |
-| `.platforms`   | `Platform.defaults` | Cross-compilation targets.                                                     |
+| Option         | Default             | Description                                                              |
+| -------------- | ------------------- | ------------------------------------------------------------------------ |
+| `.scope`       | required            | npm scope (e.g. `"@myscope"`).                                           |
+| `.repository`  | required            | `.url` required, `.type` defaults to `"git"`.                            |
+| `.description` | `""`                | Package description.                                                     |
+| `.license`     | `"MIT"`             | License identifier.                                                      |
+| `.dts`         | `.none`             | `.{ .file = path }`, `.auto`, or `.none`. See [TypeScript](/typescript). |
+| `.platforms`   | `Platform.defaults` | Cross-compilation targets.                                               |
 
 ## `Repository`
 
@@ -76,7 +76,7 @@ pub const Dts = union(enum) {
 };
 ```
 
-See [TypeScript declarations](/guide/typescript) for what each mode produces.
+See [TypeScript declarations](/typescript) for what each mode produces.
 
 ## `Platform`
 

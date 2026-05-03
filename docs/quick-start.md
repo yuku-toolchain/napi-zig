@@ -71,10 +71,10 @@ napi build
 node test.mjs
 ```
 
-`napi build` compiles for the current host. When you are ready to ship, `napi build --release` cross-compiles every platform at once. See [Cross-compiling](/guide/cross-compiling).
+`napi build` compiles for the current host. When you are ready to ship, `napi build --release` cross-compiles every platform at once. See [Cross-compiling](/cross-compiling).
 
 ## Next steps
 
-- [Functions](/guide/functions) covers everything you can put after `pub fn`.
-- [Type conversion](/guide/type-conversion) is the table of which Zig types map to which JS types.
-- [Project layout](/guide/project-layout) explains what the scaffolder generated and why.
+- [Functions](/functions) covers everything you can put after `pub fn`.
+- [Type conversion](/type-conversion) is the table of which Zig types map to which JS types.
+- [Project layout](/project-layout) explains what the scaffolder generated and why.

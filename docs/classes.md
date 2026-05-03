@@ -84,4 +84,4 @@ The general rule: state that lives on the instance uses a long-lived allocator; 
 
 ## Why not just use `pub const`?
 
-A `pub const` struct with `pub fn` declarations becomes a [namespace](/guide/namespaces): a static set of functions on a JS object. It has no `this`. `napi.class` is for stateful instances backed by a Zig struct, instantiated with `new`, with methods that take `*Self`.
+A `pub const` struct with `pub fn` declarations becomes a [namespace](/namespaces): a static set of functions on a JS object. It has no `this`. `napi.class` is for stateful instances backed by a Zig struct, instantiated with `new`, with methods that take `*Self`.

@@ -26,4 +26,4 @@ const err = try env.createError("operation failed");
 try p.deferred.reject(env, err);
 ```
 
-See [Promises](/guide/async/promises) for the full pattern.
+See [Promises](/async/promises) for the full pattern.

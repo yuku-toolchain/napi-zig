@@ -82,7 +82,7 @@ pub fn resolve(self: *FibWork, _: napi.Env) !i32 {
 asyncFib(-1).catch((e) => console.log(e.message)); // "InvalidInput"
 ```
 
-See [Workers](/guide/async/workers) for the rest.
+See [Workers](/async/workers) for the rest.
 
 ## What you cannot catch in JS
 

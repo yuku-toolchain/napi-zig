@@ -30,7 +30,7 @@ const c = new Counter(10);
 c.increment(); // 11
 ```
 
-For the conceptual model, see [Classes](/guide/classes).
+For the conceptual model, see [Classes](/classes).
 
 ## Recognized members
 

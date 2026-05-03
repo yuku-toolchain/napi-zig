@@ -2,7 +2,7 @@
 
 `env.runWorker` offloads CPU work to a background thread and returns a JS Promise. It is the right tool for **single-result** async work: parsing, hashing, image processing, anything that takes long enough to block the main thread.
 
-For multi-call async patterns (progress events, streaming), use a [ThreadsafeFn](/guide/async/threadsafe) instead.
+For multi-call async patterns (progress events, streaming), use a [ThreadsafeFn](/async/threadsafe) instead.
 
 ## The pattern
 
@@ -100,7 +100,7 @@ The convention is for `compute` or `resolve` to free the long-lived allocation w
 
 ## Returning JS values directly
 
-If you want `resolve` to return a hand-built `napi.Val` instead of a typed Zig value (for Buffers, dynamic-key objects, anything outside the [conversion table](/guide/type-conversion)):
+If you want `resolve` to return a hand-built `napi.Val` instead of a typed Zig value (for Buffers, dynamic-key objects, anything outside the [conversion table](/type-conversion)):
 
 ```zig
 pub fn resolve(self: *Work, env: napi.Env) !napi.Val {
@@ -115,5 +115,5 @@ pub fn resolve(self: *Work, env: napi.Env) !napi.Val {
 ## When not to use a worker
 
 - **Synchronous work that completes in microseconds.** The thread hop has its own cost. Just compute on the main thread.
-- **Multi-call patterns.** Progress events, streaming, anything where the worker pushes more than one value. Use [ThreadsafeFn](/guide/async/threadsafe).
+- **Multi-call patterns.** Progress events, streaming, anything where the worker pushes more than one value. Use [ThreadsafeFn](/async/threadsafe).
 - **I/O-bound work.** If the work spends its time waiting for the kernel, use Node's existing async I/O instead of pinning a thread.

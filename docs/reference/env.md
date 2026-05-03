@@ -20,13 +20,13 @@ pub fn handler(env: napi.Env) !napi.Val {
 | ------------- | ------------------- | ---------------------------------------------------------- |
 | `allocator()` | `std.mem.Allocator` | Per-call arena allocator. Freed when the function returns. |
 
-See [Memory model](/guide/memory).
+See [Memory model](/memory).
 
 ## Conversion
 
-| Method        | Returns     | Purpose                                                                   |
-| ------------- | ----------- | ------------------------------------------------------------------------- |
-| `toJs(value)` | `!napi.Val` | Convert any [convertible Zig type](/guide/type-conversion) to a JS value. |
+| Method        | Returns     | Purpose                                                             |
+| ------------- | ----------- | ------------------------------------------------------------------- |
+| `toJs(value)` | `!napi.Val` | Convert any [convertible Zig type](/type-conversion) to a JS value. |
 
 ## Primitives
 
@@ -104,7 +104,7 @@ pub const Promise = struct {
 };
 ```
 
-See [Workers](/guide/async/workers) and [Promises](/guide/async/promises).
+See [Workers](/async/workers) and [Promises](/async/promises).
 
 ## Errors
 
@@ -117,7 +117,7 @@ See [Workers](/guide/async/workers) and [Promises](/guide/async/promises).
 | `createError(message)`      | `!napi.Val` | Construct a JS `Error` without throwing it. |
 | `isExceptionPending()`      | `bool`      | Whether an exception is currently pending.  |
 
-After `throw*`, return any error from your function to abort. See [Errors](/guide/errors).
+After `throw*`, return any error from your function to abort. See [Errors](/errors).
 
 ## Version info
 

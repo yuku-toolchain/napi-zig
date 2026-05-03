@@ -57,18 +57,18 @@ addon.invokeOn(obj, function () {
 
 ## Cross-thread: `threadsafe(env, name, T)`
 
-Calling `cb.call` from a non-main thread crashes Node. To call back into JS from a worker thread, wrap the callback as a [ThreadsafeFn](/guide/async/threadsafe):
+Calling `cb.call` from a non-main thread crashes Node. To call back into JS from a worker thread, wrap the callback as a [ThreadsafeFn](/async/threadsafe):
 
 ```zig
 const tsfn = try cb.threadsafe(env, "events", u32);
 ```
 
-The third argument is the per-call payload type. Use `void` for signal-only callbacks. See [Threadsafe functions](/guide/async/threadsafe) for the full pattern.
+The third argument is the per-call payload type. Use `void` for signal-only callbacks. See [Threadsafe functions](/async/threadsafe) for the full pattern.
 
 ## Method summary
 
-| Method                      | Purpose                                                            |
-| --------------------------- | ------------------------------------------------------------------ |
-| `call(env, args_tuple)`     | Call with `undefined` as `this`. Args is a tuple.                  |
-| `callWith(env, this, args)` | Call with a specific `this` binding.                               |
-| `threadsafe(env, name, T)`  | Cross-thread wrapper. See [ThreadsafeFn](/guide/async/threadsafe). |
+| Method                      | Purpose                                                      |
+| --------------------------- | ------------------------------------------------------------ |
+| `call(env, args_tuple)`     | Call with `undefined` as `this`. Args is a tuple.            |
+| `callWith(env, this, args)` | Call with a specific `this` binding.                         |
+| `threadsafe(env, name, T)`  | Cross-thread wrapper. See [ThreadsafeFn](/async/threadsafe). |

@@ -6,14 +6,14 @@ Thread-safe wrapper around a JS function. `T` is the per-call payload type. Buil
 const tsfn = try cb.threadsafe(env, "progress", u8);
 ```
 
-For the conceptual model and lifecycle rules, see [Threadsafe functions](/guide/async/threadsafe).
+For the conceptual model and lifecycle rules, see [Threadsafe functions](/async/threadsafe).
 
 ## `T` semantics
 
-| `T` value       | Behavior                                                                                        |
-| --------------- | ----------------------------------------------------------------------------------------------- |
-| `void`          | No payload. JS callback is invoked with no arguments.                                           |
-| Any convertible | Each call sends a `T`. The bridge converts to JS via [type conversion](/guide/type-conversion). |
+| `T` value       | Behavior                                                                                  |
+| --------------- | ----------------------------------------------------------------------------------------- |
+| `void`          | No payload. JS callback is invoked with no arguments.                                     |
+| Any convertible | Each call sends a `T`. The bridge converts to JS via [type conversion](/type-conversion). |
 
 ## Methods
 

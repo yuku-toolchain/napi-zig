@@ -55,7 +55,7 @@ addon.fs.read(path);
 addon.version(); // "0.1.0"
 ```
 
-See [Namespaces](/guide/namespaces) for the full rules.
+See [Namespaces](/namespaces) for the full rules.
 
 ## Importing other Zig modules
 
@@ -106,4 +106,4 @@ my-addon/                  # the meta-package users install
 # ...one per platform
 ```
 
-A user runs `npm i my-addon` and npm picks the right binding via `optionalDependencies` and the `os`, `cpu`, and `libc` fields. There is no `postinstall` script and no native build step on the consumer's machine. See [Publishing](/guide/publishing) for the full pipeline.
+A user runs `npm i my-addon` and npm picks the right binding via `optionalDependencies` and the `os`, `cpu`, and `libc` fields. There is no `postinstall` script and no native build step on the consumer's machine. See [Publishing](/publishing) for the full pipeline.

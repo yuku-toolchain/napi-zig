@@ -53,7 +53,7 @@ zig-out/lib/
 
 The CLI also drops a top-level `my-addon.js` re-exporter so the import path matches what users will see after publish.
 
-With `--release`, cross-compiles every platform listed in `.npm.platforms` and lays out the full `npm/` package tree. See [Cross-compiling](/guide/cross-compiling).
+With `--release`, cross-compiles every platform listed in `.npm.platforms` and lays out the full `npm/` package tree. See [Cross-compiling](/cross-compiling).
 
 ## `napi bump`
 
@@ -101,4 +101,4 @@ One-time setup: publishes initial `0.0.0` versions of every package and configur
 | `--repo`     | Yes      | GitHub repository as `owner/name`.             |
 | `--workflow` | Yes      | The workflow filename in `.github/workflows/`. |
 
-You only run this once per package. The CI pipeline takes over from here. See [Publishing](/guide/publishing) for the full pipeline.
+You only run this once per package. The CI pipeline takes over from here. See [Publishing](/publishing) for the full pipeline.

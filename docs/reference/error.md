@@ -10,7 +10,7 @@ cb.call(env, .{x}) catch |e| switch (e) {
 };
 ```
 
-Use it when you want to handle a specific failure mode rather than propagate everything. For the conceptual model, see [Errors](/guide/errors).
+Use it when you want to handle a specific failure mode rather than propagate everything. For the conceptual model, see [Errors](/errors).
 
 ## Common members
 

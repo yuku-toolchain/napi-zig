@@ -2,7 +2,7 @@
 
 `ThreadsafeFn(T)` lets a background thread call back into JS. Node is single-threaded, so you cannot call N-API from a spawned thread directly. `ThreadsafeFn` queues calls back to the main thread and runs them there.
 
-Use it for **multi-call** patterns: progress events, streaming results, pub/sub. For single-result background work, use [Workers](/guide/async/workers) instead.
+Use it for **multi-call** patterns: progress events, streaming results, pub/sub. For single-result background work, use [Workers](/async/workers) instead.
 
 ## The pattern
 
@@ -57,7 +57,7 @@ The third argument to `cb.threadsafe(env, name, T)` is the per-call payload. The
 | --------- | ----------------------------------------------------- |
 | `void`    | No argument. Callback is invoked with no parameters.  |
 | `u32`     | Each call sends a `u32`. JS sees one number argument. |
-| Any type  | Any [convertible Zig type](/guide/type-conversion).   |
+| Any type  | Any [convertible Zig type](/type-conversion).         |
 
 For struct payloads, the field-by-field walk applies as usual:
 

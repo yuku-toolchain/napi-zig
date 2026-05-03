@@ -16,9 +16,9 @@ pub fn show(env: napi.Env, value: napi.Val) !napi.Val {
 
 ## Conversion
 
-| Method                           | Returns | Purpose                                                      |
-| -------------------------------- | ------- | ------------------------------------------------------------ |
-| `to(env: Env, comptime T: type)` | `!T`    | Convert to any [supported Zig type](/guide/type-conversion). |
+| Method                           | Returns | Purpose                                                |
+| -------------------------------- | ------- | ------------------------------------------------------ |
+| `to(env: Env, comptime T: type)` | `!T`    | Convert to any [supported Zig type](/type-conversion). |
 
 ## Type checks
 

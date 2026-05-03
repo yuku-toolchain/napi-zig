@@ -25,7 +25,7 @@ export default defineConfig({
     siteTitle: "napi-zig",
 
     nav: [
-      { text: "Guide", link: "/guide/introduction", activeMatch: "/guide/" },
+      { text: "Guide", link: "/", activeMatch: "^/(?!reference)" },
       { text: "Reference", link: "/reference/cli", activeMatch: "/reference/" },
       {
         text: "Resources",
@@ -47,42 +47,42 @@ export default defineConfig({
     ],
 
     sidebar: {
-      "/guide/": [
+      "/": [
         {
           text: "Introduction",
           items: [
-            { text: "Introduction", link: "/guide/introduction" },
-            { text: "Quick start", link: "/guide/quick-start" },
-            { text: "Manual setup", link: "/guide/manual-setup" },
-            { text: "Project layout", link: "/guide/project-layout" },
+            { text: "Introduction", link: "/" },
+            { text: "Quick start", link: "/quick-start" },
+            { text: "Manual setup", link: "/manual-setup" },
+            { text: "Project layout", link: "/project-layout" },
           ],
         },
         {
           text: "Writing addons",
           items: [
-            { text: "Functions", link: "/guide/functions" },
-            { text: "Namespaces", link: "/guide/namespaces" },
-            { text: "Classes", link: "/guide/classes" },
-            { text: "Type conversion", link: "/guide/type-conversion" },
-            { text: "Memory model", link: "/guide/memory" },
-            { text: "Errors", link: "/guide/errors" },
-            { text: "Callbacks", link: "/guide/callbacks" },
+            { text: "Functions", link: "/functions" },
+            { text: "Namespaces", link: "/namespaces" },
+            { text: "Classes", link: "/classes" },
+            { text: "Type conversion", link: "/type-conversion" },
+            { text: "Memory model", link: "/memory" },
+            { text: "Errors", link: "/errors" },
+            { text: "Callbacks", link: "/callbacks" },
           ],
         },
         {
           text: "Async",
           items: [
-            { text: "Workers", link: "/guide/async/workers" },
-            { text: "Threadsafe functions", link: "/guide/async/threadsafe" },
-            { text: "Promises", link: "/guide/async/promises" },
+            { text: "Workers", link: "/async/workers" },
+            { text: "Threadsafe functions", link: "/async/threadsafe" },
+            { text: "Promises", link: "/async/promises" },
           ],
         },
         {
           text: "Distribution",
           items: [
-            { text: "TypeScript declarations", link: "/guide/typescript" },
-            { text: "Cross-compiling", link: "/guide/cross-compiling" },
-            { text: "Publishing to npm", link: "/guide/publishing" },
+            { text: "TypeScript declarations", link: "/typescript" },
+            { text: "Cross-compiling", link: "/cross-compiling" },
+            { text: "Publishing to npm", link: "/publishing" },
           ],
         },
       ],

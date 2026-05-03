@@ -22,7 +22,7 @@ pub fn forEach(env: napi.Env, items: []napi.Val, cb: napi.Callback) !void {
 
 `args` is one of:
 
-- A Zig tuple. Each element is auto-converted to a JS value via [type conversion](/guide/type-conversion).
+- A Zig tuple. Each element is auto-converted to a JS value via [type conversion](/type-conversion).
 - A `[]const napi.Val` slice when you have one already built.
 
 ```zig
@@ -46,7 +46,7 @@ const result = try cb.callWith(env, target, .{42});
 const tsfn = try cb.threadsafe(env, "events", u32);
 ```
 
-Wraps the callback so it can be invoked from any thread. The third argument is the per-call payload type (use `void` for signal-only callbacks). See [ThreadsafeFn](/reference/threadsafe-fn) and [Threadsafe functions guide](/guide/async/threadsafe).
+Wraps the callback so it can be invoked from any thread. The third argument is the per-call payload type (use `void` for signal-only callbacks). See [ThreadsafeFn](/reference/threadsafe-fn) and [Threadsafe functions guide](/async/threadsafe).
 
 ## Notes
 

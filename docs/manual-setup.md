@@ -37,7 +37,7 @@ pub fn greet(env: napi.Env, name: []const u8) ![]const u8 {
 | `pub const x = <JS-mappable value>`   | A JS property         |
 | `pub const x = struct { pub fn ... }` | A nested JS namespace |
 
-Names are translated `snake_case` to `camelCase` automatically. See [Functions](/guide/functions) for the full rules.
+Names are translated `snake_case` to `camelCase` automatically. See [Functions](/functions) for the full rules.
 
 ## 3. Configure `build.zig`
 
@@ -81,6 +81,6 @@ That's the whole setup. From here, the rest of the guide covers what you can put
 
 ## Next steps
 
-- [Project layout](/guide/project-layout) describes the files the scaffolder writes.
-- [Functions](/guide/functions) is the core mental model.
-- [Cross-compiling](/guide/cross-compiling) explains what `--release` actually does.
+- [Project layout](/project-layout) describes the files the scaffolder writes.
+- [Functions](/functions) is the core mental model.
+- [Cross-compiling](/cross-compiling) explains what `--release` actually does.

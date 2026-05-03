@@ -38,7 +38,7 @@ pub fn greet(env: napi.Env, name: []const u8) ![]const u8 {
 }
 ```
 
-`env.allocator()` is an arena that resets when your function returns. See [Memory model](/guide/memory).
+`env.allocator()` is an arena that resets when your function returns. See [Memory model](/memory).
 
 ### Take raw `CallInfo`
 
@@ -97,6 +97,6 @@ If you want a JS-visible name that is not a valid Zig identifier, build the expo
 
 ## What's next?
 
-- [Namespaces](/guide/namespaces) explains how `pub const x = struct { ... }` becomes a nested object.
-- [Type conversion](/guide/type-conversion) is the table of every Zig type and what it maps to in JS.
-- [Errors](/guide/errors) covers throwing, rejecting, and the `napi.Error` set.
+- [Namespaces](/namespaces) explains how `pub const x = struct { ... }` becomes a nested object.
+- [Type conversion](/type-conversion) is the table of every Zig type and what it maps to in JS.
+- [Errors](/errors) covers throwing, rejecting, and the `napi.Error` set.
