@@ -77,4 +77,4 @@ node test.mjs
 
 - [Functions](/functions) covers everything you can put after `pub fn`.
 - [Type conversion](/type-conversion) is the table of which Zig types map to which JS types.
-- [Project layout](/project-layout) explains what the scaffolder generated and why.
+- [Project layout](/project-layout) is a one-stop map of every file in the project.

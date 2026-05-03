@@ -57,7 +57,7 @@ The one exception is renaming the addon's `.name` itself. The new tree is create
 
 `binding.js` is fully owned by the build. It implements platform detection and loads the matching `<scope>/binding-…` package. Do not edit it; your changes will be overwritten on the next build.
 
-`index.js` is your seam. The default the scaffolder writes is just a re-export:
+`index.js` is your seam. The default `napi build --release` writes is a plain re-export:
 
 ```js
 import binding from "./binding.js";

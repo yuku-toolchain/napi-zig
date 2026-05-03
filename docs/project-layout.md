@@ -1,8 +1,10 @@
 # Project layout
 
-A napi-zig project is a Zig project and a Node.js project sharing one root. This page is a one-stop map: every file the scaffolder writes, every directory the build creates, and where to look for more on each.
+A napi-zig project is a Zig project and a Node.js project sharing one root. This page is a one-stop map: every file in the project, every directory the build creates, and where to look for more on each.
 
-## After `napi new`
+The same layout applies whether you scaffolded with `napi new` or wired things up by hand following [Manual setup](/manual-setup).
+
+## Source tree
 
 ```
 my-addon/
@@ -65,4 +67,4 @@ This is the publishable tree. `napi publish` ships every directory under `npm/` 
 
 ## Generated and ignored
 
-The scaffolder's `.gitignore` excludes everything derived: `node_modules`, `zig-out`, `.zig-cache`, `zig-pkg`, and the project-root `<name>.js` / `<name>.d.ts` re-exporters. Commit `npm/` only after your first `napi build --release`; from then on, every release build keeps it in sync with `build.zig` automatically.
+Exclude everything derived from version control: `node_modules`, `zig-out`, `.zig-cache`, `zig-pkg`, and the project-root `<name>.js` / `<name>.d.ts` re-exporters. (`napi new` writes a `.gitignore` with all of these; if you set up by hand, see [Manual setup, step 5](/manual-setup#_5-add-a-gitignore).) Commit `npm/` once you start publishing. Every release build keeps it in sync with `build.zig` automatically.

@@ -22,7 +22,7 @@ The `@my-addon` part is your **npm scope**: the `@something` prefix on each bind
 - **Your npm username.** Every npm account has a personal scope at `@<your-username>`. It exists automatically.
 - **An organization you own** on npm. Create one at [npmjs.com/org/create](https://www.npmjs.com/org/create) before you publish.
 
-The recommended pattern, and the scaffolder's default, is to make the scope name match the package name (`@my-addon` for `my-addon`). That way every binding clearly belongs to one package. You can use any scope you own; matching just makes ownership obvious to consumers.
+The recommended pattern is to make the scope name match the package name (`@my-addon` for `my-addon`); that is also the default if you scaffolded with `napi new`. Matching scope to package name makes binding ownership obvious to consumers. You can use any scope you own.
 
 The scope is set in `build.zig`, in the `.scope` field inside the `.npm` block:
 
@@ -41,7 +41,7 @@ Each step below assumes the previous one is done. **Do them in this order.**
 
 ### 1. Decide your scope
 
-Open `build.zig` and review the `.scope` field. Either keep the scaffolder's default (`@<package-name>`) or change it to a username or org you own. If you set it to an org, **create that org now** at [npmjs.com/org/create](https://www.npmjs.com/org/create). The recommended pattern is to keep the scope matching the package name.
+Open `build.zig` and review the `.scope` field. Set it to a username or org you own (or keep the default `@<package-name>` if you scaffolded). If the scope is an org, **create that org now** at [npmjs.com/org/create](https://www.npmjs.com/org/create). The recommended pattern is for the scope name to match the package name.
 
 ### 2. Update npm to a recent version
 
@@ -69,7 +69,7 @@ The next step needs to publish initial `0.0.0` versions; that requires being log
 
 ### 5. Push your code to GitHub
 
-The publish workflow lives in `.github/workflows/publish.yml` (the scaffolder writes it). It runs on tag push, so the workflow file must already be on the default branch before you tag a release. If your repo is local-only, do this now:
+The publish workflow lives in `.github/workflows/publish.yml`. `napi new` writes it for you; if you set up by hand, copy the YAML from [The CI workflow](#the-ci-workflow) below into that path. The workflow runs on tag push, so it must be on the default branch before you tag a release. If your repo is local-only, push it now:
 
 ```sh
 git init
@@ -126,7 +126,7 @@ If any of those is missing, fix it first. `napi bump` is what triggers the publi
 
 ## The CI workflow
 
-The scaffolder writes this to `.github/workflows/publish.yml`. With trusted publishing configured (step 6 above), no secrets are needed.
+Save this as `.github/workflows/publish.yml` (`napi new` writes it for you). With trusted publishing configured (step 6 above), no secrets are needed.
 
 ```yaml
 name: Publish
