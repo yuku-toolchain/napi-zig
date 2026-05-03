@@ -23,4 +23,11 @@ describe("the per-call arena is lazy", () => {
     expect(m.arenaIsEmptyWithSlice("")).toBe(false);
     expect(m.arenaIsEmptyWithSlice("a".repeat(10_000))).toBe(false);
   });
+
+  test("Val.getStringLength returns the UTF-8 byte length without allocating", () => {
+    expect(Number(m.stringLengthZeroAlloc("hello"))).toBe(5);
+    expect(Number(m.stringLengthZeroAlloc(""))).toBe(0);
+    expect(Number(m.stringLengthZeroAlloc("a".repeat(10_000)))).toBe(10_000);
+    expect(Number(m.stringLengthZeroAlloc("héllo"))).toBe(6); // é is 2 UTF-8 bytes
+  });
 });

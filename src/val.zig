@@ -87,6 +87,14 @@ pub const Val = extern struct {
         return out;
     }
 
+    /// utf-8 byte length of a js string (excluding the null terminator).
+    /// does not allocate. errors if the value is not a string.
+    pub fn getStringLength(self: Val, env: Env) !usize {
+        var out: usize = 0;
+        try check(c.napi_get_value_string_utf8(env.handle, self.handle, null, 0, &out));
+        return out;
+    }
+
     pub fn getArrayBufferData(self: Val, env: Env) ![]u8 {
         return bufferInfo(env, self, c.napi_get_arraybuffer_info);
     }

@@ -14,7 +14,7 @@ The arena is constructed at the start of each call and torn down at the end. The
 
 The arena's backing pages come from `std.heap.smp_allocator`, a thread-cached allocator. The arena is **lazy**: `init` only writes a few struct fields. The first `alloc` call requests a page from `smp_allocator`; subsequent allocs come from the same page. If no allocation ever happens during the call, `deinit` has nothing to free and returns immediately.
 
-That means a function whose arguments and return value all fit in registers truly never goes near the allocator. `add(i32, i32)` does no syscall, no `smp_allocator` call, no kernel touch — just N-API conversion and the bridge wrapper.
+That means a function whose arguments and return value all fit in registers truly never goes near the allocator. `add(i32, i32)` does no syscall, no `smp_allocator` call, no kernel touch. Just N-API conversion and the bridge wrapper.
 
 ## What lives where
 
@@ -82,15 +82,13 @@ The same applies to any owned type: structs containing slices, arrays of strings
 
 ## Skipping the auto-copy for arguments
 
-A `[]const u8` parameter triggers one arena alloc. The bridge probes the JS string's byte length, reserves exactly that, and copies the UTF-8 bytes in. That is the right default — N-API has no zero-copy path for UTF-8 strings (V8 owns the original UTF-16 representation), and the arena makes the copy free at end-of-call.
+A `[]const u8` parameter triggers one arena alloc. The bridge probes the JS string's byte length, reserves exactly that, and copies the UTF-8 bytes in. That is the right default. N-API has no zero-copy path for UTF-8 strings (V8 owns the original UTF-16 representation), and the arena makes the copy free at end-of-call.
 
-If you don't need the bytes (e.g., you only want the length, the type tag, or a `Ref` to keep around), take a `napi.Val` instead. The bridge passes the JS handle through unmodified — no probe, no alloc, no copy:
+If you don't need the bytes (e.g., you only want the length, the type tag, or a `Ref` to keep around), take a `napi.Val` instead. The bridge passes the JS handle through unmodified, no probe, no alloc, no copy:
 
 ```zig
 pub fn lengthOf(env: napi.Env, value: napi.Val) !u32 {
-    var len: usize = 0;
-    _ = napi.c.napi_get_value_string_utf8(env.handle, value.handle, null, 0, &len);
-    return @intCast(len);
+    return @intCast(try value.getStringLength(env));
 }
 ```
 

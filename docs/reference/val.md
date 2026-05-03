@@ -51,6 +51,12 @@ pub fn show(env: napi.Env, value: napi.Val) !napi.Val {
 | `setElement(env, index: u32, value)` | `!void`     | Index set.    |
 | `getArrayLength(env)`                | `!u32`      | Array length. |
 
+## String access
+
+| Method                 | Returns  | Purpose                                                          |
+| ---------------------- | -------- | ---------------------------------------------------------------- |
+| `getStringLength(env)` | `!usize` | UTF-8 byte length of a JS string. Does not allocate. Probe-only. |
+
 ## Buffer access
 
 | Method                    | Returns | Purpose                                     |

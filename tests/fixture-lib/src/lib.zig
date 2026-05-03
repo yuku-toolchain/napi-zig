@@ -1101,6 +1101,13 @@ pub fn arenaIsEmptyWithI32(env: napi.Env, _: i32) bool {
     return env.arena.queryCapacity() == 0;
 }
 
+// proves Val.getStringLength does not allocate on the arena.
+pub fn stringLengthZeroAlloc(env: napi.Env, value: napi.Val) !u64 {
+    const len = try value.getStringLength(env);
+    if (env.arena.queryCapacity() != 0) return error.ArenaTouched;
+    return len;
+}
+
 // debug_allocator inside an addon function: alloc, free, then deinit
 // to verify the leak check. returns 0 on Check.ok, 1 on Check.leak.
 // always 0 in this happy-path version, but the `dbg.deinit()` switch
