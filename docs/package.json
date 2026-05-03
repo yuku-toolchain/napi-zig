@@ -1,6 +1,6 @@
 {
   "name": "@napi-zig/docs",
-  "version": "0.0.0",
+  "version": "0.1.26",
   "private": true,
   "type": "module",
   "scripts": {
