@@ -1,7 +1,8 @@
 {
   "name": "napi-zig-root",
   "workspaces": [
-    "cli"
+    "cli",
+    "docs"
   ],
   "scripts": {
     "type-check": "bun --filter './cli' type-check && tsgo --noEmit -p tests/dts",
@@ -9,7 +10,10 @@
     "lint": "oxlint",
     "format": "oxfmt",
     "build:cli": "bun --filter './cli' build",
-    "test": "zig build test && bun test"
+    "test": "zig build test && bun test",
+    "docs:dev": "bun --filter './docs' dev",
+    "docs:build": "bun --filter './docs' build",
+    "docs:preview": "bun --filter './docs' preview"
   },
   "devDependencies": {
     "@types/bun": "^1.3.11",
