@@ -24,8 +24,8 @@ export default defineConfig({
 
   markdown: {
     theme: {
-      light: "vitesse-light",
-      dark: "vesper",
+      light: "github-light",
+      dark: "github-dark-dimmed",
     },
   },
 

@@ -1,35 +1,22 @@
-/*
- * Serious systems-language palette.
- * Light: warm cream paper (echoes ziglang.org).
- * Dark: deep near-black terminal (echoes the Vesper Shiki theme).
- * Accent: Zig amber #f7a41d, applied as a darker variant for body links
- * on light to keep contrast readable.
- */
-
 :root {
-  /* Surfaces */
   --vp-c-bg: #fbfbf2;
   --vp-c-bg-alt: #f5f1e3;
   --vp-c-bg-elv: #ffffff;
   --vp-c-bg-soft: #f0ebd8;
 
-  /* Text */
   --vp-c-text-1: #1a1714;
   --vp-c-text-2: #4a4239;
   --vp-c-text-3: #6b6157;
 
-  /* Lines */
   --vp-c-divider: #e8e1cf;
   --vp-c-gutter: #ece5d2;
   --vp-c-border: #d6cdb5;
 
-  /* Brand: Zig amber, darkened for accessible link contrast on cream. */
   --vp-c-brand-1: #b56600;
   --vp-c-brand-2: #c47000;
   --vp-c-brand-3: #f7a41d;
   --vp-c-brand-soft: rgba(247, 164, 29, 0.16);
 
-  /* Semantic */
   --vp-c-tip-1: #2f7a3e;
   --vp-c-tip-2: #2f7a3e;
   --vp-c-tip-3: #3a8c4a;
@@ -55,17 +42,15 @@
   --vp-c-important-3: #7a5bc7;
   --vp-c-important-soft: rgba(122, 91, 199, 0.12);
 
-  /* Code */
   --vp-code-bg: rgba(26, 23, 20, 0.06);
   --vp-code-color: #b56600;
-  --vp-code-block-bg: #f6f1e0;
+  --vp-code-block-bg: #ffffff;
   --vp-code-block-divider-color: #e8e1cf;
   --vp-code-line-highlight-color: rgba(247, 164, 29, 0.1);
 
   --vp-c-mute: #ece5d2;
   --vp-c-mute-dark: #d6cdb5;
 
-  /* Buttons */
   --vp-button-brand-border: var(--vp-c-brand-3);
   --vp-button-brand-text: #1a1714;
   --vp-button-brand-bg: var(--vp-c-brand-3);
@@ -76,7 +61,6 @@
   --vp-button-brand-active-text: #1a1714;
   --vp-button-brand-active-bg: #d98e0e;
 
-  /* Custom block backgrounds */
   --vp-custom-block-tip-bg: rgba(47, 122, 62, 0.08);
   --vp-custom-block-warning-bg: rgba(201, 138, 23, 0.1);
   --vp-custom-block-danger-bg: rgba(192, 48, 60, 0.08);
@@ -84,29 +68,24 @@
 }
 
 .dark {
-  /* Surfaces: dark but not pitch-black; elevations brighten upward. */
   --vp-c-bg: #171717;
   --vp-c-bg-alt: #1c1c1c;
   --vp-c-bg-elv: #262626;
   --vp-c-bg-soft: #1f1f1f;
 
-  /* Text */
   --vp-c-text-1: #ededed;
   --vp-c-text-2: #b4afaa;
   --vp-c-text-3: #8a857f;
 
-  /* Lines */
   --vp-c-divider: #2a2a2a;
   --vp-c-gutter: #111111;
   --vp-c-border: #333333;
 
-  /* Brand: pure Zig amber on dark. */
   --vp-c-brand-1: #f7a41d;
   --vp-c-brand-2: #ffb340;
   --vp-c-brand-3: #f7a41d;
   --vp-c-brand-soft: rgba(247, 164, 29, 0.18);
 
-  /* Semantic */
   --vp-c-tip-1: #6cc26a;
   --vp-c-tip-2: #6cc26a;
   --vp-c-tip-3: #6cc26a;
@@ -132,29 +111,25 @@
   --vp-c-important-3: #c4a8f5;
   --vp-c-important-soft: rgba(196, 168, 245, 0.14);
 
-  /* Code: slightly darker than page so blocks still settle in. */
   --vp-code-bg: rgba(237, 237, 237, 0.06);
-  --vp-code-color: #ffc799;
-  --vp-code-block-bg: #111111;
+  --vp-code-color: #f69d50;
+  --vp-code-block-bg: #22272e;
   --vp-code-block-divider-color: #2a2a2a;
   --vp-code-line-highlight-color: rgba(247, 164, 29, 0.08);
 
   --vp-c-mute: #262626;
   --vp-c-mute-dark: #333333;
 
-  /* Buttons: amber accent reads on the dark gray. */
   --vp-button-brand-text: #171717;
   --vp-button-brand-hover-text: #171717;
   --vp-button-brand-active-text: #171717;
 
-  /* Custom block backgrounds */
   --vp-custom-block-tip-bg: rgba(108, 194, 106, 0.08);
   --vp-custom-block-warning-bg: rgba(255, 199, 153, 0.08);
   --vp-custom-block-danger-bg: rgba(255, 128, 128, 0.08);
   --vp-custom-block-info-bg: rgba(126, 182, 255, 0.08);
 }
 
-/* Inline code: tight pill, monospaced, slightly weighted. */
 :not(pre) > code {
   border-radius: 3px;
   padding: 0.12em 0.38em;
@@ -163,18 +138,15 @@
   letter-spacing: -0.005em;
 }
 
-/* Code blocks: square-ish corners feel more terminal than rounded. */
 div[class*="language-"] {
   border-radius: 4px;
 }
 
-/* Sharper, less playful focus rings. */
 :focus-visible {
   outline-color: var(--vp-c-brand-3);
   outline-offset: 2px;
 }
 
-/* Subtle slab feel for headings: tighten letter-spacing slightly. */
 .vp-doc h1,
 .vp-doc h2,
 .vp-doc h3 {
