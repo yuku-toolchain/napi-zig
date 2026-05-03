@@ -1,0 +1,176 @@
+/*
+ * Catppuccin palette for VitePress.
+ * Latte (light) and Mocha (dark), with Peach as the brand accent.
+ * Pairs with the catppuccin-latte / catppuccin-mocha Shiki themes.
+ */
+
+:root {
+  /* Surfaces */
+  --vp-c-bg: #eff1f5;
+  --vp-c-bg-alt: #e6e9ef;
+  --vp-c-bg-elv: #ffffff;
+  --vp-c-bg-soft: #e6e9ef;
+
+  /* Text */
+  --vp-c-text-1: #4c4f69;
+  --vp-c-text-2: #5c5f77;
+  --vp-c-text-3: #6c6f85;
+
+  /* Lines */
+  --vp-c-divider: #ccd0da;
+  --vp-c-gutter: #dce0e8;
+  --vp-c-border: #bcc0cc;
+
+  /* Brand: Catppuccin Peach */
+  --vp-c-brand-1: #d8590b;
+  --vp-c-brand-2: #e25d0c;
+  --vp-c-brand-3: #fe640b;
+  --vp-c-brand-soft: rgba(254, 100, 11, 0.14);
+
+  /* Semantic colors mapped onto Catppuccin */
+  --vp-c-tip-1: #1e7a56;
+  --vp-c-tip-2: #279067;
+  --vp-c-tip-3: #40a02b;
+  --vp-c-tip-soft: rgba(64, 160, 43, 0.14);
+
+  --vp-c-note-1: #1e66f5;
+  --vp-c-note-2: #2378f5;
+  --vp-c-note-3: #1e66f5;
+  --vp-c-note-soft: rgba(30, 102, 245, 0.14);
+
+  --vp-c-warning-1: #b07a07;
+  --vp-c-warning-2: #c2870c;
+  --vp-c-warning-3: #df8e1d;
+  --vp-c-warning-soft: rgba(223, 142, 29, 0.16);
+
+  --vp-c-danger-1: #c33044;
+  --vp-c-danger-2: #d32d4a;
+  --vp-c-danger-3: #d20f39;
+  --vp-c-danger-soft: rgba(210, 15, 57, 0.14);
+
+  --vp-c-important-1: #8839ef;
+  --vp-c-important-2: #9747f1;
+  --vp-c-important-3: #8839ef;
+  --vp-c-important-soft: rgba(136, 57, 239, 0.14);
+
+  /* Code */
+  --vp-code-bg: rgba(124, 127, 147, 0.1);
+  --vp-code-color: #d8590b;
+  --vp-code-block-bg: #e6e9ef;
+  --vp-code-block-divider-color: #bcc0cc;
+  --vp-code-line-highlight-color: rgba(254, 100, 11, 0.08);
+
+  /* Selection */
+  --vp-c-mute: #ccd0da;
+  --vp-c-mute-dark: #bcc0cc;
+
+  /* Buttons */
+  --vp-button-brand-border: var(--vp-c-brand-3);
+  --vp-button-brand-text: #ffffff;
+  --vp-button-brand-bg: var(--vp-c-brand-3);
+  --vp-button-brand-hover-border: var(--vp-c-brand-2);
+  --vp-button-brand-hover-text: #ffffff;
+  --vp-button-brand-hover-bg: var(--vp-c-brand-2);
+  --vp-button-brand-active-border: var(--vp-c-brand-1);
+  --vp-button-brand-active-text: #ffffff;
+  --vp-button-brand-active-bg: var(--vp-c-brand-1);
+
+  /* Custom block backgrounds */
+  --vp-custom-block-tip-bg: rgba(64, 160, 43, 0.08);
+  --vp-custom-block-warning-bg: rgba(223, 142, 29, 0.1);
+  --vp-custom-block-danger-bg: rgba(210, 15, 57, 0.08);
+  --vp-custom-block-info-bg: rgba(30, 102, 245, 0.08);
+}
+
+.dark {
+  /* Surfaces */
+  --vp-c-bg: #1e1e2e;
+  --vp-c-bg-alt: #181825;
+  --vp-c-bg-elv: #313244;
+  --vp-c-bg-soft: #181825;
+
+  /* Text */
+  --vp-c-text-1: #cdd6f4;
+  --vp-c-text-2: #bac2de;
+  --vp-c-text-3: #a6adc8;
+
+  /* Lines */
+  --vp-c-divider: #313244;
+  --vp-c-gutter: #11111b;
+  --vp-c-border: #45475a;
+
+  /* Brand: Catppuccin Peach (Mocha) */
+  --vp-c-brand-1: #fab387;
+  --vp-c-brand-2: #f7b58a;
+  --vp-c-brand-3: #fab387;
+  --vp-c-brand-soft: rgba(250, 179, 135, 0.16);
+
+  /* Semantic */
+  --vp-c-tip-1: #a6e3a1;
+  --vp-c-tip-2: #a6e3a1;
+  --vp-c-tip-3: #a6e3a1;
+  --vp-c-tip-soft: rgba(166, 227, 161, 0.14);
+
+  --vp-c-note-1: #89b4fa;
+  --vp-c-note-2: #89b4fa;
+  --vp-c-note-3: #89b4fa;
+  --vp-c-note-soft: rgba(137, 180, 250, 0.14);
+
+  --vp-c-warning-1: #f9e2af;
+  --vp-c-warning-2: #f9e2af;
+  --vp-c-warning-3: #f9e2af;
+  --vp-c-warning-soft: rgba(249, 226, 175, 0.14);
+
+  --vp-c-danger-1: #f38ba8;
+  --vp-c-danger-2: #f38ba8;
+  --vp-c-danger-3: #f38ba8;
+  --vp-c-danger-soft: rgba(243, 139, 168, 0.14);
+
+  --vp-c-important-1: #cba6f7;
+  --vp-c-important-2: #cba6f7;
+  --vp-c-important-3: #cba6f7;
+  --vp-c-important-soft: rgba(203, 166, 247, 0.14);
+
+  /* Code */
+  --vp-code-bg: rgba(49, 50, 68, 0.6);
+  --vp-code-color: #fab387;
+  --vp-code-block-bg: #181825;
+  --vp-code-block-divider-color: #313244;
+  --vp-code-line-highlight-color: rgba(250, 179, 135, 0.08);
+
+  /* Mute */
+  --vp-c-mute: #313244;
+  --vp-c-mute-dark: #45475a;
+
+  /* Buttons */
+  --vp-button-brand-text: #1e1e2e;
+  --vp-button-brand-hover-text: #1e1e2e;
+  --vp-button-brand-active-text: #1e1e2e;
+
+  /* Custom block backgrounds */
+  --vp-custom-block-tip-bg: rgba(166, 227, 161, 0.08);
+  --vp-custom-block-warning-bg: rgba(249, 226, 175, 0.08);
+  --vp-custom-block-danger-bg: rgba(243, 139, 168, 0.08);
+  --vp-custom-block-info-bg: rgba(137, 180, 250, 0.08);
+}
+
+/*
+ * Inline code: small pill that lifts off the text without competing with
+ * fenced code blocks.
+ */
+:not(pre) > code {
+  border-radius: 4px;
+  padding: 0.15em 0.4em;
+  font-size: 0.9em;
+  font-weight: 500;
+}
+
+/* Soften code-block borders to match Catppuccin's flat surfaces. */
+div[class*="language-"] {
+  border-radius: 8px;
+}
+
+/* Focus rings in brand color. */
+:focus-visible {
+  outline-color: var(--vp-c-brand-3);
+}
