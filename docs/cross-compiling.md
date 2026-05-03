@@ -27,6 +27,15 @@ npm/my-addon/
 
 Each `binding-*` directory becomes its own npm package, gated by `os`, `cpu`, and `libc` so npm only installs the binary that matches the user's machine.
 
+## Subsequent release builds
+
+The first `napi build --release` writes the full `npm/` tree. After that, only the build outputs are refreshed:
+
+- Refreshed every build: `.node` files, `binding.js`, `index.d.ts`.
+- Preserved (yours to edit): `index.js`, every `package.json`.
+
+`index.js` is your seam over the addon. By default it re-exports `binding.js`. Use it to add JS-side wrapping, normalization, or helpers. Those edits survive every release rebuild. `binding.js` is regenerated, so do not edit it directly.
+
 ## Default platforms
 
 If you do not specify `.platforms`, you get this set:

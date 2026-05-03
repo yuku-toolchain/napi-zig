@@ -107,3 +107,5 @@ my-addon/                  # the meta-package users install
 ```
 
 A user runs `npm i my-addon` and npm picks the right binding via `optionalDependencies` and the `os`, `cpu`, and `libc` fields. There is no `postinstall` script and no native build step on the consumer's machine. See [Publishing](/publishing) for the full pipeline.
+
+`index.js` is the file users hit when they `import` the package. It is written once on the first release build and preserved after that, so it is the right place to add JS-side wrapping or helpers on top of the auto-generated `binding.js`. See [Subsequent release builds](/cross-compiling#subsequent-release-builds).
