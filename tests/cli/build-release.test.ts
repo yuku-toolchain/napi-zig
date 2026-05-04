@@ -151,6 +151,49 @@ describe("napi build --release", () => {
     expect(after.main).toBe("index.js");
   }, 180_000);
 
+  test("preserves user-added entries in the main package.json files array", async () => {
+    const dir = stageCliFixture();
+    cleanup.push(dir);
+
+    await withCwd(dir, () => buildRelease("fast"));
+
+    const pkgPath = join(dir, "npm", "fcli", "package.json");
+    const pkg = readJson(pkgPath);
+    pkg.files = [...pkg.files, "CHANGELOG.md", "assets/"];
+    require("node:fs").writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
+
+    await withCwd(dir, () => buildRelease("fast"));
+
+    const after = readJson(pkgPath);
+    expect(after.files).toContain("index.js");
+    expect(after.files).toContain("binding.js");
+    expect(after.files).toContain("index.d.ts");
+    expect(after.files).toContain("CHANGELOG.md");
+    expect(after.files).toContain("assets/");
+    // No duplicates after merge.
+    expect(after.files.length).toBe(new Set(after.files).size);
+  }, 180_000);
+
+  test("re-adds canonical entries to files if the user removed them", async () => {
+    const dir = stageCliFixture();
+    cleanup.push(dir);
+
+    await withCwd(dir, () => buildRelease("fast"));
+
+    const pkgPath = join(dir, "npm", "fcli", "package.json");
+    const pkg = readJson(pkgPath);
+    pkg.files = ["CHANGELOG.md"];
+    require("node:fs").writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
+
+    await withCwd(dir, () => buildRelease("fast"));
+
+    const after = readJson(pkgPath);
+    expect(after.files).toContain("CHANGELOG.md");
+    expect(after.files).toContain("index.js");
+    expect(after.files).toContain("binding.js");
+    expect(after.files).toContain("index.d.ts");
+  }, 180_000);
+
   test("preserves user-edited index.js across rebuilds", async () => {
     const dir = stageCliFixture();
     cleanup.push(dir);

@@ -225,6 +225,8 @@ function mergeMainPackageJson(
     if (!MAIN_POLICY_FIELDS.has(k)) out[k] = v;
   }
 
+  out.files = mergeFiles(arrayOfStrings(existing.files), arrayOfStrings(generated.files));
+
   if (out.optionalDependencies && typeof out.optionalDependencies === "object") {
     const deps: Record<string, string> = {};
     for (const k of Object.keys(out.optionalDependencies as Record<string, unknown>)) {
@@ -252,6 +254,32 @@ function mergeBindingPackageJson(
 
   out.version = version;
   return out;
+}
+
+// Canonical entries (index.js, binding.js, index.d.ts) must always be present
+// for the package to load; everything else is the user's to add.
+function mergeFiles(existing: string[], canonical: string[]): string[] {
+  if (existing.length === 0) return canonical;
+  const seen = new Set<string>();
+  const merged: string[] = [];
+  for (const f of existing) {
+    if (!seen.has(f)) {
+      seen.add(f);
+      merged.push(f);
+    }
+  }
+  for (const f of canonical) {
+    if (!seen.has(f)) {
+      seen.add(f);
+      merged.push(f);
+    }
+  }
+  return merged;
+}
+
+function arrayOfStrings(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v.filter((x): x is string => typeof x === "string");
 }
 
 function listBindingDirs(root: string): string[] {
