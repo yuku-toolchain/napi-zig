@@ -12,7 +12,10 @@ export async function publish(options: PublishOptions): Promise<void> {
   const main = packages.find((p) => p.main);
 
   const useProvenance = options.provenance ?? !!process.env["CI"];
-  const flags = ["--access public"];
+  const reference = main ?? bindings[0];
+  const tag = resolveTag(reference?.version);
+
+  const flags = ["--access public", `--tag ${tag}`];
   if (useProvenance) flags.push("--provenance");
   const flagStr = flags.join(" ");
 
@@ -25,6 +28,14 @@ export async function publish(options: PublishOptions): Promise<void> {
   if (main) {
     await publishPackage(main.name, main.dir, flagStr);
   }
+}
+
+function resolveTag(version: string | undefined): string {
+  if (!version) return "latest";
+  const dash = version.indexOf("-");
+  if (dash === -1) return "latest";
+  const id = version.slice(dash + 1).split(/[.+]/)[0];
+  return id && /^[a-z][a-z0-9-]*$/i.test(id) ? id.toLowerCase() : "next";
 }
 
 async function publishPackage(name: string, dir: string, flags: string): Promise<void> {
