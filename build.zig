@@ -88,9 +88,24 @@ pub fn addLib(b: *std.Build, napi_dep: *std.Build.Dependency, options: LibOption
 
     // npm release mode (cross-compile and scaffold)
     if (options.npm) |npm| {
-        const do_npm = b.option(bool, "npm", "Cross-compile and generate npm packages") orelse false;
-        if (do_npm) addNpmRelease(b, napi_dep, napi_module, options, npm, node_api_def);
+        if (npmFlag(b)) addNpmRelease(b, napi_dep, napi_module, options, npm, node_api_def);
     }
+}
+
+// `b.option` panics on a duplicate name. When `addLib` is called more than
+// once in the same build, only the first call declares `-Dnpm`; later calls
+// read the existing value.
+fn npmFlag(b: *std.Build) bool {
+    if (b.available_options_map.contains("npm")) {
+        const opt_ptr = b.user_input_options.getPtr("npm") orelse return false;
+        opt_ptr.used = true;
+        return switch (opt_ptr.value) {
+            .flag => true,
+            .scalar => |s| std.mem.eql(u8, s, "true"),
+            else => false,
+        };
+    }
+    return b.option(bool, "npm", "Cross-compile and generate npm packages") orelse false;
 }
 
 fn installDts(
