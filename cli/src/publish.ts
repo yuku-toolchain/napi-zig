@@ -9,10 +9,10 @@ export interface PublishOptions {
 export async function publish(options: PublishOptions): Promise<void> {
   const packages = discoverPackages();
   const bindings = packages.filter((p) => !p.main);
-  const main = packages.find((p) => p.main);
+  const mains = packages.filter((p) => p.main);
 
   const useProvenance = options.provenance ?? !!process.env["CI"];
-  const reference = main ?? bindings[0];
+  const reference = mains[0] ?? bindings[0];
   const tag = resolveTag(reference?.version);
 
   const flags = ["--access public", `--tag ${tag}`];
@@ -24,9 +24,9 @@ export async function publish(options: PublishOptions): Promise<void> {
     await publishPackage(pkg.name, pkg.dir, flagStr);
   }
 
-  // publish main package last
-  if (main) {
-    await publishPackage(main.name, main.dir, flagStr);
+  // publish main packages last
+  for (const pkg of mains) {
+    await publishPackage(pkg.name, pkg.dir, flagStr);
   }
 }
 

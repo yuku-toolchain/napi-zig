@@ -17,8 +17,8 @@ export interface NpmInitOptions {
 export async function npmInit(options: NpmInitOptions): Promise<void> {
   const packages = discoverPackages();
   const bindings = packages.filter((p) => !p.main);
-  const main = packages.find((p) => p.main);
-  const ordered = [...bindings, ...(main ? [main] : [])];
+  const mains = packages.filter((p) => p.main);
+  const ordered = [...bindings, ...mains];
 
   const scopes = new Set<string>();
   for (const p of ordered) {
