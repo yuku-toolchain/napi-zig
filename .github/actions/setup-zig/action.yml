@@ -13,5 +13,5 @@ runs:
     - name: Install Zig
       uses: mlugg/setup-zig@v2
       with:
-        version: 0.17.0-dev.224+c166c49b1
+        version: master
         cache-key: ${{ inputs.cache-suffix }}
