@@ -13,13 +13,5 @@ runs:
     - name: Install Zig
       uses: mlugg/setup-zig@v2
       with:
-        version: master
-
-    - name: Restore zig cache
-      uses: actions/cache@v4
-      with:
-        path: ${{ github.workspace }}/.zig-cache-global
-        key: ${{ runner.os }}-zig-${{ inputs.cache-suffix }}-${{ hashFiles('**/build.zig.zon', '**/build.zig') }}
-        restore-keys: |
-          ${{ runner.os }}-zig-${{ inputs.cache-suffix }}-
-          ${{ runner.os }}-zig-
+        version: 0.17.0-dev.224+c166c49b1
+        cache-key: ${{ inputs.cache-suffix }}
