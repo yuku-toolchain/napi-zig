@@ -175,10 +175,6 @@ fn addNpmRelease(
         b.fmt("npm/{s}/package.json", .{options.name}),
         rootPackageJson(b.allocator, options.name, npm),
     );
-    _ = wf.add(
-        b.fmt("npm/{s}/index.js", .{options.name}),
-        defaultIndexJs(b.allocator),
-    );
 
     for (npm.platforms) |platform| {
         _ = wf.add(
@@ -224,7 +220,45 @@ fn addNpmRelease(
         b.getInstallStep().dependOn(&node_install.step);
     }
 
-    installDts(b, napi_dep, napi_module, options, npm.dts, .{ .custom = b.fmt("npm/{s}", .{options.name}) }, "index.d.ts");
+    const npm_dir: std.Build.InstallDir = .{ .custom = b.fmt("npm/{s}", .{options.name}) };
+    installIndexJs(b, napi_dep, napi_module, options, npm_dir);
+    installDts(b, napi_dep, napi_module, options, npm.dts, npm_dir, "index.d.ts");
+}
+
+fn installIndexJs(
+    b: *std.Build,
+    napi_dep: *std.Build.Dependency,
+    napi_module: *std.Build.Module,
+    options: LibOptions,
+    install_dir: std.Build.InstallDir,
+) void {
+    const host = b.graph.host;
+    const user_host_mod = b.createModule(.{
+        .root_source_file = options.root,
+        .target = host,
+        .optimize = .Debug,
+    });
+    user_host_mod.addImport("napi-zig", napi_module);
+    for (options.imports) |imp| user_host_mod.addImport(imp.name, imp.module);
+
+    const emit_mod = b.createModule(.{
+        .root_source_file = napi_dep.path("build/index_js_emit.zig"),
+        .target = host,
+        .optimize = .Debug,
+    });
+    emit_mod.addImport("napi-zig", napi_module);
+    emit_mod.addImport("user-root", user_host_mod);
+
+    const exe = b.addExecutable(.{
+        .name = b.fmt("{s}-index-js-emit", .{options.name}),
+        .root_module = emit_mod,
+    });
+
+    const run = b.addRunArtifact(exe);
+    const out = run.addOutputFileArg("index.js");
+
+    const step = b.addInstallFileWithDir(out, install_dir, "index.js");
+    b.getInstallStep().dependOn(&step.step);
 }
 
 fn configureLinkerFlags(b: *std.Build, lib: *std.Build.Step.Compile, target: std.Build.ResolvedTarget, node_api_def: std.Build.LazyPath, host_exe: []const u8, napi_dep: *std.Build.Dependency) void {
@@ -393,12 +427,4 @@ fn bindingJs(alloc: std.mem.Allocator, name: []const u8, scope: []const u8) []co
         \\export default loadBinding();
         \\
     , .{ scope, name, scope, name }) catch "";
-}
-
-fn defaultIndexJs(alloc: std.mem.Allocator) []const u8 {
-    return std.fmt.allocPrint(alloc,
-        \\import binding from './binding.js';
-        \\export default binding;
-        \\
-    , .{}) catch "";
 }

@@ -6,4 +6,5 @@ comptime {
     _ = @import("module.zig");
     _ = @import("class.zig");
     _ = @import("dts.zig");
+    _ = @import("index_js.zig");
 }

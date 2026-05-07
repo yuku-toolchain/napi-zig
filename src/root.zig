@@ -4,6 +4,7 @@ const val_mod = @import("val.zig");
 
 pub const c = @import("c.zig");
 pub const dts = @import("dts.zig");
+pub const index_js = @import("index_js.zig");
 
 pub const Error = @import("error.zig").Error;
 pub const Env = @import("env.zig").Env;
