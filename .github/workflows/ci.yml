@@ -7,7 +7,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  ZIG_GLOBAL_CACHE_DIR: ${{ github.workspace }}/.zig-cache-global
   DISABLE_V8_COMPILE_CACHE: 1
 
 jobs:
@@ -24,7 +23,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup-zig
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.0-dev.224+c166c49b1
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -55,7 +58,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup-zig
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.0-dev.224+c166c49b1
+
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
@@ -74,7 +82,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup-zig
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.0-dev.224+c166c49b1
+
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
@@ -91,7 +104,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup-zig
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.0-dev.224+c166c49b1
+
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
@@ -114,9 +132,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup-zig
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
         with:
-          cache-suffix: musl-${{ matrix.arch }}
+          version: 0.17.0-dev.224+c166c49b1
 
       - name: Cross-compile fixture-lib for ${{ matrix.target }}
         run: cd tests/fixture-lib && zig build -Dtarget=${{ matrix.target }}
@@ -137,9 +157,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup-zig
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
         with:
-          cache-suffix: freebsd
+          version: 0.17.0-dev.224+c166c49b1
 
       - name: Cross-compile fixture-lib for x86_64-freebsd
         run: cd tests/fixture-lib && zig build -Dtarget=x86_64-freebsd
@@ -162,9 +184,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup-zig
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
         with:
-          cache-suffix: cross
+          version: 0.17.0-dev.224+c166c49b1
 
       - name: Cross-compile fixture-cli for every target
         run: cd tests/fixture-cli && zig build -Dnpm=true --release=fast
