@@ -20,11 +20,6 @@ pub const NpmConfig = struct {
     scope: []const u8,
     description: []const u8 = "",
     license: []const u8 = "MIT",
-    /// git repository the published packages point to. accepts the
-    /// `"owner/repo"` shorthand (expanded to a github url) or a full
-    /// git/https url. npm requires this field on every package for
-    /// provenance attestations to verify, so when set it is written
-    /// into the main package.json and every per-platform binding.
     repository: []const u8 = "",
     dts: Dts = .none,
     platforms: []const Platform = Platform.defaults,
