@@ -145,16 +145,19 @@ export async function buildRelease(optimize: string): Promise<void> {
 
   const expectedTargets = detectExpectedTargets();
   if (expectedTargets.length > 0) {
-    printTargetList(`Targets  ${c.gray("·")}  ${c.bold(String(expectedTargets.length))} platforms`, expectedTargets, {
-      columns: 3,
-      symbol: "○",
-      symbolColor: c.gray,
-    });
+    printTargetList(
+      `Targets  ${c.gray("·")}  ${c.bold(String(expectedTargets.length))} platforms`,
+      expectedTargets,
+      {
+        columns: 3,
+        symbol: "○",
+        symbolColor: c.gray,
+      },
+    );
     blank();
   }
 
-  const targets =
-    expectedTargets.length > 0 ? expectedTargets : ["all platforms"];
+  const targets = expectedTargets.length > 0 ? expectedTargets : ["all platforms"];
 
   const grid = new TaskList(
     `Cross-compiling`,
@@ -228,7 +231,11 @@ export async function buildRelease(optimize: string): Promise<void> {
     notes.push(...result.notes);
     syncList.setState(`main:${pkgName}`, "ok", fresh ? "created" : "reconciled");
     for (const rel of result.bindings) {
-      syncList.setState(`bind:${pkgName}:${rel}`, "ok", result.freshBindings.has(rel) ? "new" : undefined);
+      syncList.setState(
+        `bind:${pkgName}:${rel}`,
+        "ok",
+        result.freshBindings.has(rel) ? "new" : undefined,
+      );
     }
   }
 

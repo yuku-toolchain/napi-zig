@@ -2,16 +2,7 @@ import { execFileSync } from "node:child_process";
 import prompts from "prompts";
 import { inc, valid, clean, parse } from "semver";
 import { discoverPackages, updateVersions } from "./npm";
-import {
-  Spinner,
-  banner,
-  blank,
-  bullet,
-  c,
-  done,
-  fail as uiFail,
-  info as uiInfo,
-} from "./ui";
+import { Spinner, banner, blank, bullet, c, done, fail as uiFail, info as uiInfo } from "./ui";
 import { CLI_VERSION, runArgs } from "./utils";
 
 type ReleaseType =
@@ -247,7 +238,9 @@ export async function bump(options: BumpOptions): Promise<void> {
   // update all package.json files
   const writeSpinner = new Spinner(`Updating ${packages.length} package.json files`).start();
   updateVersions(packages, newVersion);
-  writeSpinner.succeed(`Updated ${c.bold(String(packages.length))} packages to ${c.green(c.bold(newVersion))}`);
+  writeSpinner.succeed(
+    `Updated ${c.bold(String(packages.length))} packages to ${c.green(c.bold(newVersion))}`,
+  );
 
   const commitMsg = (options.commit ?? "%s").replace(/%s/g, newVersion);
   const doTag = options.tag !== false;

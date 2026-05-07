@@ -101,11 +101,15 @@ export function banner(title: string, subtitle?: string): void {
 }
 
 export function done(text: string, dur?: number): void {
-  console.log(`${PAD}${c.green(sym.ok)}  ${text}${dur !== undefined ? "  " + c.gray(formatDuration(dur)) : ""}`);
+  console.log(
+    `${PAD}${c.green(sym.ok)}  ${text}${dur !== undefined ? "  " + c.gray(formatDuration(dur)) : ""}`,
+  );
 }
 
 export function fail(text: string, dur?: number): void {
-  console.log(`${PAD}${c.red(sym.fail)}  ${text}${dur !== undefined ? "  " + c.gray(formatDuration(dur)) : ""}`);
+  console.log(
+    `${PAD}${c.red(sym.fail)}  ${text}${dur !== undefined ? "  " + c.gray(formatDuration(dur)) : ""}`,
+  );
 }
 
 export function warn(text: string): void {
@@ -148,8 +152,7 @@ export function formatSize(bytes: number): string {
   return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
-const ANSI_RE =
-  /\x1b\[[0-9;]*m/g;
+const ANSI_RE = /\x1b\[[0-9;]*m/g;
 export function stripAnsi(s: string): string {
   return s.replace(ANSI_RE, "");
 }
@@ -226,7 +229,7 @@ export class Spinner {
   }
 
   succeed(label?: string, hint?: string): void {
-    this.stop();
+    this.stopTimer();
     const dur = Date.now() - this.started;
     const text = label ?? this.label;
     const h = hint !== undefined ? "  " + c.dim(hint) : "";
@@ -234,7 +237,7 @@ export class Spinner {
   }
 
   fail(label?: string, hint?: string): void {
-    this.stop();
+    this.stopTimer();
     const dur = Date.now() - this.started;
     const text = label ?? this.label;
     const h = hint !== undefined ? "  " + c.dim(hint) : "";
@@ -242,16 +245,20 @@ export class Spinner {
   }
 
   warn(label?: string): void {
-    this.stop();
+    this.stopTimer();
     const text = label ?? this.label;
     this.block.finish(`${PAD}${c.yellow(sym.warn)}  ${text}\n`);
   }
 
   stop(): void {
+    this.stopTimer();
+    this.block.finish();
+  }
+
+  private stopTimer(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = undefined;
     this.active = false;
-    this.block.finish();
   }
 
   private render(): void {
@@ -407,7 +414,11 @@ export class TaskList {
     this.block.write(this.renderTo("active", Date.now() - this.startedAt));
   }
 
-  private renderTo(headerState: "active" | "ok" | "fail", dur: number, finalLabel?: string): string {
+  private renderTo(
+    headerState: "active" | "ok" | "fail",
+    dur: number,
+    finalLabel?: string,
+  ): string {
     const spinner = this.spinnerFrame();
     const lines: string[] = [];
 

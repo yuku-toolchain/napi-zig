@@ -5,16 +5,7 @@ import prompts from "prompts";
 import { detect, getUserAgent } from "package-manager-detector/detect";
 import { resolveCommand } from "package-manager-detector/commands";
 import type { Agent, AgentName } from "package-manager-detector";
-import {
-  Spinner,
-  banner,
-  blank,
-  bullet,
-  c,
-  done,
-  fail as uiFail,
-  plain,
-} from "./ui";
+import { Spinner, banner, blank, bullet, c, done, fail as uiFail, plain } from "./ui";
 import { CLI_VERSION, run } from "./utils";
 import { buildDev } from "./build";
 
@@ -217,9 +208,7 @@ function printNextSteps(name: string, pm: Pm, repo: string): void {
   plain(
     `      ${bold("@" + name)} that you own. Create the org at ${c.cyan("https://www.npmjs.com/org/create")}`,
   );
-  plain(
-    `      ${c.dim("(recommended: match the org name to the package name)")}, or change the`,
-  );
+  plain(`      ${c.dim("(recommended: match the org name to the package name)")}, or change the`);
   plain(
     `      scope in ${bold("build.zig")} ${c.dim("(.scope under .npm)")} to one you already own.`,
   );

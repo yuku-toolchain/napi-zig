@@ -70,10 +70,14 @@ export async function ensureNpmScope(scope: string): Promise<void> {
     const stderr = String((e as { stderr?: string }).stderr ?? "").trim();
     if (stderr) console.error(stderr.split("\n").slice(0, 3).join("\n"));
     console.error();
-    plain(`Per-platform bindings publish under the scope ${c.bold("@" + scopeName)}, so the scope must`);
+    plain(
+      `Per-platform bindings publish under the scope ${c.bold("@" + scopeName)}, so the scope must`,
+    );
     plain(`exist on npm before publishing. Two options:`);
     console.error();
-    plain(`  1. Create the org at ${c.cyan("https://www.npmjs.com/org/create?orgname=" + scopeName)}`);
+    plain(
+      `  1. Create the org at ${c.cyan("https://www.npmjs.com/org/create?orgname=" + scopeName)}`,
+    );
     plain(`     (it's fine and recommended to match the org name to the package name).`);
     plain(`  2. Change the scope in build.zig (the .scope field inside the .npm block)`);
     plain(`     to a scope you already own, then re-run 'napi build --release'.`);

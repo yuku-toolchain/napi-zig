@@ -1,13 +1,5 @@
 import { discoverPackages } from "./npm";
-import {
-  TaskList,
-  banner,
-  blank,
-  bullet,
-  c,
-  done,
-  fail as uiFail,
-} from "./ui";
+import { TaskList, banner, blank, bullet, c, done, fail as uiFail } from "./ui";
 import { CLI_VERSION, run } from "./utils";
 
 export interface PublishOptions {
@@ -31,7 +23,9 @@ export async function publish(options: PublishOptions): Promise<void> {
   bullet(`Version       ${c.bold(reference?.version ?? "?")}`);
   bullet(`Tag           ${c.bold(tag)}`);
   bullet(`Provenance    ${useProvenance ? c.green("enabled") : c.gray("disabled")}`);
-  bullet(`Packages      ${c.bold(String(packages.length))}  ${c.gray(`(${bindings.length} bindings + ${mains.length} main)`)}`);
+  bullet(
+    `Packages      ${c.bold(String(packages.length))}  ${c.gray(`(${bindings.length} bindings + ${mains.length} main)`)}`,
+  );
   blank();
 
   const ordered = [...bindings, ...mains];

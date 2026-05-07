@@ -1,15 +1,5 @@
 import { discoverPackages } from "./npm";
-import {
-  Spinner,
-  TaskList,
-  banner,
-  blank,
-  bullet,
-  c,
-  done,
-  info,
-  plain,
-} from "./ui";
+import { Spinner, TaskList, banner, blank, bullet, c, done, info, plain } from "./ui";
 import {
   CLI_VERSION,
   ensureNpmScope,
@@ -61,11 +51,15 @@ export async function npmInit(options: NpmInitOptions): Promise<void> {
   // interactive auth (OTP / browser-based 2FA) works for the user
   if (newPackages.length > 0) {
     blank();
-    plain(c.dim(`Publishing initial versions  ${c.gray("(npm prompts pass through for OTP/2FA)")}`));
+    plain(
+      c.dim(`Publishing initial versions  ${c.gray("(npm prompts pass through for OTP/2FA)")}`),
+    );
     blank();
     for (let i = 0; i < newPackages.length; i++) {
       const pkg = newPackages[i]!;
-      info(`[${i + 1}/${newPackages.length}]  Publishing ${c.bold(pkg.name)}@${c.cyan(pkg.version)}`);
+      info(
+        `[${i + 1}/${newPackages.length}]  Publishing ${c.bold(pkg.name)}@${c.cyan(pkg.version)}`,
+      );
       try {
         await runInherit("npm publish --access public", { cwd: pkg.dir });
       } catch {}
