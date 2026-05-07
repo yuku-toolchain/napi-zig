@@ -1,15 +1,12 @@
 import { exec, execFile, execFileSync, spawn } from "node:child_process";
 import { promisify } from "node:util";
-import ora from "ora";
 import pkg from "../package.json" with { type: "json" };
+import { Spinner, c, fail as uiFail, info as uiInfo, plain } from "./ui";
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
 export const CLI_VERSION: string = pkg.version;
-
-export const bold = (s: string): string => `\x1b[1m${s}\x1b[0m`;
-export const green = (s: string): string => `\x1b[32m${s}\x1b[0m`;
 
 export async function run(
   cmd: string,
@@ -57,29 +54,29 @@ export async function ensureNpmScope(scope: string): Promise<void> {
     const r = await execAsync("npm whoami", { timeout: 15000 });
     username = r.stdout.trim();
   } catch {
-    ora().fail("Not logged in to npm. Run 'npm login' first.");
+    uiFail("Not logged in to npm. Run 'npm login' first.");
     process.exit(1);
   }
 
   // a user's own scope auto-exists; only org scopes need the npm org check.
   if (scopeName === username) return;
 
-  const spinner = ora(`Verifying npm scope @${scopeName}...`).start();
+  const sp = new Spinner(`Verifying npm scope ${c.bold("@" + scopeName)}`).start();
   try {
     await execAsync(`npm org ls "${scopeName}" --json`, { timeout: 15000 });
-    spinner.succeed(`Scope @${scopeName} verified`);
+    sp.succeed(`Scope ${c.bold("@" + scopeName)} verified`);
   } catch (e: unknown) {
-    spinner.fail(`Scope @${scopeName} not found or not accessible to ${username}`);
+    sp.fail(`Scope ${c.bold("@" + scopeName)} not found or not accessible to ${c.bold(username)}`);
     const stderr = String((e as { stderr?: string }).stderr ?? "").trim();
     if (stderr) console.error(stderr.split("\n").slice(0, 3).join("\n"));
     console.error();
-    console.error(`Per-platform bindings publish under the scope @${scopeName}, so the scope must`);
-    console.error(`exist on npm before publishing. Two options:`);
+    plain(`Per-platform bindings publish under the scope ${c.bold("@" + scopeName)}, so the scope must`);
+    plain(`exist on npm before publishing. Two options:`);
     console.error();
-    console.error(`  1. Create the org at https://www.npmjs.com/org/create?orgname=${scopeName}`);
-    console.error(`     (it's fine and recommended to match the org name to the package name).`);
-    console.error(`  2. Change the scope in build.zig (the .scope field inside the .npm block)`);
-    console.error(`     to a scope you already own, then re-run 'napi build --release'.`);
+    plain(`  1. Create the org at ${c.cyan("https://www.npmjs.com/org/create?orgname=" + scopeName)}`);
+    plain(`     (it's fine and recommended to match the org name to the package name).`);
+    plain(`  2. Change the scope in build.zig (the .scope field inside the .npm block)`);
+    plain(`     to a scope you already own, then re-run 'napi build --release'.`);
     process.exit(1);
   }
 }
@@ -91,12 +88,17 @@ export function requireNpmVersion(minMajor: number, minMinor: number, feature: s
     const major = Number(parts[0]);
     const minor = Number(parts[1]);
     if (major < minMajor || (major === minMajor && minor < minMinor)) {
-      ora().fail(`npm ${version} found, but ${feature} requires npm >= ${minMajor}.${minMinor}.0`);
-      ora().info("Run: npm install -g npm@latest");
+      uiFail(
+        `npm ${c.bold(version)} found, but ${feature} requires npm >= ${c.bold(`${minMajor}.${minMinor}.0`)}`,
+      );
+      uiInfo(`Run: ${c.cyan("npm install -g npm@latest")}`);
       process.exit(1);
     }
   } catch {
-    ora().fail("Could not detect npm version. Is npm installed?");
+    uiFail("Could not detect npm version. Is npm installed?");
     process.exit(1);
   }
 }
+
+export const bold = (s: string): string => c.bold(s);
+export const green = (s: string): string => c.green(s);

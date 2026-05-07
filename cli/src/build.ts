@@ -9,13 +9,57 @@ import {
   rmSync,
 } from "node:fs";
 import { join, relative } from "node:path";
-import ora from "ora";
-import { run } from "./utils";
+import { arch, platform } from "node:os";
+import {
+  Spinner,
+  TaskList,
+  banner,
+  blank,
+  bullet,
+  c,
+  done,
+  fail as uiFail,
+  formatSize,
+  note as uiNote,
+  plain,
+  printTargetList,
+  warn as uiWarn,
+} from "./ui";
+import { CLI_VERSION, run } from "./utils";
 
 export interface BuildDevOptions {
   // Suppress the per-file `info` lines about created/copied loader and .d.ts
   // files. Used by `napi new` for a quiet scaffold flow.
   quiet?: boolean;
+}
+
+const HOST_TARGET = `${normalizePlatform(platform())}-${normalizeArch(arch())}`;
+
+function normalizePlatform(p: string): string {
+  if (p === "darwin") return "darwin";
+  if (p === "linux") return "linux";
+  if (p === "win32") return "win32";
+  return p;
+}
+
+function normalizeArch(a: string): string {
+  if (a === "arm64") return "arm64";
+  if (a === "x64") return "x64";
+  return a;
+}
+
+function formatOptimize(opt: string | undefined): string {
+  if (!opt) return "Debug";
+  switch (opt) {
+    case "fast":
+      return "ReleaseFast";
+    case "safe":
+      return "ReleaseSafe";
+    case "small":
+      return "ReleaseSmall";
+    default:
+      return opt;
+  }
 }
 
 export async function buildDev(
@@ -25,72 +69,148 @@ export async function buildDev(
   const optFlag = optimize ? ` --release=${optimize}` : "";
   const quiet = options?.quiet ?? false;
 
-  const spinner = ora("Building for current platform...").start();
+  if (!quiet) {
+    banner("napi-zig", `${CLI_VERSION}  ·  build  ·  ${formatOptimize(optimize)}`);
+    bullet(`Target  ${c.bold(HOST_TARGET)}`);
+    bullet(`Mode    ${c.bold(formatOptimize(optimize))}`);
+    blank();
+  }
+
+  const sp = new Spinner(`Compiling for ${c.bold(HOST_TARGET)}`).start();
   try {
     await run(`zig build${optFlag}`);
   } catch (e) {
-    spinner.fail("Build failed");
+    sp.fail(`Build failed`);
     const stderr = String((e as { stderr?: string }).stderr ?? "");
     if (stderr) console.error(stderr.trim());
     throw e;
   }
-  spinner.succeed("Build complete");
+  sp.succeed(`Compiled for ${c.bold(HOST_TARGET)}`);
 
   const libDir = join(process.cwd(), "zig-out", "lib");
   if (!existsSync(libDir)) return;
+
+  let totalSize = 0;
+  const generated: { kind: "loader" | "dts" | "node"; name: string; size: number }[] = [];
 
   for (const file of readdirSync(libDir)) {
     if (!file.endsWith(".node")) continue;
 
     const name = file.replace(".node", "");
-    const loaderPath = join(process.cwd(), `${name}.js`);
+    const nodePath = join(libDir, file);
+    if (existsSync(nodePath)) {
+      const size = statSync(nodePath).size;
+      totalSize += size;
+      generated.push({ kind: "node", name: `zig-out/lib/${file}`, size });
+    }
 
+    const loaderPath = join(process.cwd(), `${name}.js`);
     if (!existsSync(loaderPath)) {
       writeFileSync(loaderPath, `module.exports = require('./zig-out/lib/${file}');\n`);
-      if (!quiet) ora().info(`Created ${name}.js`);
+      generated.push({ kind: "loader", name: `${name}.js`, size: statSync(loaderPath).size });
     }
 
     const dtsSource = join(libDir, `${name}.d.ts`);
     if (existsSync(dtsSource)) {
-      copyFileSync(dtsSource, join(process.cwd(), `${name}.d.ts`));
-      if (!quiet) ora().info(`Copied ${name}.d.ts`);
+      const dest = join(process.cwd(), `${name}.d.ts`);
+      copyFileSync(dtsSource, dest);
+      generated.push({ kind: "dts", name: `${name}.d.ts`, size: statSync(dest).size });
     }
+  }
+
+  if (!quiet && generated.length > 0) {
+    blank();
+    plain(c.dim("Output"));
+    const labelWidth = generated.reduce((w, g) => Math.max(w, g.name.length), 0);
+    for (const g of generated) {
+      const sizeStr = c.gray(formatSize(g.size));
+      const padding = " ".repeat(labelWidth - g.name.length + 2);
+      const tag = g.kind === "node" ? c.cyan("•") : c.gray("•");
+      plain(`   ${tag}  ${g.name}${padding}${sizeStr}`);
+    }
+    blank();
+    done(`Build complete  ${c.dim("·")}  ${c.bold(formatSize(totalSize))} compiled`);
   }
 }
 
 export async function buildRelease(optimize: string): Promise<void> {
   const optFlag = ` --release=${optimize}`;
 
+  banner("napi-zig", `${CLI_VERSION}  ·  cross-compile  ·  ${formatOptimize(optimize)}`);
+
   // zig's WriteFiles step adds without removing, so a renamed scope leaves
   // stale dirs in zig-out/npm that the reconciler would otherwise copy back.
   const srcBase = join(process.cwd(), "zig-out", "npm");
   if (existsSync(srcBase)) rmSync(srcBase, { recursive: true, force: true });
 
-  const spinner = ora("Cross-compiling for all platforms...").start();
+  const expectedTargets = detectExpectedTargets();
+  if (expectedTargets.length > 0) {
+    printTargetList(`Targets  ${c.gray("·")}  ${c.bold(String(expectedTargets.length))} platforms`, expectedTargets, {
+      columns: 3,
+      symbol: "○",
+      symbolColor: c.gray,
+    });
+    blank();
+  }
+
+  const targets =
+    expectedTargets.length > 0 ? expectedTargets : ["all platforms"];
+
+  const grid = new TaskList(
+    `Cross-compiling`,
+    targets.map((t) => ({ id: t, label: t, state: "active" as const })),
+    { columns: 3, hint: c.dim(formatOptimize(optimize)) },
+  ).start();
+
+  let buildErr: unknown;
   try {
     await run(`zig build -Dnpm=true${optFlag}`);
   } catch (e) {
-    spinner.fail("Cross-compilation failed");
-    const stderr = String((e as { stderr?: string }).stderr ?? "");
-    if (stderr) console.error(stderr.trim());
-    throw e;
+    buildErr = e;
   }
-  spinner.succeed("Cross-compilation complete");
+
+  const built = listBuiltTargets(srcBase);
+  for (const t of targets) {
+    if (built.has(t)) grid.setState(t, "ok");
+    else if (buildErr) grid.setState(t, "fail");
+    else grid.setState(t, "skip", "not generated");
+  }
+
+  if (buildErr) {
+    grid.finish(false, `Cross-compilation failed`);
+    blank();
+    const stderr = String((buildErr as { stderr?: string }).stderr ?? "");
+    if (stderr) console.error(stderr.trim());
+    throw buildErr;
+  }
+
+  grid.finish(true, `Compiled ${c.bold(String(built.size))} platforms`);
 
   const destBase = join(process.cwd(), "npm");
 
   if (!existsSync(srcBase)) {
-    ora().fail(
-      "No npm output found in zig-out/npm/. Make sure your build.zig uses addLib with .npm config.",
-    );
+    blank();
+    uiFail("No npm output found in zig-out/npm/.");
+    uiNote("Make sure your build.zig uses addLib with .npm config.");
     process.exit(1);
   }
 
-  const syncSpinner = ora("Syncing npm packages...").start();
+  blank();
 
   const generatedPkgs = readdirSync(srcBase).filter((n) =>
     statSync(join(srcBase, n)).isDirectory(),
   );
+
+  const syncTasks: { id: string; label: string }[] = [];
+  for (const pkgName of generatedPkgs) {
+    const srcPkg = join(srcBase, pkgName);
+    syncTasks.push({ id: `main:${pkgName}`, label: `${pkgName}` });
+    for (const rel of listBindingDirs(srcPkg)) {
+      syncTasks.push({ id: `bind:${pkgName}:${rel}`, label: `${pkgName}/${rel}` });
+    }
+  }
+
+  const syncList = new TaskList(`Syncing npm packages`, syncTasks, { columns: 1 }).start();
 
   const notes: string[] = [];
 
@@ -100,14 +220,25 @@ export async function buildRelease(optimize: string): Promise<void> {
 
     const fresh = !existsSync(destPkg);
     mkdirSync(destPkg, { recursive: true });
-    const result = reconcilePackage(srcPkg, destPkg);
-    syncSpinner.text = fresh ? `Created npm/${pkgName}/` : `Reconciled npm/${pkgName}/`;
+
+    syncList.setState(`main:${pkgName}`, "active");
+    const result = reconcilePackage(srcPkg, destPkg, (rel) => {
+      syncList.setState(`bind:${pkgName}:${rel}`, "active");
+    });
     notes.push(...result.notes);
+    syncList.setState(`main:${pkgName}`, "ok", fresh ? "created" : "reconciled");
+    for (const rel of result.bindings) {
+      syncList.setState(`bind:${pkgName}:${rel}`, "ok", result.freshBindings.has(rel) ? "new" : undefined);
+    }
   }
 
-  syncSpinner.succeed("npm packages synced");
+  syncList.finish(true, `Synced ${c.bold(String(syncTasks.length))} packages`);
 
-  for (const note of notes) ora().info(note);
+  if (notes.length > 0) {
+    blank();
+    plain(c.dim("Notes"));
+    for (const n of notes) plain(`   ${c.gray("›")}  ${n}`);
+  }
 
   if (existsSync(destBase)) {
     const generated = new Set(generatedPkgs);
@@ -116,24 +247,87 @@ export async function buildRelease(optimize: string): Promise<void> {
       .filter((n) => !generated.has(n));
 
     if (orphans.length > 0) {
-      console.log();
-      ora().warn(
+      blank();
+      uiWarn(
         `Orphan director${orphans.length > 1 ? "ies" : "y"} in npm/: ${orphans
           .map((n) => `npm/${n}/`)
           .join(", ")}`,
       );
-      console.log(`  These do not match any package generated by build.zig. If you renamed`);
-      console.log(`  the addon's .name, copy any user fields from the old main package.json`);
-      console.log(`  into the new one and delete the orphan folder(s).`);
+      uiNote(`These do not match any package generated by build.zig. If you renamed`);
+      uiNote(`the addon's .name, copy any user fields from the old main package.json`);
+      uiNote(`into the new one and delete the orphan folder(s).`);
     }
   }
+
+  blank();
+  done(`Cross-compilation complete`);
+}
+
+function detectExpectedTargets(): string[] {
+  const npmDir = join(process.cwd(), "npm");
+  if (existsSync(npmDir)) {
+    const found = new Set<string>();
+    for (const addon of readdirSync(npmDir)) {
+      const addonDir = join(npmDir, addon);
+      if (!statSync(addonDir).isDirectory()) continue;
+      for (const scope of readdirSync(addonDir)) {
+        if (!scope.startsWith("@")) continue;
+        const scopeDir = join(addonDir, scope);
+        if (!statSync(scopeDir).isDirectory()) continue;
+        for (const binding of readdirSync(scopeDir)) {
+          if (binding.startsWith("binding-")) {
+            found.add(binding.slice("binding-".length));
+          }
+        }
+      }
+    }
+    if (found.size > 0) return [...found].sort();
+  }
+
+  return [
+    "linux-x64-gnu",
+    "linux-arm64-gnu",
+    "linux-x64-musl",
+    "linux-arm64-musl",
+    "darwin-x64",
+    "darwin-arm64",
+    "win32-x64",
+    "win32-arm64",
+    "freebsd-x64",
+  ];
+}
+
+function listBuiltTargets(srcBase: string): Set<string> {
+  const out = new Set<string>();
+  if (!existsSync(srcBase)) return out;
+  for (const addon of readdirSync(srcBase)) {
+    const addonDir = join(srcBase, addon);
+    if (!statSync(addonDir).isDirectory()) continue;
+    for (const scope of readdirSync(addonDir)) {
+      if (!scope.startsWith("@")) continue;
+      const scopeDir = join(addonDir, scope);
+      if (!statSync(scopeDir).isDirectory()) continue;
+      for (const binding of readdirSync(scopeDir)) {
+        if (binding.startsWith("binding-")) {
+          out.add(binding.slice("binding-".length));
+        }
+      }
+    }
+  }
+  return out;
 }
 
 interface ReconcileResult {
   notes: string[];
+  bindings: string[];
+  freshBindings: Set<string>;
 }
 
-function reconcilePackage(src: string, dest: string): ReconcileResult {
+function reconcilePackage(
+  src: string,
+  dest: string,
+  onBindingStart?: (rel: string) => void,
+): ReconcileResult {
   const notes: string[] = [];
 
   const existingMain = readJson(join(dest, "package.json")) ?? {};
@@ -165,10 +359,14 @@ function reconcilePackage(src: string, dest: string): ReconcileResult {
 
   const newBindings = listBindingDirs(src);
   const newBindingSet = new Set(newBindings);
+  const freshBindings = new Set<string>();
 
   for (const rel of newBindings) {
+    onBindingStart?.(rel);
     const srcBind = join(src, rel);
     const destBind = join(dest, rel);
+    const fresh = !existsSync(destBind);
+    if (fresh) freshBindings.add(rel);
     mkdirSync(destBind, { recursive: true });
 
     for (const f of readdirSync(srcBind)) {
@@ -197,7 +395,7 @@ function reconcilePackage(src: string, dest: string): ReconcileResult {
     if (readdirSync(scopeDir).length === 0) rmSync(scopeDir, { recursive: true });
   }
 
-  return { notes };
+  return { notes, bindings: newBindings, freshBindings };
 }
 
 const MAIN_POLICY_FIELDS = new Set([

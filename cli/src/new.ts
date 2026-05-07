@@ -2,12 +2,24 @@ import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 import prompts from "prompts";
-import ora from "ora";
 import { detect, getUserAgent } from "package-manager-detector/detect";
 import { resolveCommand } from "package-manager-detector/commands";
 import type { Agent, AgentName } from "package-manager-detector";
-import { CLI_VERSION, bold, green, run } from "./utils";
+import {
+  Spinner,
+  banner,
+  blank,
+  bullet,
+  c,
+  done,
+  fail as uiFail,
+  plain,
+} from "./ui";
+import { CLI_VERSION, run } from "./utils";
 import { buildDev } from "./build";
+
+const bold = (s: string): string => c.bold(s);
+const green = (s: string): string => c.green(s);
 
 const NAPI_ZIG_GIT = "git+https://github.com/yuku-toolchain/napi-zig.git/#HEAD";
 
@@ -21,20 +33,28 @@ export interface NewOptions {
 }
 
 export async function scaffoldNew(options: NewOptions): Promise<void> {
+  banner("napi-zig", `${CLI_VERSION}  ·  new`);
+
   const name = await resolveProjectName(options.name);
   const targetDir = resolve(process.cwd(), name);
   if (existsSync(targetDir) && readdirSync(targetDir).length > 0) {
-    ora().fail(`Directory ${name} already exists and is not empty`);
+    uiFail(`Directory ${bold(name)} already exists and is not empty`);
     process.exit(1);
   }
 
   const pm = await resolvePackageManager(options.pm);
   const repo = await resolveGithubRepo(options.repo);
 
-  const writeSpinner = ora("Scaffolding project...").start();
+  blank();
+  bullet(`Project       ${bold(name)}`);
+  bullet(`Package mgr   ${bold(pm)}`);
+  bullet(`Repository    ${repo ? bold(repo) : c.gray("(skipped)")}`);
+  blank();
+
+  const writeSpinner = new Spinner("Scaffolding project").start();
   mkdirSync(targetDir, { recursive: true });
   writeFiles(targetDir, name, pm, repo);
-  writeSpinner.succeed(`Scaffolded ${bold(name)}`);
+  writeSpinner.succeed(`Scaffolded ${bold(name)}/`);
 
   await runInstall(pm, targetDir);
   await runZigFetch(targetDir);
@@ -47,7 +67,7 @@ async function resolveProjectName(initial: string | undefined): Promise<string> 
   if (initial) {
     const err = validateName(initial);
     if (err !== true) {
-      ora().fail(err);
+      uiFail(err);
       process.exit(1);
     }
     return initial;
@@ -74,7 +94,7 @@ async function resolveGithubRepo(initial: string | undefined): Promise<string> {
     const t = initial.trim();
     if (t === "") return "";
     if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(t)) {
-      ora().fail(`--repo must be owner/repo, got "${initial}"`);
+      uiFail(`--repo must be owner/repo, got "${initial}"`);
       process.exit(1);
     }
     return t;
@@ -122,10 +142,10 @@ async function resolvePackageManager(initial: string | undefined): Promise<Pm> {
 async function runInstall(pm: Pm, cwd: string): Promise<void> {
   const cmd = resolveCommand(pm as Agent, "install", []);
   if (!cmd) return;
-  const spinner = ora(`Installing dependencies with ${pm}...`).start();
+  const spinner = new Spinner(`Installing dependencies with ${bold(pm)}`).start();
   try {
     await run(`${cmd.command} ${cmd.args.join(" ")}`.trim(), { cwd });
-    spinner.succeed("Installed dependencies");
+    spinner.succeed(`Installed dependencies with ${bold(pm)}`);
   } catch (e) {
     spinner.fail(`${pm} install failed`);
     dumpError(e);
@@ -134,7 +154,7 @@ async function runInstall(pm: Pm, cwd: string): Promise<void> {
 }
 
 async function runZigFetch(cwd: string): Promise<void> {
-  const spinner = ora("Fetching napi-zig (Zig dependency)...").start();
+  const spinner = new Spinner("Fetching napi-zig").start();
   try {
     await run(`zig fetch --save "${NAPI_ZIG_GIT}"`, { cwd });
     spinner.succeed("Fetched napi-zig");
@@ -180,29 +200,33 @@ function printNextSteps(name: string, pm: Pm, repo: string): void {
   );
   const pad = Math.max(test.length, build.length, release.length, npmInit.length);
   const col = (s: string) => s.padEnd(pad);
-  console.log();
-  ora().succeed(`Project ${green(name)} ready in ${bold(`./${name}`)}`);
-  console.log();
-  console.log("Next steps:");
-  console.log(`  cd ${name}`);
-  console.log(`  ${col(test)}    # run the addon`);
-  console.log(`  ${col(build)}    # rebuild after edits`);
-  console.log(`  ${col(release)}    # cross-compile every platform`);
-  console.log(`  ${col(npmInit)}    # first-time publish + OIDC`);
-  console.log();
-  console.log("Before publishing:");
-  console.log(
-    `  - Per-platform bindings are published as @${name}/binding-<os>-<arch>, so you need`,
+  blank();
+  done(`Project ${green(name)} ready in ${bold(`./${name}`)}`);
+  blank();
+  plain(c.bold("Next steps"));
+  plain(`   ${c.gray("›")}  cd ${name}`);
+  plain(`   ${c.gray("›")}  ${col(test)}    ${c.dim("# run the addon")}`);
+  plain(`   ${c.gray("›")}  ${col(build)}    ${c.dim("# rebuild after edits")}`);
+  plain(`   ${c.gray("›")}  ${col(release)}    ${c.dim("# cross-compile every platform")}`);
+  plain(`   ${c.gray("›")}  ${col(npmInit)}    ${c.dim("# first-time publish + OIDC")}`);
+  blank();
+  plain(c.bold("Before publishing"));
+  plain(
+    `   ${c.gray("·")}  Per-platform bindings publish under ${bold("@" + name)}, so you need an npm scope`,
   );
-  console.log(
-    `    an npm scope @${name} that you own. Create the org at https://www.npmjs.com/org/create`,
+  plain(
+    `      ${bold("@" + name)} that you own. Create the org at ${c.cyan("https://www.npmjs.com/org/create")}`,
   );
-  console.log(`    (recommended: match the org name to the package name) or change the scope`);
-  console.log(
-    `    in build.zig (the ${bold(".scope")} field under ${bold(".npm")}) to one you already own.`,
+  plain(
+    `      ${c.dim("(recommended: match the org name to the package name)")}, or change the`,
   );
-  console.log(`  - Init git, push to a GitHub repo, and make sure publish.yml is on the`);
-  console.log(`    default branch before running ${bold("napi bump")} (it tags + pushes).`);
+  plain(
+    `      scope in ${bold("build.zig")} ${c.dim("(.scope under .npm)")} to one you already own.`,
+  );
+  plain(
+    `   ${c.gray("·")}  Init git, push to a GitHub repo, and make sure ${bold("publish.yml")} is on the`,
+  );
+  plain(`      default branch before running ${bold("napi bump")} ${c.dim("(it tags + pushes)")}.`);
 }
 
 function runScript(pm: Pm, name: string): string {

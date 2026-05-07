@@ -1,9 +1,18 @@
 import { execFileSync } from "node:child_process";
 import prompts from "prompts";
 import { inc, valid, clean, parse } from "semver";
-import ora from "ora";
 import { discoverPackages, updateVersions } from "./npm";
-import { bold, green, runArgs } from "./utils";
+import {
+  Spinner,
+  banner,
+  blank,
+  bullet,
+  c,
+  done,
+  fail as uiFail,
+  info as uiInfo,
+} from "./ui";
+import { CLI_VERSION, runArgs } from "./utils";
 
 type ReleaseType =
   | "major"
@@ -157,6 +166,11 @@ export async function bump(options: BumpOptions): Promise<void> {
   const preid = options.preid ?? "beta";
   let newVersion: string;
 
+  banner("napi-zig", `${CLI_VERSION}  ·  bump`);
+  bullet(`Current     ${c.bold(currentVersion)}`);
+  bullet(`Packages    ${c.bold(String(packages.length))}`);
+  blank();
+
   if (options.release && valid(options.release)) {
     // explicit version, napi bump 1.2.3
     newVersion = clean(options.release)!;
@@ -172,6 +186,8 @@ export async function bump(options: BumpOptions): Promise<void> {
     const commits = getRecentCommits();
     const next = allNextVersions(currentVersion, preid, commits);
     const PADDING = 13;
+    const bold = (s: string): string => c.bold(s);
+    const green = (s: string): string => c.green(s);
 
     const result = await prompts(
       {
@@ -219,42 +235,52 @@ export async function bump(options: BumpOptions): Promise<void> {
   }
 
   if (newVersion === currentVersion) {
-    ora().info("Version unchanged");
+    blank();
+    uiInfo("Version unchanged");
     return;
   }
 
+  blank();
+  bullet(`Bumping ${c.bold(currentVersion)} ${c.gray("→")} ${c.green(c.bold(newVersion))}`);
+  blank();
+
   // update all package.json files
-  const spinner = ora(`Bumping to ${green(newVersion)}...`).start();
+  const writeSpinner = new Spinner(`Updating ${packages.length} package.json files`).start();
   updateVersions(packages, newVersion);
-  spinner.succeed(`Updated ${packages.length} packages to ${bold(newVersion)}`);
+  writeSpinner.succeed(`Updated ${c.bold(String(packages.length))} packages to ${c.green(c.bold(newVersion))}`);
 
   const commitMsg = (options.commit ?? "%s").replace(/%s/g, newVersion);
   const doTag = options.tag !== false;
   const doPush = options.push !== false;
 
   try {
+    const commitSpinner = new Spinner("Committing").start();
     execFileSync("git", ["add", "npm/"], { stdio: "pipe" });
     execFileSync("git", ["commit", "-m", commitMsg], { stdio: "pipe" });
-    ora().succeed(`Committed: ${commitMsg}`);
+    commitSpinner.succeed(`Committed: ${c.dim(commitMsg)}`);
 
     if (doTag) {
       const tagName = `v${newVersion}`;
+      const tagSpinner = new Spinner(`Tagging ${tagName}`).start();
       execFileSync("git", ["tag", "--annotate", "--message", commitMsg, tagName], {
         stdio: "pipe",
       });
-      ora().succeed(`Tagged: ${tagName}`);
+      tagSpinner.succeed(`Tagged ${c.bold(tagName)}`);
     }
 
     if (doPush) {
-      const pushSpinner = ora("Pushing to remote...").start();
+      const pushSpinner = new Spinner("Pushing to remote").start();
       // --follow-tags pushes the branch and any annotated tags reachable
       // from it in a single round-trip, if no tag was created, it's a
       // no-op for the tag set.
       await runArgs("git", ["push", "--follow-tags"]);
-      pushSpinner.succeed("Pushed");
+      pushSpinner.succeed("Pushed to remote");
     }
   } catch (e) {
-    ora().fail(`Git operation failed: ${(e as Error).message}`);
+    uiFail(`Git operation failed: ${(e as Error).message}`);
     process.exit(1);
   }
+
+  blank();
+  done(`Bumped to ${c.green(c.bold(newVersion))}`);
 }
