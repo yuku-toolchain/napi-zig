@@ -152,7 +152,7 @@ export function formatSize(bytes: number): string {
   return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
-const ANSI_RE = /\x1b\[[0-9;]*m/g;
+const ANSI_RE = new RegExp(String.fromCharCode(27) + "\\[[0-9;]*m", "g");
 export function stripAnsi(s: string): string {
   return s.replace(ANSI_RE, "");
 }

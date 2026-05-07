@@ -22,7 +22,6 @@ import {
   formatSize,
   note as uiNote,
   plain,
-  printTargetList,
   warn as uiWarn,
 } from "./ui";
 import { CLI_VERSION, run } from "./utils";
@@ -144,19 +143,6 @@ export async function buildRelease(optimize: string): Promise<void> {
   if (existsSync(srcBase)) rmSync(srcBase, { recursive: true, force: true });
 
   const expectedTargets = detectExpectedTargets();
-  if (expectedTargets.length > 0) {
-    printTargetList(
-      `Targets  ${c.gray("·")}  ${c.bold(String(expectedTargets.length))} platforms`,
-      expectedTargets,
-      {
-        columns: 3,
-        symbol: "○",
-        symbolColor: c.gray,
-      },
-    );
-    blank();
-  }
-
   const targets = expectedTargets.length > 0 ? expectedTargets : ["all platforms"];
 
   const grid = new TaskList(
@@ -165,12 +151,24 @@ export async function buildRelease(optimize: string): Promise<void> {
     { columns: 3, hint: c.dim(formatOptimize(optimize)) },
   ).start();
 
+  const completed = new Set<string>();
+  const poll = setInterval(() => {
+    const built = listBuiltTargets(srcBase);
+    for (const t of built) {
+      if (!completed.has(t)) {
+        completed.add(t);
+        grid.setState(t, "ok");
+      }
+    }
+  }, 250);
+
   let buildErr: unknown;
   try {
     await run(`zig build -Dnpm=true${optFlag}`);
   } catch (e) {
     buildErr = e;
   }
+  clearInterval(poll);
 
   const built = listBuiltTargets(srcBase);
   for (const t of targets) {
@@ -315,9 +313,11 @@ function listBuiltTargets(srcBase: string): Set<string> {
       const scopeDir = join(addonDir, scope);
       if (!statSync(scopeDir).isDirectory()) continue;
       for (const binding of readdirSync(scopeDir)) {
-        if (binding.startsWith("binding-")) {
-          out.add(binding.slice("binding-".length));
-        }
+        if (!binding.startsWith("binding-")) continue;
+        const bindDir = join(scopeDir, binding);
+        if (!statSync(bindDir).isDirectory()) continue;
+        const hasNode = readdirSync(bindDir).some((f) => f.endsWith(".node"));
+        if (hasNode) out.add(binding.slice("binding-".length));
       }
     }
   }
