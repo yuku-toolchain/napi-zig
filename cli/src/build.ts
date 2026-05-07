@@ -220,9 +220,10 @@ function mergeMainPackageJson(
   version: string,
 ): Record<string, unknown> {
   const out: Record<string, unknown> = { ...generated };
+  const policy = policyFields(MAIN_POLICY_FIELDS, generated);
 
   for (const [k, v] of Object.entries(existing)) {
-    if (!MAIN_POLICY_FIELDS.has(k)) out[k] = v;
+    if (!policy.has(k)) out[k] = v;
   }
 
   out.files = mergeFiles(arrayOfStrings(existing.files), arrayOfStrings(generated.files));
@@ -247,12 +248,25 @@ function mergeBindingPackageJson(
   const out: Record<string, unknown> = { ...generated };
 
   if (existing) {
+    const policy = policyFields(BINDING_POLICY_FIELDS, generated);
     for (const [k, v] of Object.entries(existing)) {
-      if (!BINDING_POLICY_FIELDS.has(k)) out[k] = v;
+      if (!policy.has(k)) out[k] = v;
     }
   }
 
   out.version = version;
+  return out;
+}
+
+// `repository` is opt-in: when build.zig sets `.npm.repository`, the
+// generator emits the field and we treat it as policy so the build.zig
+// value wins. when it's not set, generated has no `repository`, the
+// rule below is a no-op, and any user-edited value in package.json is
+// preserved as before.
+function policyFields(base: Set<string>, generated: Record<string, unknown>): Set<string> {
+  if (!("repository" in generated)) return base;
+  const out = new Set(base);
+  out.add("repository");
   return out;
 }
 

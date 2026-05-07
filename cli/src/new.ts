@@ -17,6 +17,7 @@ type Pm = (typeof SUPPORTED_PMS)[number];
 export interface NewOptions {
   name?: string;
   pm?: string;
+  repo?: string;
 }
 
 export async function scaffoldNew(options: NewOptions): Promise<void> {
@@ -28,17 +29,18 @@ export async function scaffoldNew(options: NewOptions): Promise<void> {
   }
 
   const pm = await resolvePackageManager(options.pm);
+  const repo = await resolveGithubRepo(options.repo);
 
   const writeSpinner = ora("Scaffolding project...").start();
   mkdirSync(targetDir, { recursive: true });
-  writeFiles(targetDir, name, pm);
+  writeFiles(targetDir, name, pm, repo);
   writeSpinner.succeed(`Scaffolded ${bold(name)}`);
 
   await runInstall(pm, targetDir);
   await runZigFetch(targetDir);
   await runInitialBuild(targetDir);
 
-  printNextSteps(name, pm);
+  printNextSteps(name, pm, repo);
 }
 
 async function resolveProjectName(initial: string | undefined): Promise<string> {
@@ -61,6 +63,38 @@ async function resolveProjectName(initial: string | undefined): Promise<string> 
   );
   if (!r.value) process.exit(1);
   return r.value as string;
+}
+
+// asks for the github `owner/repo`. blank is allowed: leaves
+// `.repository` empty in build.zig, which the user can fill in
+// later. when set, the value is baked into build.zig so every
+// generated package.json carries it (npm provenance needs it).
+async function resolveGithubRepo(initial: string | undefined): Promise<string> {
+  if (initial !== undefined) {
+    const t = initial.trim();
+    if (t === "") return "";
+    if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(t)) {
+      ora().fail(`--repo must be owner/repo, got "${initial}"`);
+      process.exit(1);
+    }
+    return t;
+  }
+  const r = await prompts(
+    {
+      type: "text",
+      name: "value",
+      message: "GitHub repo (owner/repo, blank to skip):",
+      validate: (v: string) => {
+        const t = v.trim();
+        if (t === "") return true;
+        return /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(t)
+          ? true
+          : "Use the form owner/repo, e.g. yuku-toolchain/napi-zig";
+      },
+    },
+    { onCancel: () => process.exit(1) },
+  );
+  return typeof r.value === "string" ? r.value.trim() : "";
 }
 
 async function resolvePackageManager(initial: string | undefined): Promise<Pm> {
@@ -131,7 +165,7 @@ function dumpError(e: unknown): void {
   else if (err.message) console.error(err.message);
 }
 
-function printNextSteps(name: string, pm: Pm): void {
+function printNextSteps(name: string, pm: Pm, repo: string): void {
   const test = runScript(pm, "test");
   const build = runScript(pm, "build");
   const release = runScript(pm, "release");
@@ -140,7 +174,7 @@ function printNextSteps(name: string, pm: Pm): void {
     "napi",
     "npm-init",
     "--repo",
-    "<owner>/<repo>",
+    repo || "<owner>/<repo>",
     "--workflow",
     "publish.yml",
   );
@@ -237,12 +271,12 @@ function crc32(s: string): number {
   return (crc ^ 0xffffffff) >>> 0;
 }
 
-function writeFiles(dir: string, name: string, pm: Pm): void {
+function writeFiles(dir: string, name: string, pm: Pm, repo: string): void {
   const zigName = toZigIdentifier(name);
   const fingerprint = generateFingerprint(zigName);
 
-  writeFileSync(join(dir, "package.json"), packageJsonContent(name, pm));
-  writeFileSync(join(dir, "build.zig"), buildZigContent(name));
+  writeFileSync(join(dir, "package.json"), packageJsonContent(name, pm, repo));
+  writeFileSync(join(dir, "build.zig"), buildZigContent(name, repo));
   writeFileSync(join(dir, "build.zig.zon"), buildZigZonContent(zigName, fingerprint));
 
   mkdirSync(join(dir, "src"));
@@ -250,15 +284,15 @@ function writeFiles(dir: string, name: string, pm: Pm): void {
 
   writeFileSync(join(dir, "test.mjs"), testMjsContent(name));
   writeFileSync(join(dir, ".gitignore"), gitignoreContent(name));
-  writeFileSync(join(dir, "README.md"), readmeContent(name, pm));
+  writeFileSync(join(dir, "README.md"), readmeContent(name, pm, repo));
 
   mkdirSync(join(dir, ".github", "workflows"), { recursive: true });
   writeFileSync(join(dir, ".github", "workflows", "publish.yml"), publishWorkflow(pm));
 }
 
-function packageJsonContent(name: string, pm: Pm): string {
+function packageJsonContent(name: string, pm: Pm, repo: string): string {
   const runner = jsRunner(pm);
-  const pkg = {
+  const pkg: Record<string, unknown> = {
     name,
     version: "0.0.0",
     description: "",
@@ -273,10 +307,14 @@ function packageJsonContent(name: string, pm: Pm): string {
       "napi-zig": `^${CLI_VERSION}`,
     },
   };
+  if (repo) {
+    pkg.repository = { type: "git", url: `git+https://github.com/${repo}.git` };
+  }
   return JSON.stringify(pkg, null, 2) + "\n";
 }
 
-function buildZigContent(name: string): string {
+function buildZigContent(name: string, repo: string): string {
+  const repoLine = repo ? `            .repository = "${repo}",\n` : "";
   return `const std = @import("std");
 const napi_zig = @import("napi_zig");
 
@@ -291,7 +329,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .npm = .{
             .scope = "@${name}",
-            .dts = .auto,
+${repoLine}            .dts = .auto,
         },
     });
 }
@@ -354,7 +392,7 @@ zig-pkg
 `;
 }
 
-function readmeContent(name: string, pm: Pm): string {
+function readmeContent(name: string, pm: Pm, repo: string): string {
   const build = runScript(pm, "build");
   const release = runScript(pm, "release");
   const bump = runScript(pm, "bump");
@@ -364,7 +402,7 @@ function readmeContent(name: string, pm: Pm): string {
     "napi",
     "npm-init",
     "--repo",
-    "<owner>/<repo>",
+    repo || "<owner>/<repo>",
     "--workflow",
     "publish.yml",
   );

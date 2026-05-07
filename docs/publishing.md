@@ -168,7 +168,7 @@ For each package in `npm/`:
 
 1. Reads its `package.json`.
 2. Runs `npm publish --access public`.
-3. Attaches a [provenance attestation](https://docs.npmjs.com/generating-provenance-statements) (auto in CI).
+3. Attaches a [provenance attestation](https://docs.npmjs.com/generating-provenance-statements/) (auto in CI).
 
 Per-platform binding packages are published before the main package, so users who install during the small window between publishes always get a working set.
 
@@ -197,6 +197,8 @@ napi publish --provenance        # force on (rarely needed; default in CI)
 ```
 
 Provenance proves the package was built from a specific commit on a specific workflow. It shows up on the npm registry as a verified badge.
+
+Provenance requires every package to declare a `repository` field that points to the source tree, otherwise npm rejects the publish with "package must specify a repository". Set `.repository` once in `build.zig` (`.npm.repository = "owner/repo"`). Release builds then write the field into the main package and every per-platform binding (twelve files by default), so the `package.json` files stay in sync without hand-editing. See [`addLib` reference](/reference/build#repository) for the accepted forms.
 
 ## What users see
 

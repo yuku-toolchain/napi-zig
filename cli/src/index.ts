@@ -13,8 +13,9 @@ const cli = cac("napi-zig");
 cli
   .command("new [name]", "Scaffold a new napi-zig project")
   .option("--pm <pm>", "Package manager: npm, yarn, pnpm, bun (default: detected)")
-  .action((name: string | undefined, options: { pm?: string }) => {
-    return scaffoldNew({ name, pm: options.pm });
+  .option("--repo <repo>", "GitHub repo (owner/repo) for the .repository field, skips the prompt")
+  .action((name: string | undefined, options: { pm?: string; repo?: string }) => {
+    return scaffoldNew({ name, pm: options.pm, repo: options.repo });
   });
 
 cli

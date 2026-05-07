@@ -43,7 +43,7 @@ The reconciler is conservative about your work:
 | `binding.js`                         | Refreshed.                                                                                                                                     |
 | `index.d.ts`                         | Refreshed when `.dts` is `.auto` or `.{ .file = … }`.                                                                                          |
 | `package.json` (main, policy fields) | Refreshed: `name`, `type`, `main`, `types`, `optionalDependencies`. The keys of `optionalDependencies` track `.platforms`.                     |
-| `package.json` (main, `files`)       | Merged: the canonical entries (`index.js`, `binding.js`, `index.d.ts`) are always present; any extras you add (e.g. `assets/`) are preserved. |
+| `package.json` (main, `files`)       | Merged: the canonical entries (`index.js`, `binding.js`, `index.d.ts`) are always present; any extras you add (e.g. `assets/`) are preserved.  |
 | `package.json` (main, user fields)   | Preserved: `description`, `repository`, `homepage`, `keywords`, `author`, `bugs`, `funding`, `engines`, `scripts`, anything else you've added. |
 | `package.json` (main, version)       | Preserved. Only `napi bump` changes it. The bindings' `optionalDependencies` values are kept in lockstep with this version.                    |
 | `package.json` (per-binding)         | Refreshed: `name`, `os`, `cpu`, `libc`, `main`, `files`. `version` is pinned to the main package's `version`.                                  |

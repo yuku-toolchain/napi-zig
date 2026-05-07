@@ -56,6 +56,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .npm = .{
             .scope = "@myscope",
+            .repository = "<owner>/<repo>",
         },
     });
 }
@@ -64,6 +65,8 @@ pub fn build(b: *std.Build) void {
 `addLib` is the only thing you need to call. It registers an artifact, sets up the right linker flags for each OS, and (when `--release` is set) generates the cross-compile graph and the npm package skeleton. See [build.zig (addLib)](/reference/build) for every option.
 
 The `.scope` you pick here is the npm scope your per-platform bindings publish under. Set it to a username or org you own, and create the org on npm before publishing. See [Publishing: how distribution works](/publishing#how-distribution-works) for the full rationale.
+
+**Don't skip `.repository`.** npm requires a `repository` field on every published package for [provenance](https://docs.npmjs.com/generating-provenance-statements/) to verify against the source tree. Without it, `napi publish` fails in CI with "package must specify a repository". An addon ships the main package plus one binding per platform (twelve `package.json` files with the default platform set), and setting `.repository` once here writes it into all of them on every release build, so you don't have to maintain twelve copies by hand. Use the `"owner/repo"` shorthand for GitHub or pass a full git URL. See [`addLib` reference](/reference/build#repository) for the accepted forms.
 
 ## 4. Add scripts to `package.json`
 

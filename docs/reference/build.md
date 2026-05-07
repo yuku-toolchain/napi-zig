@@ -54,10 +54,22 @@ Pass via `.imports = &.{ .{ .name = "parser", .module = parser } }`. See [Projec
 | `.scope`       | required            | npm scope (e.g. `"@myscope"`).                                           |
 | `.description` | `""`                | Package description.                                                     |
 | `.license`     | `"MIT"`             | License identifier.                                                      |
+| `.repository`  | `""`                | Git repository (`"owner/repo"` shorthand or a full URL). See below.      |
 | `.dts`         | `.none`             | `.{ .file = path }`, `.auto`, or `.none`. See [TypeScript](/typescript). |
 | `.platforms`   | `Platform.defaults` | Cross-compilation targets.                                               |
 
-`repository` is intentionally not part of `NpmConfig`. The first release build writes the main `package.json` once; add a `"repository"` field there yourself if you want one and it will be preserved on every subsequent build.
+### `.repository`
+
+npm requires a `repository` field on every published package for [provenance](https://docs.npmjs.com/generating-provenance-statements/) to verify against the source tree, otherwise `napi publish` fails in CI with "package must specify a repository". An addon ships as the main package plus one binding per platform (twelve `package.json` files with the default platform set), and setting `.repository` once in `build.zig` writes the field into every one of them on each release build, so you never have to keep them in sync by hand.
+
+Two accepted forms:
+
+```zig
+.repository = "yuku-toolchain/napi-zig",                       // GitHub shorthand
+.repository = "git+https://github.com/yuku-toolchain/napi-zig.git", // explicit URL
+```
+
+The shorthand expands to `git+https://github.com/owner/repo.git`. Anything starting with `http://`, `https://`, `git+`, `git@`, or `ssh://` is passed through unchanged so non-GitHub hosts work too. If `.repository` is empty, no field is emitted and any value already in the existing `package.json` is preserved.
 
 ## `Dts`
 

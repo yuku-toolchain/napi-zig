@@ -20,6 +20,12 @@ pub const NpmConfig = struct {
     scope: []const u8,
     description: []const u8 = "",
     license: []const u8 = "MIT",
+    /// git repository the published packages point to. accepts the
+    /// `"owner/repo"` shorthand (expanded to a github url) or a full
+    /// git/https url. npm requires this field on every package for
+    /// provenance attestations to verify, so when set it is written
+    /// into the main package.json and every per-platform binding.
+    repository: []const u8 = "",
     dts: Dts = .none,
     platforms: []const Platform = Platform.defaults,
 };
@@ -315,12 +321,14 @@ fn rootPackageJson(alloc: std.mem.Allocator, name: []const u8, npm: NpmConfig) [
     else
         "";
 
+    const repo_line = repositoryLine(alloc, npm.repository, 2);
+
     return std.fmt.allocPrint(alloc,
         \\{{
         \\  "name": "{s}",
         \\  "version": "0.0.0",
         \\{s}  "license": "{s}",
-        \\  "type": "module",
+        \\{s}  "type": "module",
         \\  "main": "index.js",
         \\  "types": "index.d.ts",
         \\  "files": [
@@ -332,7 +340,7 @@ fn rootPackageJson(alloc: std.mem.Allocator, name: []const u8, npm: NpmConfig) [
         \\{s}  }}
         \\}}
         \\
-    , .{ name, desc_line, npm.license, deps }) catch "";
+    , .{ name, desc_line, npm.license, repo_line, deps }) catch "";
 }
 
 fn platformPackageJson(alloc: std.mem.Allocator, name: []const u8, npm: NpmConfig, platform: Platform) []const u8 {
@@ -341,13 +349,15 @@ fn platformPackageJson(alloc: std.mem.Allocator, name: []const u8, npm: NpmConfi
     else
         "";
 
+    const repo_line = repositoryLine(alloc, npm.repository, 2);
+
     return std.fmt.allocPrint(alloc,
         \\{{
         \\  "name": "{s}/binding-{s}",
         \\  "version": "0.0.0",
         \\  "os": ["{s}"],
         \\  "cpu": ["{s}"],
-        \\{s}  "main": "{s}.node",
+        \\{s}{s}  "main": "{s}.node",
         \\  "files": [
         \\    "{s}.node"
         \\  ]
@@ -355,9 +365,41 @@ fn platformPackageJson(alloc: std.mem.Allocator, name: []const u8, npm: NpmConfi
         \\
     , .{
         npm.scope,         platform.suffix(), platform.npmOs(),
-        platform.npmCpu(), libc_line,         name,
-        name,
+        platform.npmCpu(), libc_line,         repo_line,
+        name,              name,
     }) catch "";
+}
+
+/// emits a `"repository": { "type": "git", "url": "..." },\n` block
+/// indented by `indent` spaces. returns "" when repo is empty.
+fn repositoryLine(alloc: std.mem.Allocator, repo: []const u8, indent: usize) []const u8 {
+    if (repo.len == 0) return "";
+    const pad = " " ** 16;
+    const lead = pad[0..@min(indent, pad.len)];
+    const url = repositoryUrl(alloc, repo);
+    if (url.len == 0) return "";
+    return std.fmt.allocPrint(alloc,
+        \\{s}"repository": {{
+        \\{s}  "type": "git",
+        \\{s}  "url": "{s}"
+        \\{s}}},
+        \\
+    , .{ lead, lead, lead, url, lead }) catch "";
+}
+
+/// expands an `owner/repo` shorthand to a github git+https url.
+/// any string that already looks like a url is passed through.
+fn repositoryUrl(alloc: std.mem.Allocator, repo: []const u8) []const u8 {
+    if (repo.len == 0) return "";
+    if (std.mem.startsWith(u8, repo, "http://") or
+        std.mem.startsWith(u8, repo, "https://") or
+        std.mem.startsWith(u8, repo, "git+") or
+        std.mem.startsWith(u8, repo, "git@") or
+        std.mem.startsWith(u8, repo, "ssh://"))
+    {
+        return alloc.dupe(u8, repo) catch "";
+    }
+    return std.fmt.allocPrint(alloc, "git+https://github.com/{s}.git", .{repo}) catch "";
 }
 
 fn bindingJs(alloc: std.mem.Allocator, name: []const u8, scope: []const u8) []const u8 {
