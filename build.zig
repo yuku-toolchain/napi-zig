@@ -374,7 +374,7 @@ fn platformPackageJson(alloc: std.mem.Allocator, name: []const u8, npm: NpmConfi
 /// indented by `indent` spaces. returns "" when repo is empty.
 fn repositoryLine(alloc: std.mem.Allocator, repo: []const u8, indent: usize) []const u8 {
     if (repo.len == 0) return "";
-    const pad = " " ** 16;
+    const pad = "                ";
     const lead = pad[0..@min(indent, pad.len)];
     const url = repositoryUrl(alloc, repo);
     if (url.len == 0) return "";
