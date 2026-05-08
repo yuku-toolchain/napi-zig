@@ -369,8 +369,8 @@ fn rootPackageJson(alloc: std.mem.Allocator, name: []const u8, npm: NpmConfig) [
     // targets. pure-native packages stay dep-free.
     const deps_block = if (hasWasm(npm.platforms))
         \\  "dependencies": {
-        \\    "@emnapi/core": "^1.7.1",
-        \\    "@emnapi/runtime": "^1.7.1"
+        \\    "@emnapi/core": "^1.10.0",
+        \\    "@emnapi/runtime": "^1.10.0"
         \\  },
         \\
     else
