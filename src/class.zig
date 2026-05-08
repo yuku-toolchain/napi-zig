@@ -98,7 +98,7 @@ fn ConstructorBridge(comptime T: type) type {
 
     return struct {
         fn call(raw_env: c.napi_env, raw_info: c.napi_callback_info) callconv(.c) ?c.napi_value {
-            var arena = std.heap.ArenaAllocator.init(std.heap.smp_allocator);
+            var arena = std.heap.ArenaAllocator.init(util.default_allocator);
             defer arena.deinit();
             const env: Env = .{ .handle = raw_env, .arena = &arena };
 
@@ -113,14 +113,14 @@ fn ConstructorBridge(comptime T: type) type {
                 return null;
             }) else raw;
 
-            const instance = std.heap.smp_allocator.create(T) catch {
+            const instance = util.default_allocator.create(T) catch {
                 env.throwError("napi-zig: out of memory");
                 return null;
             };
             instance.* = value;
 
             if (c.napi_wrap(env.handle, this_val, instance, &finalize, null, null) != .ok) {
-                std.heap.smp_allocator.destroy(instance);
+                util.default_allocator.destroy(instance);
                 env.throwError("napi-zig: napi_wrap failed");
                 return null;
             }
@@ -130,7 +130,7 @@ fn ConstructorBridge(comptime T: type) type {
         fn finalize(_: c.napi_env, data: ?*anyopaque, _: ?*anyopaque) callconv(.c) void {
             const instance: *T = @ptrCast(@alignCast(data orelse return));
             if (@hasDecl(T, "deinit")) instance.deinit();
-            std.heap.smp_allocator.destroy(instance);
+            util.default_allocator.destroy(instance);
         }
     };
 }
@@ -144,7 +144,7 @@ fn MethodBridge(comptime T: type, comptime method_name: []const u8) type {
 
     return struct {
         fn call(raw_env: c.napi_env, raw_info: c.napi_callback_info) callconv(.c) ?c.napi_value {
-            var arena = std.heap.ArenaAllocator.init(std.heap.smp_allocator);
+            var arena = std.heap.ArenaAllocator.init(util.default_allocator);
             defer arena.deinit();
             const env: Env = .{ .handle = raw_env, .arena = &arena };
 

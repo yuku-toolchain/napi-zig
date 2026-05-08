@@ -3,6 +3,7 @@ const c = @import("c.zig");
 const err = @import("error.zig");
 const convert = @import("convert.zig");
 const env_mod = @import("env.zig");
+const util = @import("util.zig");
 
 const Env = env_mod.Env;
 const check = err.check;
@@ -218,8 +219,8 @@ pub fn ThreadsafeFn(comptime T: type) type {
         pub fn call(self: Self, value: T, mode: Mode) !void {
             if (T == void) return check(c.napi_call_threadsafe_function(self.handle, null, mode));
 
-            const ptr = try std.heap.smp_allocator.create(T);
-            errdefer std.heap.smp_allocator.destroy(ptr);
+            const ptr = try util.default_allocator.create(T);
+            errdefer util.default_allocator.destroy(ptr);
             ptr.* = value;
             try check(c.napi_call_threadsafe_function(self.handle, ptr, mode));
         }
@@ -242,9 +243,9 @@ pub fn ThreadsafeFn(comptime T: type) type {
 
         fn callJs(raw_env: c.napi_env, js_callback: c.napi_value, _: ?*anyopaque, data: ?*anyopaque) callconv(.c) void {
             const typed: *T = @ptrCast(@alignCast(data orelse return));
-            defer std.heap.smp_allocator.destroy(typed);
+            defer util.default_allocator.destroy(typed);
 
-            var arena = std.heap.ArenaAllocator.init(std.heap.smp_allocator);
+            var arena = std.heap.ArenaAllocator.init(util.default_allocator);
             defer arena.deinit();
             const env: Env = .{ .handle = raw_env, .arena = &arena };
 

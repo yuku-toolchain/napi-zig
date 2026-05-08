@@ -70,18 +70,12 @@ pub fn addLib(b: *std.Build, napi_dep: *std.Build.Dependency, options: LibOption
     lib_mod.addImport("napi-zig", napi_module);
     for (options.imports) |imp| lib_mod.addImport(imp.name, imp.module);
 
-    const lib = b.addLibrary(.{
-        .name = options.name,
-        .root_module = lib_mod,
-        .linkage = .dynamic,
-    });
-    configureLinkerFlags(b, lib, options.target, node_api_def, options.host_exe, napi_dep);
-
-    const install = b.addInstallArtifact(lib, .{
-        .dest_dir = .{ .override = .lib },
-        .dest_sub_path = b.fmt("{s}.node", .{options.name}),
-    });
-    b.getInstallStep().dependOn(&install.step);
+    const dest_dir: std.Build.InstallDir = .lib;
+    const install_step = if (options.target.result.cpu.arch.isWasm())
+        installWasm(b, options.name, lib_mod, dest_dir)
+    else
+        installNative(b, options.name, lib_mod, options.target, dest_dir, options.host_exe, node_api_def, napi_dep);
+    b.getInstallStep().dependOn(install_step);
 
     if (options.npm) |npm| {
         installDts(b, napi_dep, napi_module, options, npm.dts, .lib, b.fmt("{s}.d.ts", .{options.name}));
@@ -191,34 +185,32 @@ fn addNpmRelease(
     });
     b.getInstallStep().dependOn(&install_wf.step);
 
-    // cross-compile a .node for each platform.
+    // cross-compile a binding for each platform: native -> .node, wasm -> .wasm.
     for (npm.platforms) |platform| {
         const target = b.resolveTargetQuery(platform.zigTarget());
+
+        // wasm is a fallback path optimized for size. download and parse cost
+        // matters more than raw throughput. native targets are tuned for speed.
+        const optimize: std.builtin.OptimizeMode = if (platform.isWasm()) .ReleaseSmall else .ReleaseFast;
 
         const lib_mod = b.createModule(.{
             .root_source_file = options.root,
             .target = target,
-            .optimize = .ReleaseFast,
+            .optimize = optimize,
         });
         lib_mod.addImport("napi-zig", napi_module);
         for (options.imports) |imp| lib_mod.addImport(imp.name, imp.module);
 
-        const lib = b.addLibrary(.{
-            .name = options.name,
-            .root_module = lib_mod,
-            .linkage = .dynamic,
-        });
-        configureLinkerFlags(b, lib, target, node_api_def, options.host_exe, napi_dep);
+        const dest_dir: std.Build.InstallDir = .{ .custom = b.fmt(
+            "npm/{s}/{s}/binding-{s}",
+            .{ options.name, npm.scope, platform.suffix() },
+        ) };
 
-        const node_install = b.addInstallArtifact(lib, .{
-            .dest_dir = .{ .override = .{
-                .custom = b.fmt("npm/{s}/{s}/binding-{s}", .{ options.name, npm.scope, platform.suffix() }),
-            } },
-            .dest_sub_path = b.fmt("{s}.node", .{options.name}),
-            .pdb_dir = .disabled,
-            .implib_dir = .disabled,
-        });
-        b.getInstallStep().dependOn(&node_install.step);
+        const install_step = if (platform.isWasm())
+            installWasm(b, options.name, lib_mod, dest_dir)
+        else
+            installNative(b, options.name, lib_mod, target, dest_dir, options.host_exe, node_api_def, napi_dep);
+        b.getInstallStep().dependOn(install_step);
     }
 
     const npm_dir: std.Build.InstallDir = .{ .custom = b.fmt("npm/{s}", .{options.name}) };
@@ -260,6 +252,61 @@ fn installIndexJs(
 
     const step = b.addInstallFileWithDir(out, install_dir, "index.js");
     b.getInstallStep().dependOn(&step.step);
+}
+
+fn installNative(
+    b: *std.Build,
+    name: []const u8,
+    lib_mod: *std.Build.Module,
+    target: std.Build.ResolvedTarget,
+    dest_dir: std.Build.InstallDir,
+    host_exe: []const u8,
+    node_api_def: std.Build.LazyPath,
+    napi_dep: *std.Build.Dependency,
+) *std.Build.Step {
+    const lib = b.addLibrary(.{
+        .name = name,
+        .root_module = lib_mod,
+        .linkage = .dynamic,
+    });
+    configureLinkerFlags(b, lib, target, node_api_def, host_exe, napi_dep);
+
+    const install = b.addInstallArtifact(lib, .{
+        .dest_dir = .{ .override = dest_dir },
+        .dest_sub_path = b.fmt("{s}.node", .{name}),
+        .pdb_dir = .disabled,
+        .implib_dir = .disabled,
+    });
+    return &install.step;
+}
+
+// wasi reactor: no main, just exported functions. linking libc gives us
+// malloc/free for emnapi to allocate strings/buffers across the wasm boundary.
+fn installWasm(
+    b: *std.Build,
+    name: []const u8,
+    lib_mod: *std.Build.Module,
+    dest_dir: std.Build.InstallDir,
+) *std.Build.Step {
+    lib_mod.link_libc = true;
+    lib_mod.export_symbol_names = &.{ "malloc", "free" };
+
+    const exe = b.addExecutable(.{
+        .name = name,
+        .root_module = lib_mod,
+    });
+    exe.entry = .disabled;
+    exe.rdynamic = true;
+    // emnapi's runtime needs the indirect function table at instantiation
+    // time (it routes function-pointer callbacks through it).
+    exe.export_table = true;
+    exe.wasi_exec_model = .reactor;
+
+    const install = b.addInstallArtifact(exe, .{
+        .dest_dir = .{ .override = dest_dir },
+        .dest_sub_path = b.fmt("{s}.wasm", .{name}),
+    });
+    return &install.step;
 }
 
 fn configureLinkerFlags(b: *std.Build, lib: *std.Build.Step.Compile, target: std.Build.ResolvedTarget, node_api_def: std.Build.LazyPath, host_exe: []const u8, napi_dep: *std.Build.Dependency) void {
@@ -318,6 +365,17 @@ fn rootPackageJson(alloc: std.mem.Allocator, name: []const u8, npm: NpmConfig) [
 
     const repo_line = repositoryLine(alloc, npm.repository, 2);
 
+    // emnapi runtime is only pulled in when wasm is one of the cross-compile
+    // targets. pure-native packages stay dep-free.
+    const deps_block = if (hasWasm(npm.platforms))
+        \\  "dependencies": {
+        \\    "@emnapi/core": "^1.7.1",
+        \\    "@emnapi/runtime": "^1.7.1"
+        \\  },
+        \\
+    else
+        "";
+
     return std.fmt.allocPrint(alloc,
         \\{{
         \\  "name": "{s}",
@@ -331,37 +389,53 @@ fn rootPackageJson(alloc: std.mem.Allocator, name: []const u8, npm: NpmConfig) [
         \\    "index.d.ts",
         \\    "binding.js"
         \\  ],
-        \\  "optionalDependencies": {{
+        \\{s}  "optionalDependencies": {{
         \\{s}  }}
         \\}}
         \\
-    , .{ name, desc_line, npm.license, repo_line, deps }) catch "";
+    , .{ name, desc_line, npm.license, repo_line, deps_block, deps }) catch "";
+}
+
+fn hasWasm(platforms: []const Platform) bool {
+    for (platforms) |p| if (p.isWasm()) return true;
+    return false;
 }
 
 fn platformPackageJson(alloc: std.mem.Allocator, name: []const u8, npm: NpmConfig, platform: Platform) []const u8 {
-    const libc_line = if (platform.npmLibc()) |libc|
-        std.fmt.allocPrint(alloc, "  \"libc\": [\"{s}\"],\n", .{libc}) catch ""
-    else
-        "";
-
     const repo_line = repositoryLine(alloc, npm.repository, 2);
+    const ext = if (platform.isWasm()) "wasm" else "node";
+
+    // wasm runs anywhere, so no os/cpu/libc filter. npm installs it on
+    // every platform as a fallback.
+    const filter_lines = if (platform.isWasm()) "" else blk: {
+        const os_str = platform.npmOs() orelse break :blk "";
+        const cpu_str = platform.npmCpu() orelse break :blk "";
+        const libc_line = if (platform.npmLibc()) |libc|
+            std.fmt.allocPrint(alloc, "  \"libc\": [\"{s}\"],\n", .{libc}) catch ""
+        else
+            "";
+        break :blk std.fmt.allocPrint(alloc,
+            \\  "os": ["{s}"],
+            \\  "cpu": ["{s}"],
+            \\{s}
+        , .{ os_str, cpu_str, libc_line }) catch "";
+    };
 
     return std.fmt.allocPrint(alloc,
         \\{{
         \\  "name": "{s}/binding-{s}",
         \\  "version": "0.0.0",
-        \\  "os": ["{s}"],
-        \\  "cpu": ["{s}"],
-        \\{s}{s}  "main": "{s}.node",
+        \\{s}{s}  "main": "{s}.{s}",
         \\  "files": [
-        \\    "{s}.node"
+        \\    "{s}.{s}"
         \\  ]
         \\}}
         \\
     , .{
-        npm.scope,         platform.suffix(), platform.npmOs(),
-        platform.npmCpu(), libc_line,         repo_line,
-        name,              name,
+        npm.scope, platform.suffix(),
+        filter_lines, repo_line,
+        name,         ext,
+        name,         ext,
     }) catch "";
 }
 
@@ -400,7 +474,7 @@ fn repositoryUrl(alloc: std.mem.Allocator, repo: []const u8) []const u8 {
 fn bindingJs(alloc: std.mem.Allocator, name: []const u8, scope: []const u8) []const u8 {
     return std.fmt.allocPrint(alloc,
         \\import {{ createRequire }} from 'node:module';
-        \\import {{ readFileSync }} from 'node:fs';
+        \\import {{ readFileSync, existsSync }} from 'node:fs';
         \\import {{ execSync }} from 'node:child_process';
         \\import {{ fileURLToPath }} from 'node:url';
         \\import {{ dirname, join }} from 'node:path';
@@ -436,6 +510,32 @@ fn bindingJs(alloc: std.mem.Allocator, name: []const u8, scope: []const u8) []co
         \\  return false;
         \\}}
         \\
+        \\function findWasm() {{
+        \\  const local = join(__dirname, '{s}', 'binding-wasm32-wasi', '{s}.wasm');
+        \\  if (existsSync(local)) return local;
+        \\  try {{ return require.resolve('{s}/binding-wasm32-wasi'); }} catch {{ return null; }}
+        \\}}
+        \\
+        \\function loadWasm() {{
+        \\  const path = findWasm();
+        \\  if (!path) return null;
+        \\  const {{ instantiateNapiModuleSync }} = require('@emnapi/core');
+        \\  const {{ getDefaultContext }} = require('@emnapi/runtime');
+        \\  const {{ WASI }} = require('node:wasi');
+        \\  const wasi = new WASI({{ version: 'preview1', env: process.env }});
+        \\  const {{ napiModule }} = instantiateNapiModuleSync(readFileSync(path), {{
+        \\    context: getDefaultContext(),
+        \\    wasi,
+        \\    // emnapi splits napi and emnapi into separate import modules.
+        \\    // zig (and clang wasm32) imports them from `env`, so merge them.
+        \\    overwriteImports(imports) {{
+        \\      imports.env = {{ ...imports.env, ...imports.napi, ...imports.emnapi }};
+        \\      return imports;
+        \\    }},
+        \\  }});
+        \\  return napiModule.exports;
+        \\}}
+        \\
         \\function loadBinding() {{
         \\  const errors = [];
         \\  const libc = platform === 'linux' ? (isMusl() ? '-musl' : '-gnu') : '';
@@ -453,6 +553,13 @@ fn bindingJs(alloc: std.mem.Allocator, name: []const u8, scope: []const u8) []co
         \\    errors.push(e);
         \\  }}
         \\
+        \\  try {{
+        \\    const wasm = loadWasm();
+        \\    if (wasm) return wasm;
+        \\  }} catch (e) {{
+        \\    errors.push(e);
+        \\  }}
+        \\
         \\  throw new Error(
         \\    `Failed to load native binding for ${{platform}}-${{arch}}.\n` +
         \\    `If this persists, try removing node_modules and reinstalling.\n` +
@@ -463,5 +570,5 @@ fn bindingJs(alloc: std.mem.Allocator, name: []const u8, scope: []const u8) []co
         \\
         \\export default loadBinding();
         \\
-    , .{ scope, name, scope, name }) catch "";
+    , .{ scope, name, scope, scope, name, scope, name }) catch "";
 }

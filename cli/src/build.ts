@@ -299,6 +299,7 @@ function detectExpectedTargets(): string[] {
     "win32-x64",
     "win32-arm64",
     "freebsd-x64",
+    "wasm32-wasi",
   ];
 }
 
@@ -316,8 +317,10 @@ function listBuiltTargets(srcBase: string): Set<string> {
         if (!binding.startsWith("binding-")) continue;
         const bindDir = join(scopeDir, binding);
         if (!statSync(bindDir).isDirectory()) continue;
-        const hasNode = readdirSync(bindDir).some((f) => f.endsWith(".node"));
-        if (hasNode) out.add(binding.slice("binding-".length));
+        const hasBinary = readdirSync(bindDir).some(
+          (f) => f.endsWith(".node") || f.endsWith(".wasm"),
+        );
+        if (hasBinary) out.add(binding.slice("binding-".length));
       }
     }
   }
@@ -377,7 +380,7 @@ function reconcilePackage(
     mkdirSync(destBind, { recursive: true });
 
     for (const f of readdirSync(srcBind)) {
-      if (f.endsWith(".node")) {
+      if (f.endsWith(".node") || f.endsWith(".wasm")) {
         copyFileSync(join(srcBind, f), join(destBind, f));
       }
     }

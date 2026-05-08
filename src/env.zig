@@ -2,6 +2,7 @@ const std = @import("std");
 const c = @import("c.zig");
 const err = @import("error.zig");
 const convert = @import("convert.zig");
+const util = @import("util.zig");
 const val_mod = @import("val.zig");
 const Val = val_mod.Val;
 const Ref = val_mod.Ref;
@@ -156,8 +157,8 @@ pub const Env = struct {
         const p = try self.createPromise();
         errdefer rejectWith(self, p.deferred, "napi-zig: failed to start worker");
 
-        const state = try std.heap.smp_allocator.create(State);
-        errdefer std.heap.smp_allocator.destroy(state);
+        const state = try util.default_allocator.create(State);
+        errdefer util.default_allocator.destroy(state);
         state.* = .{ .ctx = context, .deferred = p.deferred };
 
         const name_val = try self.createString(std.mem.span(name));
@@ -211,9 +212,9 @@ fn WorkerState(comptime T: type) type {
 
         fn complete(raw_env: c.napi_env, _: c.napi_status, data: ?*anyopaque) callconv(.c) void {
             const state: *Self = @ptrCast(@alignCast(data));
-            defer std.heap.smp_allocator.destroy(state);
+            defer util.default_allocator.destroy(state);
 
-            var arena = std.heap.ArenaAllocator.init(std.heap.smp_allocator);
+            var arena = std.heap.ArenaAllocator.init(util.default_allocator);
             defer arena.deinit();
             const env: Env = .{ .handle = raw_env, .arena = &arena };
 

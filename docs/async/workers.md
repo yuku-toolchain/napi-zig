@@ -117,3 +117,7 @@ pub fn resolve(self: *Work, env: napi.Env) !napi.Val {
 - **Synchronous work that completes in microseconds.** The thread hop has its own cost. Just compute on the main thread.
 - **Multi-call patterns.** Progress events, streaming, anything where the worker pushes more than one value. Use [ThreadsafeFn](/async/threadsafe).
 - **I/O-bound work.** If the work spends its time waiting for the kernel, use Node's existing async I/O instead of pinning a thread.
+
+## On wasm
+
+`runWorker` works in the [WebAssembly](/webassembly) fallback. emnapi schedules `compute` and `resolve` on its own JS-side work queue, so the same Zig source compiles and behaves the same way. The two restrictions on wasm are unrelated to `runWorker` itself: `std.Thread.spawn` is not available (wasm32-wasi is single-threaded), and `ThreadsafeFn` calls from a real Zig thread cannot happen for the same reason.

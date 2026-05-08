@@ -73,14 +73,15 @@ That is already a working entry point. Keep it as-is, or use it for JS-side wrap
 
 If `.platforms` is omitted from `.npm`, you get this set:
 
-| OS      | Architectures   | libc           |
-| ------- | --------------- | -------------- |
-| Linux   | x64, arm64, arm | glibc and musl |
-| macOS   | x64, arm64      | n/a            |
-| Windows | x64, arm64      | n/a            |
-| FreeBSD | x64             | n/a            |
+| OS          | Architectures   | libc           |
+| ----------- | --------------- | -------------- |
+| Linux       | x64, arm64, arm | glibc and musl |
+| macOS       | x64, arm64      | n/a            |
+| Windows     | x64, arm64      | n/a            |
+| FreeBSD     | x64             | n/a            |
+| WebAssembly | wasm32-wasi     | n/a            |
 
-That is 11 binaries from one `napi build --release` call.
+That is 11 native binaries plus one portable wasm binary from a single `napi build --release`. The wasm binary acts as a fallback for any environment that has no matching native, see [WebAssembly](/webassembly).
 
 ## Custom platforms
 
@@ -116,7 +117,7 @@ This only affects Windows import-library generation. On macOS and Linux the addo
 
 ## Optimization
 
-`napi build --release` uses `ReleaseFast` for every cross-compiled binary. For development, `napi build` uses whatever `-Doptimize` you specify (default `Debug`). Override the release mode with:
+`napi build --release` uses `ReleaseFast` for native cross-compiled binaries and `ReleaseSmall` for the `wasm32-wasi` binding (download and parse cost dominate over raw throughput in the fallback path). For development, `napi build` uses whatever `-Doptimize` you specify (default `Debug`). Override the release mode with:
 
 ```sh
 napi build --release --optimize=safe    # ReleaseSafe
