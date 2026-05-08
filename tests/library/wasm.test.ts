@@ -29,10 +29,15 @@ describe("wasm fallback", () => {
 
     const stdout = new TextDecoder().decode(run.stdout);
     const stderr = new TextDecoder().decode(run.stderr);
-    expect({ exitCode: run.exitCode, stderr, stdout }).toEqual({
-      exitCode: 0,
-      stderr: stderr,
-      stdout: expect.stringContaining("wasm fixture: ok"),
-    });
+
+    // On non-zero exit, surface stderr in the thrown error so CI logs show
+    // the underlying cause (node:wasi unavailable, missing emnapi dep, etc).
+    if (run.exitCode !== 0) {
+      throw new Error(
+        `node smoke.mjs exited ${run.exitCode}\nstdout:\n${stdout}\nstderr:\n${stderr}`,
+      );
+    }
+
+    expect(stdout).toContain("wasm fixture: ok");
   }, 120_000);
 });

@@ -34,6 +34,12 @@ jobs:
         with:
           bun-version: latest
 
+      # wasm.test.ts spawns `node smoke.mjs`. Pin a Node version where
+      # `node:wasi` is stable instead of relying on the runner default.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - run: bun install --frozen-lockfile
 
       # Type-check covers cli/ + the auto-generated fixture-lib/<name>.d.ts.
