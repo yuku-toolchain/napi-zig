@@ -8,7 +8,7 @@ pub fn add(a: i32, b: i32) i32 { return a + b; }
 
 ```js
 import addon from "my-addon";
-addon.add(2, 3); // 5 — runs natively where possible, wasm where not.
+addon.add(2, 3); // 5. runs natively where possible, wasm where not.
 ```
 
 ## Why wasm matters
@@ -114,7 +114,7 @@ The result is one cross-platform package with no `os`/`cpu` filter. `napi instal
 2. The published `<scope>/binding-<os>-<arch>(-<libc>)` package via `require`.
 3. The wasm fallback: read `<scope>/binding-wasm32-wasi/<name>.wasm`, then load with `@emnapi/core` + `@emnapi/runtime` + `node:wasi`.
 
-Each failure is recorded; if all three fail, the thrown error lists every cause. The wasm path is silent when no `.wasm` is published (the `findWasm` helper returns `null` and the loader keeps going).
+Each failure is recorded. If all three fail, the thrown error lists every cause. The wasm path is silent when no `.wasm` is published (the `findWasm` helper returns `null` and the loader keeps going).
 
 ## Output size
 
@@ -140,4 +140,4 @@ This integration targets **basic libraries**: pure computation, allocations, syn
 - Direct system calls beyond what WASI preview1 exposes.
 - C dependencies that assume a full `libc` and a real filesystem.
 
-then a wasm fallback will not cover you. Either keep your `.platforms` list to native-only, or drop down to a custom build with `wasm32-wasi-threads` + `@napi-rs/wasm-runtime` and wire the worker plumbing yourself. Zig's build system is up to it; this default is just the minimal, idiomatic, no-config path.
+then a wasm fallback will not cover you. Either keep your `.platforms` list to native-only, or drop down to a custom build with `wasm32-wasi-threads` + `@napi-rs/wasm-runtime` and wire the worker plumbing yourself. Zig's build system is up to it. This default is just the minimal, idiomatic, no-config path.
