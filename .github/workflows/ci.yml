@@ -47,6 +47,12 @@ jobs:
       - name: Install fixture-wasm deps
         run: cd tests/fixture-wasm && bun install --frozen-lockfile
 
+      # Warm the zig cache: the wasm cross-compile is a one-shot ~10s on
+      # cold runners, which would push wasm.test.ts past bun's per-test
+      # timeout. Pre-building means the test only re-runs the smoke.
+      - name: Pre-build fixture-wasm
+        run: cd tests/fixture-wasm && zig build -Dnpm=true
+
       - run: bun run type-check
       - run: bun run lint
       - run: zig build test

@@ -7,6 +7,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const fixtureDir = join(here, "..", "fixture-wasm");
 
 describe("wasm fallback", () => {
+  // The cold-cache `zig build -Dnpm=true` blows past bun's default 5s budget
+  // on CI runners. Local runs after the first hit are well under a second.
   test("smoke.mjs passes under node", () => {
     const build = spawnSync({
       cmd: ["zig", "build", "-Dnpm=true"],
@@ -32,5 +34,5 @@ describe("wasm fallback", () => {
       stderr: stderr,
       stdout: expect.stringContaining("wasm fixture: ok"),
     });
-  });
+  }, 120_000);
 });
