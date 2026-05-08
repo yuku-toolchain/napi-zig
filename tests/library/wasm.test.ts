@@ -15,9 +15,7 @@ describe("wasm fallback", () => {
       stderr: "pipe",
     });
     if (build.exitCode !== 0) {
-      throw new Error(
-        `wasm fixture build failed:\n${new TextDecoder().decode(build.stderr)}`,
-      );
+      throw new Error(`wasm fixture build failed:\n${new TextDecoder().decode(build.stderr)}`);
     }
 
     const run = spawnSync({

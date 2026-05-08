@@ -41,6 +41,12 @@ jobs:
       - name: Pre-build fixture-lib (for dts)
         run: cd tests/fixture-lib && zig build
 
+      # fixture-wasm is not a workspace, so `bun install` at the root does
+      # not pull in @emnapi/core + @emnapi/runtime. wasm.test.ts spawns
+      # `node smoke.mjs` in that directory, which needs the deps locally.
+      - name: Install fixture-wasm deps
+        run: cd tests/fixture-wasm && bun install --frozen-lockfile
+
       - run: bun run type-check
       - run: bun run lint
       - run: zig build test
@@ -177,6 +183,41 @@ jobs:
           run: |
             sudo pkg install -y node22
             node tests/smoke.mjs
+
+  wasm-abi:
+    name: WASM fallback (Node ${{ matrix.node }} / ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # node:wasi went stable in 20. older majors still flag it as
+        # experimental at runtime, so we restrict the matrix to versions
+        # the wasm path is officially supported on.
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [20, 22, 24]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.0-dev.224+c166c49b1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      # Use npm so this job has no Bun dependency. The wasm fixture is
+      # tiny and resolves instantly under any package manager.
+      - name: Install fixture-wasm deps
+        run: cd tests/fixture-wasm && npm install --no-package-lock --no-audit --no-fund
+
+      - name: Build wasm binding
+        run: cd tests/fixture-wasm && zig build -Dnpm=true
+
+      - name: Smoke-test wasm fallback
+        run: cd tests/fixture-wasm && node smoke.mjs
 
   cross-compile:
     name: Cross-compile package
@@ -327,6 +368,7 @@ jobs:
       - linux-arm64-abi
       - musl-abi
       - freebsd-abi
+      - wasm-abi
       - cross-compile
       - cross-install
       - cross-install-musl
