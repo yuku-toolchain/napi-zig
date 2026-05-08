@@ -12,6 +12,7 @@ pub const Platform = enum {
     windows_x64,
     windows_arm64,
     freebsd_x64,
+    wasm32_wasi,
 
     pub const defaults: []const Platform = &.{
         .linux_x64_gnu,
@@ -25,14 +26,15 @@ pub const Platform = enum {
         .windows_x64,
         .windows_arm64,
         .freebsd_x64,
+        .wasm32_wasi,
     };
 
     const Info = struct {
         cpu_arch: std.Target.Cpu.Arch,
         os_tag: std.Target.Os.Tag,
         abi: std.Target.Abi = .none,
-        npm_os: []const u8,
-        npm_cpu: []const u8,
+        npm_os: ?[]const u8 = null,
+        npm_cpu: ?[]const u8 = null,
         npm_libc: ?[]const u8 = null,
         suffix: []const u8,
     };
@@ -50,6 +52,7 @@ pub const Platform = enum {
             .windows_x64 => .{ .cpu_arch = .x86_64, .os_tag = .windows, .npm_os = "win32", .npm_cpu = "x64", .suffix = "win32-x64" },
             .windows_arm64 => .{ .cpu_arch = .aarch64, .os_tag = .windows, .npm_os = "win32", .npm_cpu = "arm64", .suffix = "win32-arm64" },
             .freebsd_x64 => .{ .cpu_arch = .x86_64, .os_tag = .freebsd, .npm_os = "freebsd", .npm_cpu = "x64", .suffix = "freebsd-x64" },
+            .wasm32_wasi => .{ .cpu_arch = .wasm32, .os_tag = .wasi, .abi = .musl, .suffix = "wasm32-wasi" },
         };
     }
 
@@ -58,11 +61,11 @@ pub const Platform = enum {
         return .{ .cpu_arch = i.cpu_arch, .os_tag = i.os_tag, .abi = i.abi };
     }
 
-    pub fn npmOs(self: Platform) []const u8 {
+    pub fn npmOs(self: Platform) ?[]const u8 {
         return self.info().npm_os;
     }
 
-    pub fn npmCpu(self: Platform) []const u8 {
+    pub fn npmCpu(self: Platform) ?[]const u8 {
         return self.info().npm_cpu;
     }
 
@@ -72,5 +75,9 @@ pub const Platform = enum {
 
     pub fn suffix(self: Platform) []const u8 {
         return self.info().suffix;
+    }
+
+    pub fn isWasm(self: Platform) bool {
+        return self.info().cpu_arch.isWasm();
     }
 };

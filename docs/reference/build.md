@@ -87,19 +87,22 @@ See [TypeScript declarations](/typescript) for what each mode produces.
 
 A tagged enum of every supported (OS, architecture, libc) tuple. Used in `.npm.platforms`. Defaults are exposed as `Platform.defaults`:
 
-| Platform value          | OS      | Arch  | libc  |
-| ----------------------- | ------- | ----- | ----- |
-| `.linux_x64_gnu`        | Linux   | x64   | glibc |
-| `.linux_x64_musl`       | Linux   | x64   | musl  |
-| `.linux_arm64_gnu`      | Linux   | arm64 | glibc |
-| `.linux_arm64_musl`     | Linux   | arm64 | musl  |
-| `.linux_arm_gnueabihf`  | Linux   | arm   | glibc |
-| `.linux_arm_musleabihf` | Linux   | arm   | musl  |
-| `.darwin_x64`           | macOS   | x64   | n/a   |
-| `.darwin_arm64`         | macOS   | arm64 | n/a   |
-| `.win32_x64_msvc`       | Windows | x64   | n/a   |
-| `.win32_arm64_msvc`     | Windows | arm64 | n/a   |
-| `.freebsd_x64`          | FreeBSD | x64   | n/a   |
+| Platform value          | OS          | Arch        | libc  |
+| ----------------------- | ----------- | ----------- | ----- |
+| `.linux_x64_gnu`        | Linux       | x64         | glibc |
+| `.linux_x64_musl`       | Linux       | x64         | musl  |
+| `.linux_arm64_gnu`      | Linux       | arm64       | glibc |
+| `.linux_arm64_musl`     | Linux       | arm64       | musl  |
+| `.linux_arm_gnueabihf`  | Linux       | arm         | glibc |
+| `.linux_arm_musleabihf` | Linux       | arm         | musl  |
+| `.darwin_x64`           | macOS       | x64         | n/a   |
+| `.darwin_arm64`         | macOS       | arm64       | n/a   |
+| `.win32_x64_msvc`       | Windows     | x64         | n/a   |
+| `.win32_arm64_msvc`     | Windows     | arm64       | n/a   |
+| `.freebsd_x64`          | FreeBSD     | x64         | n/a   |
+| `.wasm32_wasi`          | WebAssembly | wasm32-wasi | n/a   |
+
+The wasm target compiles in [reactor mode](https://github.com/WebAssembly/WASI/blob/main/legacy/application-abi.md#current-unstable-abi) with libc linked, and ships as a portable fallback when no native binding matches. See [WebAssembly](/webassembly) for the full picture.
 
 Override the default set with:
 

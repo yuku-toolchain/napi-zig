@@ -116,3 +116,7 @@ try tick.call({}, .non_blocking);
 ```js
 addon.onTick(() => console.log("tick"));
 ```
+
+## On wasm
+
+The [WebAssembly](/webassembly) fallback compiles for `wasm32-wasi`, which is single-threaded. `ThreadsafeFn` itself still loads and works when called from the JS thread, but `std.Thread.spawn` is unavailable, so any code path that spawns a Zig thread to drive the callback will not compile for wasm. If your addon needs cross-thread callbacks on every platform, drop `.wasm32_wasi` from `.platforms` so wasm is not generated.

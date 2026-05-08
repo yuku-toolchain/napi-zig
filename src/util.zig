@@ -1,4 +1,16 @@
+const std = @import("std");
+const builtin = @import("builtin");
+
 // translate zig snake_case identifiers to js camelCase at the boundary.
+
+/// long-lived allocator used for state that outlives a single call (class
+/// instances, async-work payloads, threadsafe-fn refs). picks `wasm_allocator`
+/// on wasm (where smp_allocator's threading and PageAllocator's mmap aren't
+/// available) and `smp_allocator` everywhere else.
+pub const default_allocator: std.mem.Allocator = if (builtin.target.cpu.arch.isWasm())
+    std.heap.wasm_allocator
+else
+    std.heap.smp_allocator;
 
 pub fn snakeToCamel(comptime input: []const u8) [:0]const u8 {
     comptime {
@@ -19,7 +31,7 @@ pub fn snakeToCamel(comptime input: []const u8) [:0]const u8 {
     }
 }
 
-const testing = @import("std").testing;
+const testing = std.testing;
 
 test "single word stays unchanged" {
     try testing.expectEqualStrings("hello", comptime snakeToCamel("hello"));

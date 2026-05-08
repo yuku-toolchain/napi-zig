@@ -18,18 +18,23 @@ pub const Kind = enum { func, constant, namespace, class, skip };
 
 pub fn registerModule(comptime Module: type) void {
     // skip emitting c entry points when the module is pulled into a host
-    // executable (e.g. dts_emit). lib targets only.
-    if (builtin.output_mode != .Lib) return;
+    // executable (e.g. dts_emit). on wasm we ship a reactor (.exe linkage)
+    // so the check there is "any output mode that's not a host helper".
+    const is_wasm = comptime builtin.target.cpu.arch.isWasm();
+    if (!is_wasm and builtin.output_mode != .Lib) return;
 
     const Init = ModuleInit(Module);
-    @export(&Init.init, .{ .name = "napi_register_module_v1", .linkage = .strong });
+    // wasm uses a different entry point name. the .node loader calls
+    // `napi_register_module_v1`, emnapi calls `napi_register_wasm_v1`.
+    const init_name = if (is_wasm) "napi_register_wasm_v1" else "napi_register_module_v1";
+    @export(&Init.init, .{ .name = init_name, .linkage = .strong });
     @export(&Init.apiVersion, .{ .name = "node_api_module_get_api_version_v1", .linkage = .strong });
 }
 
 fn ModuleInit(comptime Module: type) type {
     return struct {
         fn init(raw_env: c.napi_env, exports: c.napi_value) callconv(.c) ?c.napi_value {
-            var arena = std.heap.ArenaAllocator.init(std.heap.smp_allocator);
+            var arena = std.heap.ArenaAllocator.init(util.default_allocator);
             defer arena.deinit();
             const env: Env = .{ .handle = raw_env, .arena = &arena };
 
@@ -94,7 +99,7 @@ fn FnBridge(comptime Module: type, comptime name: []const u8) type {
 
     return struct {
         fn call(raw_env: c.napi_env, raw_info: c.napi_callback_info) callconv(.c) ?c.napi_value {
-            var arena = std.heap.ArenaAllocator.init(std.heap.smp_allocator);
+            var arena = std.heap.ArenaAllocator.init(util.default_allocator);
             defer arena.deinit();
             const env: Env = .{ .handle = raw_env, .arena = &arena };
 
@@ -111,7 +116,7 @@ fn FnBridge(comptime Module: type, comptime name: []const u8) type {
 fn RawBridge(comptime Module: type, comptime name: []const u8) type {
     return struct {
         fn call(raw_env: c.napi_env, raw_info: c.napi_callback_info) callconv(.c) ?c.napi_value {
-            var arena = std.heap.ArenaAllocator.init(std.heap.smp_allocator);
+            var arena = std.heap.ArenaAllocator.init(util.default_allocator);
             defer arena.deinit();
             const env: Env = .{ .handle = raw_env, .arena = &arena };
 

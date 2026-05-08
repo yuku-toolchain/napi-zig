@@ -13,7 +13,7 @@ The result is an addon you write as a normal Zig module, ship as a single `npm i
 Zig is a small systems language with no hidden control flow and a build system that already knows how to cross-compile. With N-API, that gives you:
 
 - No GC, no runtime, no surprise allocations.
-- Cross-compilation for Linux (glibc and musl), macOS, Windows, and FreeBSD from a single machine.
+- Cross-compilation for Linux (glibc and musl), macOS, Windows, FreeBSD, and WebAssembly from a single machine. The wasm artifact is a [portable fallback](/webassembly) that runs anywhere a native binding is missing.
 - Comptime for type conversion, dispatch, and `.d.ts` generation.
 - Direct C interop with the N-API headers when you need to drop down.
 

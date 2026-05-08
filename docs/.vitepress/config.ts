@@ -90,6 +90,7 @@ export default defineConfig({
           items: [
             { text: "TypeScript declarations", link: "/typescript" },
             { text: "Cross-compiling", link: "/cross-compiling" },
+            { text: "WebAssembly", link: "/webassembly" },
             { text: "Publishing to npm", link: "/publishing" },
           ],
         },

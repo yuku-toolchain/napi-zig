@@ -1,0 +1,14 @@
+.{
+    .name = .wasmtest,
+    .version = "0.0.0",
+    .fingerprint = 0xfb596d3261936e18,
+    .minimum_zig_version = "0.17.0",
+    .dependencies = .{
+        .napi_zig = .{ .path = "../.." },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
