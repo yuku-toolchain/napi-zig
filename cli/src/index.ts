@@ -47,9 +47,10 @@ cli
 
 cli
   .command("publish", "Publish all packages to npm")
+  .option("--pm <pm>", "Package manager for packing: npm, yarn, pnpm, bun (default: detected)")
   .option("--provenance", "Generate provenance (default: auto in CI)")
   .option("--no-provenance", "Skip provenance generation")
-  .action((options: { provenance?: boolean }) => {
+  .action((options: { pm?: string; provenance?: boolean }) => {
     return publish(options);
   });
 

@@ -2,9 +2,9 @@ import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 import prompts from "prompts";
-import { detect, getUserAgent } from "package-manager-detector/detect";
 import { resolveCommand } from "package-manager-detector/commands";
-import type { Agent, AgentName } from "package-manager-detector";
+import type { Agent } from "package-manager-detector";
+import { SUPPORTED_PMS, detectPm, isPm, type Pm } from "./pm";
 import { Spinner, banner, blank, bullet, c, done, fail as uiFail, plain } from "./ui";
 import { CLI_VERSION, run } from "./utils";
 import { buildDev } from "./build";
@@ -13,9 +13,6 @@ const bold = (s: string): string => c.bold(s);
 const green = (s: string): string => c.green(s);
 
 const NAPI_ZIG_GIT = "git+https://github.com/yuku-toolchain/napi-zig.git/#HEAD";
-
-const SUPPORTED_PMS = ["npm", "yarn", "pnpm", "bun"] as const;
-type Pm = (typeof SUPPORTED_PMS)[number];
 
 export interface NewOptions {
   name?: string;
@@ -109,12 +106,8 @@ async function resolveGithubRepo(initial: string | undefined): Promise<string> {
 }
 
 async function resolvePackageManager(initial: string | undefined): Promise<Pm> {
-  if (initial && (SUPPORTED_PMS as readonly string[]).includes(initial)) {
-    return initial as Pm;
-  }
-  const detected = await detect().catch(() => null);
-  const fallback = parseUserAgent(getUserAgent());
-  const guessed: Pm = ((detected?.name as AgentName | undefined) ?? fallback ?? "npm") as Pm;
+  if (isPm(initial)) return initial;
+  const guessed = await detectPm();
   const initialIdx = Math.max(0, SUPPORTED_PMS.indexOf(guessed));
   const r = await prompts(
     {
@@ -240,12 +233,6 @@ function validateName(n: string): true | string {
     return "Name must be lowercase, may contain a-z 0-9 - _ .";
   }
   return true;
-}
-
-function parseUserAgent(ua: AgentName | null): Pm | undefined {
-  if (!ua) return undefined;
-  if ((SUPPORTED_PMS as readonly string[]).includes(ua)) return ua as Pm;
-  return undefined;
 }
 
 function toZigIdentifier(s: string): string {
