@@ -1,11 +1,26 @@
 import { readFileSync, writeFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
+export type NpmPackageKind = "main" | "binding" | "extra";
+
 export interface NpmPackage {
   name: string;
   version: string;
   dir: string;
-  main: boolean;
+  kind: NpmPackageKind;
+}
+
+export function isExtraPackageDir(dir: string): boolean {
+  const pkgJsonPath = join(dir, "package.json");
+  if (!existsSync(pkgJsonPath)) return false;
+  let pkg: { name?: unknown; optionalDependencies?: unknown };
+  try {
+    pkg = JSON.parse(readFileSync(pkgJsonPath, "utf-8")) as typeof pkg;
+  } catch {
+    return false;
+  }
+  if (typeof pkg.name !== "string" || pkg.name.length === 0) return false;
+  return !pkg.optionalDependencies;
 }
 
 export function discoverPackages(): NpmPackage[] {
@@ -18,29 +33,31 @@ export function discoverPackages(): NpmPackage[] {
 
   for (const entry of readdirSync(npmDir, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
-    const pkgJsonPath = join(npmDir, entry.name, "package.json");
+    const dir = join(npmDir, entry.name);
+    const pkgJsonPath = join(dir, "package.json");
     if (!existsSync(pkgJsonPath)) continue;
 
     const pkg = JSON.parse(readFileSync(pkgJsonPath, "utf-8")) as {
-      name: string;
-      version: string;
+      name?: string;
+      version?: string;
       optionalDependencies?: Record<string, string>;
     };
-    if (!pkg.optionalDependencies) continue;
+    if (typeof pkg.name !== "string" || pkg.name.length === 0) continue;
+    const version = pkg.version ?? "0.0.0";
+
+    if (!pkg.optionalDependencies) {
+      packages.push({ name: pkg.name, version, dir, kind: "extra" });
+      continue;
+    }
 
     // main package (has optionalDependencies)
-    packages.push({
-      name: pkg.name,
-      version: pkg.version,
-      dir: join(npmDir, entry.name),
-      main: true,
-    });
+    packages.push({ name: pkg.name, version, dir, kind: "main" });
 
     // binding packages from optionalDependencies
     for (const depName of Object.keys(pkg.optionalDependencies)) {
       const [scope, bindingName] = depName.split("/");
       if (!scope || !bindingName) continue;
-      const bindingDir = join(npmDir, entry.name, scope, bindingName);
+      const bindingDir = join(dir, scope, bindingName);
       if (!existsSync(join(bindingDir, "package.json"))) continue;
       const bindingPkg = JSON.parse(readFileSync(join(bindingDir, "package.json"), "utf-8")) as {
         name: string;
@@ -50,7 +67,7 @@ export function discoverPackages(): NpmPackage[] {
         name: bindingPkg.name,
         version: bindingPkg.version,
         dir: bindingDir,
-        main: false,
+        kind: "binding",
       });
     }
   }
@@ -68,7 +85,7 @@ export function updateVersions(packages: NpmPackage[], version: string): void {
     const json = JSON.parse(readFileSync(jsonPath, "utf-8")) as Record<string, unknown>;
     json["version"] = version;
     if (
-      pkg.main &&
+      pkg.kind === "main" &&
       typeof json["optionalDependencies"] === "object" &&
       json["optionalDependencies"] !== null
     ) {

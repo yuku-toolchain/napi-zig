@@ -12,15 +12,16 @@ export interface PublishOptions {
 
 export async function publish(options: PublishOptions): Promise<void> {
   const packages = discoverPackages();
-  const bindings = packages.filter((p) => !p.main);
-  const mains = packages.filter((p) => p.main);
+  const bindings = packages.filter((p) => p.kind === "binding");
+  const mains = packages.filter((p) => p.kind === "main");
+  const extras = packages.filter((p) => p.kind === "extra");
 
   if (options.pm && !isPm(options.pm)) {
     throw new Error(`Unsupported --pm '${options.pm}'. Use one of: ${SUPPORTED_PMS.join(", ")}`);
   }
   const pm = await detectPm(options.pm);
   const useProvenance = options.provenance ?? !!process.env["CI"];
-  const reference = mains[0] ?? bindings[0];
+  const reference = mains[0] ?? extras[0] ?? bindings[0];
   const tag = resolveTag(reference?.version);
 
   const flags = ["--access public", `--tag ${tag}`];
@@ -32,12 +33,14 @@ export async function publish(options: PublishOptions): Promise<void> {
   bullet(`Tag           ${c.bold(tag)}`);
   bullet(`Pack with     ${c.bold(pm)}`);
   bullet(`Provenance    ${useProvenance ? c.green("enabled") : c.gray("disabled")}`);
+  const breakdown = [`${bindings.length} bindings`, `${mains.length} main`];
+  if (extras.length > 0) breakdown.push(`${extras.length} extra`);
   bullet(
-    `Packages      ${c.bold(String(packages.length))}  ${c.gray(`(${bindings.length} bindings + ${mains.length} main)`)}`,
+    `Packages      ${c.bold(String(packages.length))}  ${c.gray(`(${breakdown.join(" + ")})`)}`,
   );
   blank();
 
-  const ordered = [...bindings, ...mains];
+  const ordered = [...bindings, ...mains, ...extras];
 
   const tasks = new TaskList(
     "Publishing to npm",

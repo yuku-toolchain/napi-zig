@@ -42,11 +42,11 @@ describe("discoverPackages", () => {
       const pkgs = discoverPackages();
       expect(pkgs).toHaveLength(3);
 
-      const main = pkgs.find((p) => p.main);
+      const main = pkgs.find((p) => p.kind === "main");
       expect(main?.name).toBe("myaddon");
       expect(main?.version).toBe("1.0.0");
 
-      const bindings = pkgs.filter((p) => !p.main).map((p) => p.name);
+      const bindings = pkgs.filter((p) => p.kind === "binding").map((p) => p.name);
       expect(bindings.sort()).toEqual([
         "@scope/binding-darwin-arm64",
         "@scope/binding-linux-x64-gnu",
@@ -61,12 +61,62 @@ describe("discoverPackages", () => {
     });
   });
 
-  test("throws when no packages have optionalDependencies", async () => {
+  test("discovers a package without optionalDependencies as an extra", async () => {
     const root = setup({
       "npm/somewhere/package.json": { name: "somewhere", version: "1.0.0" },
     });
     await withCwd(root, () => {
-      expect(() => discoverPackages()).toThrow("No npm packages found");
+      const pkgs = discoverPackages();
+      expect(pkgs).toHaveLength(1);
+      expect(pkgs[0]?.kind).toBe("extra");
+      expect(pkgs[0]?.name).toBe("somewhere");
+    });
+  });
+
+  test("includes extra packages alongside napi-generated ones", async () => {
+    const root = setup({
+      "npm/myaddon/package.json": {
+        name: "myaddon",
+        version: "1.0.0",
+        optionalDependencies: { "@scope/binding-darwin-arm64": "1.0.0" },
+      },
+      "npm/myaddon/@scope/binding-darwin-arm64/package.json": {
+        name: "@scope/binding-darwin-arm64",
+        version: "1.0.0",
+      },
+      "npm/my-helper/package.json": {
+        name: "my-helper",
+        version: "1.0.0",
+        dependencies: { myaddon: "^1.0.0" },
+      },
+    });
+
+    await withCwd(root, () => {
+      const pkgs = discoverPackages();
+      expect(pkgs).toHaveLength(3);
+
+      const extra = pkgs.find((p) => p.kind === "extra");
+      expect(extra?.name).toBe("my-helper");
+      expect(extra?.dir.endsWith("/npm/my-helper")).toBe(true);
+
+      expect(pkgs.filter((p) => p.kind === "main").map((p) => p.name)).toEqual(["myaddon"]);
+      expect(pkgs.filter((p) => p.kind === "binding")).toHaveLength(1);
+    });
+  });
+
+  test("skips directories without a usable package.json", async () => {
+    const root = setup({
+      "npm/x/package.json": {
+        name: "x",
+        version: "1.0.0",
+        optionalDependencies: { "@s/binding-a": "1.0.0" },
+      },
+      "npm/x/@s/binding-a/package.json": { name: "@s/binding-a", version: "1.0.0" },
+      "npm/nameless/package.json": { version: "1.0.0" },
+    });
+    await withCwd(root, () => {
+      const pkgs = discoverPackages();
+      expect(pkgs.map((p) => p.name).sort()).toEqual(["@s/binding-a", "x"]);
     });
   });
 
@@ -166,6 +216,31 @@ describe("updateVersions", () => {
 
       const a = readJson(`${root}/npm/x/@s/binding-a/package.json`);
       expect(a.os).toEqual(["darwin"]);
+    });
+  });
+
+  test("bumps extra packages but leaves their dependency ranges untouched", async () => {
+    const root = setup({
+      "npm/myaddon/package.json": {
+        name: "myaddon",
+        version: "1.0.0",
+        optionalDependencies: { "@s/binding-a": "1.0.0" },
+      },
+      "npm/myaddon/@s/binding-a/package.json": { name: "@s/binding-a", version: "1.0.0" },
+      "npm/my-helper/package.json": {
+        name: "my-helper",
+        version: "1.0.0",
+        dependencies: { myaddon: "^1.0.0" },
+      },
+    });
+
+    await withCwd(root, () => {
+      const pkgs = discoverPackages();
+      updateVersions(pkgs, "2.0.0");
+
+      const helper = readJson(`${root}/npm/my-helper/package.json`);
+      expect(helper.version).toBe("2.0.0");
+      expect(helper.dependencies.myaddon).toBe("^1.0.0");
     });
   });
 });

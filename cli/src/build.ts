@@ -10,6 +10,7 @@ import {
 } from "node:fs";
 import { join, relative } from "node:path";
 import { arch, platform } from "node:os";
+import { isExtraPackageDir } from "./npm";
 import {
   Spinner,
   TaskList,
@@ -249,7 +250,8 @@ export async function buildRelease(optimize: string): Promise<void> {
     const generated = new Set(generatedPkgs);
     const orphans = readdirSync(destBase)
       .filter((n) => statSync(join(destBase, n)).isDirectory())
-      .filter((n) => !generated.has(n));
+      .filter((n) => !generated.has(n))
+      .filter((n) => !isExtraPackageDir(join(destBase, n)));
 
     if (orphans.length > 0) {
       blank();

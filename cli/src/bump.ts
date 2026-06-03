@@ -150,10 +150,10 @@ export interface BumpOptions {
 
 export async function bump(options: BumpOptions): Promise<void> {
   const packages = discoverPackages();
-  const mainPkg = packages.find((p) => p.main);
-  if (!mainPkg) throw new Error("Main package not found");
+  const reference = packages.find((p) => p.kind === "main") ?? packages[0];
+  if (!reference) throw new Error("No npm packages found");
 
-  const currentVersion = mainPkg.version;
+  const currentVersion = reference.version;
   const preid = options.preid ?? "beta";
   let newVersion: string;
 

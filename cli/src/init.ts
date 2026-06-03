@@ -17,9 +17,10 @@ export interface NpmInitOptions {
 
 export async function npmInit(options: NpmInitOptions): Promise<void> {
   const packages = discoverPackages();
-  const bindings = packages.filter((p) => !p.main);
-  const mains = packages.filter((p) => p.main);
-  const ordered = [...bindings, ...mains];
+  const bindings = packages.filter((p) => p.kind === "binding");
+  const mains = packages.filter((p) => p.kind === "main");
+  const extras = packages.filter((p) => p.kind === "extra");
+  const ordered = [...bindings, ...mains, ...extras];
 
   banner("napi-zig", `${CLI_VERSION}  ·  npm-init`);
   bullet(`Repo        ${c.bold(options.repo)}`);
