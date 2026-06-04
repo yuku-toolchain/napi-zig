@@ -27,7 +27,7 @@ jobs:
       - name: Setup Zig
         uses: mlugg/setup-zig@v2
         with:
-          version: 0.17.0-dev.224+c166c49b1
+          version: 0.16.0
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -62,7 +62,7 @@ jobs:
       - name: Setup Zig
         uses: mlugg/setup-zig@v2
         with:
-          version: 0.17.0-dev.224+c166c49b1
+          version: 0.16.0
 
       - uses: actions/setup-node@v4
         with:
@@ -86,7 +86,7 @@ jobs:
       - name: Setup Zig
         uses: mlugg/setup-zig@v2
         with:
-          version: 0.17.0-dev.224+c166c49b1
+          version: 0.16.0
 
       - uses: denoland/setup-deno@v2
         with:
@@ -108,7 +108,7 @@ jobs:
       - name: Setup Zig
         uses: mlugg/setup-zig@v2
         with:
-          version: 0.17.0-dev.224+c166c49b1
+          version: 0.16.0
 
       - uses: actions/setup-node@v4
         with:
@@ -136,7 +136,7 @@ jobs:
       - name: Setup Zig
         uses: mlugg/setup-zig@v2
         with:
-          version: 0.17.0-dev.224+c166c49b1
+          version: 0.16.0
 
       - name: Cross-compile fixture-lib for ${{ matrix.target }}
         run: cd tests/fixture-lib && zig build -Dtarget=${{ matrix.target }}
@@ -161,7 +161,7 @@ jobs:
       - name: Setup Zig
         uses: mlugg/setup-zig@v2
         with:
-          version: 0.17.0-dev.224+c166c49b1
+          version: 0.16.0
 
       - name: Cross-compile fixture-lib for x86_64-freebsd
         run: cd tests/fixture-lib && zig build -Dtarget=x86_64-freebsd
@@ -188,7 +188,7 @@ jobs:
       - name: Setup Zig
         uses: mlugg/setup-zig@v2
         with:
-          version: 0.17.0-dev.224+c166c49b1
+          version: 0.16.0
 
       - name: Cross-compile fixture-cli for every target
         run: cd tests/fixture-cli && zig build -Dnpm=true --release=fast
