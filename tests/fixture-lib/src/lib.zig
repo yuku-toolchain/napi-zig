@@ -349,6 +349,45 @@ pub const Plain = napi.class("Plain", struct {
     }
 });
 
+// zig-style iterator (`next(self) ?Item`), exercises [Symbol.iterator]
+pub const Range = napi.class("Range", struct {
+    i: u32,
+    end: u32,
+
+    pub fn init(end: u32) @This() {
+        return .{ .i = 0, .end = end };
+    }
+
+    pub fn next(self: *@This()) ?u32 {
+        if (self.i >= self.end) return null;
+        defer self.i += 1;
+        return self.i;
+    }
+});
+
+// iterator whose next takes Env and returns an error union
+pub const Words = napi.class("Words", struct {
+    text: []const u8,
+    pos: usize,
+
+    pub fn init(_: napi.Env, text: []const u8) !@This() {
+        const owned = try std.heap.smp_allocator.dupe(u8, text);
+        return .{ .text = owned, .pos = 0 };
+    }
+
+    pub fn next(self: *@This(), _: napi.Env) !?[]const u8 {
+        if (self.pos >= self.text.len) return null;
+        const end = std.mem.indexOfScalarPos(u8, self.text, self.pos, ' ') orelse self.text.len;
+        const word = self.text[self.pos..end];
+        self.pos = end + 1;
+        return word;
+    }
+
+    pub fn deinit(self: *@This()) void {
+        std.heap.smp_allocator.free(self.text);
+    }
+});
+
 // init returning !T, exercises the rejection path
 pub const Validating = napi.class("Validating", struct {
     value: i32,

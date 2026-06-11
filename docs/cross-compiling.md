@@ -1,7 +1,7 @@
 # Cross-compiling
 
 ```sh
-napi build --release
+napi-zig build --release
 ```
 
 That single command builds your addon for every platform listed in `.npm.platforms` and lays out the npm package structure ready to publish. Zig's cross-compilation is built in: there are no toolchains to install, no Docker images, no QEMU.
@@ -10,7 +10,7 @@ The same command is also safe to run repeatedly. The build owns and reconciles t
 
 ## Output layout
 
-The first `napi build --release` writes a complete `npm/` tree:
+The first `napi-zig build --release` writes a complete `npm/` tree:
 
 ```
 npm/<name>/
@@ -33,7 +33,7 @@ Calling `addLib` more than once in `build.zig` is supported; each addon gets its
 
 ## What every release build does
 
-`napi build --release` is the only command you need during release. It cross-compiles, then reconciles `npm/` against the policy in `build.zig`. Re-run it as often as you like; you cannot drift `npm/` out of sync with `build.zig`.
+`napi-zig build --release` is the only command you need during release. It cross-compiles, then reconciles `npm/` against the policy in `build.zig`. Re-run it as often as you like; you cannot drift `npm/` out of sync with `build.zig`.
 
 The reconciler is conservative about your work:
 
@@ -45,14 +45,14 @@ The reconciler is conservative about your work:
 | `package.json` (main, policy fields) | Refreshed: `name`, `type`, `main`, `types`, `optionalDependencies`. The keys of `optionalDependencies` track `.platforms`.                     |
 | `package.json` (main, `files`)       | Merged: the canonical entries (`index.js`, `binding.js`, `index.d.ts`) are always present; any extras you add (e.g. `assets/`) are preserved.  |
 | `package.json` (main, user fields)   | Preserved: `description`, `repository`, `homepage`, `keywords`, `author`, `bugs`, `funding`, `engines`, `scripts`, anything else you've added. |
-| `package.json` (main, version)       | Preserved. Only `napi bump` changes it. The bindings' `optionalDependencies` values are kept in lockstep with this version.                    |
+| `package.json` (main, version)       | Preserved. Only `napi-zig bump` changes it. The bindings' `optionalDependencies` values are kept in lockstep with this version.                |
 | `package.json` (per-binding)         | Refreshed: `name`, `os`, `cpu`, `libc`, `main`, `files`. `version` is pinned to the main package's `version`.                                  |
 | `<scope>/binding-*/`                 | Recreated to match `.platforms`. Bindings for removed platforms are deleted; bindings for newly added platforms are created.                   |
 | `<scope>/`                           | Renames cleanly. If you change `.scope` in `build.zig`, the old scope dir is removed on the next build and the new one takes its place.        |
 | `index.js`                           | Seeded once on the first release build, then preserved. Your seam: edit it freely.                                                             |
 | Anything else under `npm/<name>/`    | Preserved. Add `CHANGELOG.md`, `.npmignore`, etc.; the build will not touch them.                                                              |
 
-The practical guarantee: **edit `build.zig`, then re-run `napi build --release`.** That works for every change, including renaming the scope, adding or removing platforms, changing `.dts`, and renaming `.host_exe`. You do not need to delete `npm/` first; the reconciler does the right thing.
+The practical guarantee: **edit `build.zig`, then re-run `napi-zig build --release`.** That works for every change, including renaming the scope, adding or removing platforms, changing `.dts`, and renaming `.host_exe`. You do not need to delete `npm/` first; the reconciler does the right thing.
 
 The one exception is renaming the addon's `.name` itself. The new tree is created fresh under `npm/<new-name>/`, the old `npm/<old-name>/` becomes an orphan, and the build prints a warning that asks you to copy any user fields you want to keep on the new main `package.json` and delete the old folder. (Renaming a published npm package is a rare and disruptive event; this is intentional.)
 
@@ -60,7 +60,7 @@ The one exception is renaming the addon's `.name` itself. The new tree is create
 
 `binding.js` is fully owned by the build. It implements platform detection and loads the matching `<scope>/binding-…` package. Do not edit it; your changes will be overwritten on the next build.
 
-`index.js` is your seam. The default `napi build --release` writes is a plain re-export:
+`index.js` is your seam. The default `napi-zig build --release` writes is a plain re-export:
 
 ```js
 import binding from "./binding.js";
@@ -80,7 +80,7 @@ If `.platforms` is omitted from `.npm`, you get this set:
 | Windows | x64, arm64      | n/a            |
 | FreeBSD | x64             | n/a            |
 
-That is 11 binaries from one `napi build --release` call.
+That is 11 binaries from one `napi-zig build --release` call.
 
 ## Custom platforms
 
@@ -99,7 +99,7 @@ napi_zig.addLib(b, napi_dep, .{
 });
 ```
 
-Adding or removing entries from `.platforms` is a regular edit. The next `napi build --release` adds bindings for the new entries and deletes bindings for ones you took out. The full list of `Platform` values is in [build.zig (addLib)](/reference/build).
+Adding or removing entries from `.platforms` is a regular edit. The next `napi-zig build --release` adds bindings for the new entries and deletes bindings for ones you took out. The full list of `Platform` values is in [build.zig (addLib)](/reference/build).
 
 ## Electron and other hosts
 
@@ -116,9 +116,9 @@ This only affects Windows import-library generation. On macOS and Linux the addo
 
 ## Optimization
 
-`napi build --release` uses `ReleaseFast` for every cross-compiled binary. For development, `napi build` uses whatever `-Doptimize` you specify (default `Debug`). Override the release mode with:
+`napi-zig build --release` uses `ReleaseFast` for every cross-compiled binary. For development, `napi-zig build` uses whatever `-Doptimize` you specify (default `Debug`). Override the release mode with:
 
 ```sh
-napi build --release --optimize=safe    # ReleaseSafe
-napi build --release --optimize=small   # ReleaseSmall
+napi-zig build --release --optimize=safe    # ReleaseSafe
+napi-zig build --release --optimize=small   # ReleaseSmall
 ```

@@ -61,7 +61,7 @@ cli
   .action((options: { repo?: string; workflow?: string }) => {
     if (!options.repo || !options.workflow) {
       console.error("Error: --repo and --workflow are required");
-      console.error("Example: napi npm-init --repo myorg/myrepo --workflow publish.yml");
+      console.error("Example: napi-zig npm-init --repo myorg/myrepo --workflow publish.yml");
       process.exit(1);
     }
     return npmInit({ repo: options.repo, workflow: options.workflow });

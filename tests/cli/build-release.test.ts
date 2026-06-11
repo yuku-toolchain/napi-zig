@@ -26,7 +26,7 @@ function listAllFiles(root: string): string[] {
   return out.map((p) => p.slice(root.length + 1)).sort();
 }
 
-describe("napi build --release", () => {
+describe("napi-zig build --release", () => {
   test("produces the expected npm scaffolding", async () => {
     const dir = stageCliFixture();
     cleanup.push(dir);

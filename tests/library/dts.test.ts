@@ -108,6 +108,21 @@ describe("classes", () => {
     expect(dts).toContain("constructor(a0: string);");
     expect(dts).toContain("greet(): string;");
   });
+
+  test("iterator class emits [Symbol.iterator] alongside next()", () => {
+    expect(dts).toContain("export class Range {");
+    expect(dts).toContain("[Symbol.iterator](): IterableIterator<number>;");
+    expect(dts).toContain("next(): number | null;");
+    expect(dts).toContain("[Symbol.iterator](): IterableIterator<string>;");
+  });
+
+  test("non-iterator classes get no [Symbol.iterator]", () => {
+    const counter = dts.slice(
+      dts.indexOf("export class Counter {"),
+      dts.indexOf("}", dts.indexOf("export class Counter {")),
+    );
+    expect(counter).not.toContain("Symbol.iterator");
+  });
 });
 
 describe("Val / Callback escape hatches", () => {

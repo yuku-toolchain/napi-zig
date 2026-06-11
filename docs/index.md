@@ -4,7 +4,7 @@ napi-zig is a toolchain for writing [Node.js native addons](https://nodejs.org/a
 
 1. A Zig library that turns ordinary `pub fn` declarations into N-API functions, with automatic conversion of arguments, return values, errors, and complex types like structs and enums.
 2. A `build.zig` helper that compiles your addon for the current platform during development, and cross-compiles every platform you target during release.
-3. A `napi` CLI that scaffolds new projects, bumps versions, and publishes per-platform npm packages with [trusted publishing](https://docs.npmjs.com/trusted-publishers).
+3. A `napi-zig` CLI that scaffolds new projects, bumps versions, and publishes per-platform npm packages with [trusted publishing](https://docs.npmjs.com/trusted-publishers).
 
 The result is an addon you write as a normal Zig module, ship as a single `npm install`, and distribute as prebuilt binaries for every platform your users run on.
 

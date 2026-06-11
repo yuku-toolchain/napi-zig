@@ -37,6 +37,11 @@ const c = new m.Counter(0);
 const _ci: number = c.increment();
 const _ca: number = c.addN(5);
 
+// iterator class
+const _nums: number[] = [...new m.Range(3)];
+const _words: string[] = [...new m.Words("a b")];
+const _step: IteratorResult<number> = new m.Range(1)[Symbol.iterator]().next();
+
 // namespace
 const _sq: number = m.math.square(3);
 const _deepest: number = m.math.inner.deeper.deepest(7);
@@ -61,3 +66,6 @@ void _sq;
 void _deepest;
 void _v;
 void _max;
+void _nums;
+void _words;
+void _step;

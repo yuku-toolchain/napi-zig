@@ -13,7 +13,7 @@ afterEach(() => {
   cleanup = [];
 });
 
-describe("napi build (dev)", () => {
+describe("napi-zig build (dev)", () => {
   test("produces zig-out/lib/<name>.node", async () => {
     const dir = stageCliFixture();
     cleanup.push(dir);

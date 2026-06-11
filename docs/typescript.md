@@ -60,7 +60,7 @@ What is intentionally `unknown`:
 These are escape hatches by design. Tighten the Zig signature and the generated type tightens with it. For example, `[]f64` generates `number[]` instead of `unknown[]`.
 
 ::: tip
-A common workflow: start with `.auto`, run `napi build`, copy the generated file out of `zig-out/lib/<name>.d.ts` into `src/index.d.ts`, edit it to taste, and switch the build to `.{ .file = ... }`.
+A common workflow: start with `.auto`, run `napi-zig build`, copy the generated file out of `zig-out/lib/<name>.d.ts` into `src/index.d.ts`, edit it to taste, and switch the build to `.{ .file = ... }`.
 :::
 
 ## None (`.none`)

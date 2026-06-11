@@ -22,7 +22,7 @@ The `@my-addon` part is your **npm scope**: the `@something` prefix on each bind
 - **Your npm username.** Every npm account has a personal scope at `@<your-username>`. It exists automatically.
 - **An organization you own** on npm. Create one at [npmjs.com/org/create](https://www.npmjs.com/org/create) before you publish.
 
-The recommended pattern is to make the scope name match the package name (`@my-addon` for `my-addon`); that is also the default if you scaffolded with `napi new`. Matching scope to package name makes binding ownership obvious to consumers. You can use any scope you own.
+The recommended pattern is to make the scope name match the package name (`@my-addon` for `my-addon`); that is also the default if you scaffolded with `napi-zig new`. Matching scope to package name makes binding ownership obvious to consumers. You can use any scope you own.
 
 The scope is set in `build.zig`, in the `.scope` field inside the `.npm` block:
 
@@ -33,7 +33,7 @@ The scope is set in `build.zig`, in the `.scope` field inside the `.npm` block:
 },
 ```
 
-If you change the scope later, the next `napi build --release` will migrate `npm/` cleanly. See [Cross-compiling](/cross-compiling).
+If you change the scope later, the next `napi-zig build --release` will migrate `npm/` cleanly. See [Cross-compiling](/cross-compiling).
 
 ## First-time setup, in order
 
@@ -45,7 +45,7 @@ Open `build.zig` and review the `.scope` field. Set it to a username or org you 
 
 ### 2. Update npm to a recent version
 
-Trusted publishing requires `npm >= 11.10`.
+Trusted publishing requires `npm >= 11.16`.
 
 ```sh
 npm install -g npm@latest
@@ -54,7 +54,7 @@ npm install -g npm@latest
 ### 3. Cross-compile
 
 ```sh
-napi build --release
+napi-zig build --release
 ```
 
 This produces the `npm/` tree that gets published. Every per-platform binary is built. See [Cross-compiling](/cross-compiling) for what this lays out.
@@ -69,7 +69,7 @@ The next step needs to publish initial `0.0.0` versions; that requires being log
 
 ### 5. Push your code to GitHub
 
-The publish workflow lives in `.github/workflows/publish.yml`. `napi new` writes it for you; if you set up by hand, copy the YAML from [The CI workflow](#the-ci-workflow) below into that path. The workflow runs on tag push, so it must be on the default branch before you tag a release. If your repo is local-only, push it now:
+The publish workflow lives in `.github/workflows/publish.yml`. `napi-zig new` writes it for you; if you set up by hand, copy the YAML from [The CI workflow](#the-ci-workflow) below into that path. The workflow runs on tag push, so it must be on the default branch before you tag a release. If your repo is local-only, push it now:
 
 ```sh
 git init
@@ -83,7 +83,7 @@ git push -u origin main
 ### 6. One-time publish + OIDC trust
 
 ```sh
-napi npm-init --repo <owner>/<name> --workflow publish.yml
+napi-zig npm-init --repo <owner>/<name> --workflow publish.yml
 ```
 
 This:
@@ -94,39 +94,39 @@ This:
 
 `--repo` is `owner/name` of your GitHub repository. `--workflow` is the workflow filename in `.github/workflows/`.
 
-`napi npm-init` is idempotent: it skips any package that already exists on npm and only sets up new ones. After the first run the CI pipeline takes over for releases. You only need to run `napi npm-init` again if you later add another addon to `build.zig` (see [Multiple addons in one repo](#multiple-addons-in-one-repo) below).
+`napi-zig npm-init` is idempotent: it skips any package that already exists on npm and only sets up new ones. After the first run the CI pipeline takes over for releases. You only need to run `napi-zig npm-init` again if you later add another addon to `build.zig` (see [Multiple addons in one repo](#multiple-addons-in-one-repo) below).
 
 ## The release loop
 
 Once setup is done, every release is a single command:
 
 ```sh
-napi bump
+napi-zig bump
 ```
 
-`napi bump` updates the version in **every** `package.json` (main + per-platform bindings + any [extra packages](#extra-packages-in-npm)), commits, creates an annotated git tag, and pushes branch + tag in one round-trip. The push triggers the publish workflow on GitHub Actions, which runs `napi publish`.
+`napi-zig bump` updates the version in **every** `package.json` (main + per-platform bindings + any [extra packages](#extra-packages-in-npm)), commits, creates an annotated git tag, and pushes branch + tag in one round-trip. The push triggers the publish workflow on GitHub Actions, which runs `napi-zig publish`.
 
-Without arguments, `napi bump` shows an interactive picker (patch / minor / major / prerelease / conventional / explicit). You can also pass an explicit type or version:
+Without arguments, `napi-zig bump` shows an interactive picker (patch / minor / major / prerelease / conventional / explicit). You can also pass an explicit type or version:
 
 ```sh
-napi bump          # interactive picker
-napi bump patch    # 1.2.3 → 1.2.4
-napi bump minor    # 1.2.3 → 1.3.0
-napi bump major    # 1.2.3 → 2.0.0
-napi bump 1.5.0    # exact version
+napi-zig bump          # interactive picker
+napi-zig bump patch    # 1.2.3 → 1.2.4
+napi-zig bump minor    # 1.2.3 → 1.3.0
+napi-zig bump major    # 1.2.3 → 2.0.0
+napi-zig bump 1.5.0    # exact version
 ```
 
-`napi bump` requires:
+`napi-zig bump` requires:
 
 - A clean working tree (no uncommitted changes).
 - The current branch tracks a remote (so `git push --follow-tags` has somewhere to go).
 - The publish workflow already on the default branch.
 
-If any of those is missing, fix it first. `napi bump` is what triggers the publish on the remote, so without a remote there is nothing to publish.
+If any of those is missing, fix it first. `napi-zig bump` is what triggers the publish on the remote, so without a remote there is nothing to publish.
 
 ## The CI workflow
 
-Save this as `.github/workflows/publish.yml` (`napi new` writes it for you). With trusted publishing configured (step 6 above), no secrets are needed.
+Save this as `.github/workflows/publish.yml` (`napi-zig new` writes it for you). With trusted publishing configured (step 6 above), no secrets are needed.
 
 ```yaml
 name: Publish
@@ -159,10 +159,10 @@ jobs:
 Notes:
 
 - `id-token: write` is what enables OIDC. Don't remove it.
-- The `Update npm` step is required: trusted publishing needs `npm >= 11.10`, and `actions/setup-node` ships an older default.
+- The `Update npm` step is required: trusted publishing needs `npm >= 11.16`, and `actions/setup-node` ships an older default.
 - The job runs on a single `ubuntu-latest` runner because Zig cross-compiles every target from one host. No matrix needed.
 
-## What `napi publish` does
+## What `napi-zig publish` does
 
 For each package in `npm/`:
 
@@ -172,16 +172,16 @@ For each package in `npm/`:
 
 Per-platform binding packages are published before the main package, so users who install during the small window between publishes always get a working set.
 
-`napi publish` runs over every addon in `npm/`, so a repo with multiple `addLib` calls in `build.zig` publishes them all in the same CI run.
+`napi-zig publish` runs over every addon in `npm/`, so a repo with multiple `addLib` calls in `build.zig` publishes them all in the same CI run.
 
 ## Extra packages in npm/
 
 Anything you drop into `npm/` that isn't generated by napi-zig (a pure-JS wrapper, a companion CLI, a types-only package) is treated as a **first-class package**. As long as a top-level directory under `npm/` has a `package.json` with a `name` and no `optionalDependencies`, every release command picks it up automatically:
 
-- `napi bump` bumps its `version` in lockstep with the generated packages (its own dependency ranges are left untouched, since those are yours to manage).
-- `napi publish` packs and publishes it alongside the addon (after the main package, so an extra that depends on the addon sees it on the registry first).
-- `napi npm-init` publishes its initial version and configures trusted publishing for it.
-- `napi build --release` leaves it alone and does **not** flag it as an orphan.
+- `napi-zig bump` bumps its `version` in lockstep with the generated packages (its own dependency ranges are left untouched, since those are yours to manage).
+- `napi-zig publish` packs and publishes it alongside the addon (after the main package, so an extra that depends on the addon sees it on the registry first).
+- `napi-zig npm-init` publishes its initial version and configures trusted publishing for it.
+- `napi-zig build --release` leaves it alone and does **not** flag it as an orphan.
 
 Just create the folder and commit it:
 
@@ -198,24 +198,24 @@ There's nothing to configure. Drop the package in `npm/` and it ships with the r
 
 ## Multiple addons in one repo
 
-You can ship more than one addon from the same repository: call `addLib` once per addon in `build.zig` (each with its own `.name` and `.scope`). Every command in this guide already iterates per-addon: `napi build --release` cross-compiles every one, `napi bump` bumps every one in lockstep, `napi publish` publishes every one. See [`addLib` reference](/reference/build) for the constraints on `.scope`.
+You can ship more than one addon from the same repository: call `addLib` once per addon in `build.zig` (each with its own `.name` and `.scope`). Every command in this guide already iterates per-addon: `napi-zig build --release` cross-compiles every one, `napi-zig bump` bumps every one in lockstep, `napi-zig publish` publishes every one. See [`addLib` reference](/reference/build) for the constraints on `.scope`.
 
 When you add a new addon to an existing repo:
 
 ```sh
-napi build --release
-napi npm-init --repo <owner>/<name> --workflow publish.yml
+napi-zig build --release
+napi-zig npm-init --repo <owner>/<name> --workflow publish.yml
 ```
 
-`napi npm-init` skips packages that are already on npm and only publishes initial versions and configures trusted publishing for the new ones. From the next `napi bump` onwards, the new addon ships alongside the existing ones.
+`napi-zig npm-init` skips packages that are already on npm and only publishes initial versions and configures trusted publishing for the new ones. From the next `napi-zig bump` onwards, the new addon ships alongside the existing ones.
 
 ## Provenance
 
 In CI, provenance is on by default. Override:
 
 ```sh
-napi publish --no-provenance     # opt out
-napi publish --provenance        # force on (rarely needed; default in CI)
+napi-zig publish --no-provenance     # opt out
+napi-zig publish --provenance        # force on (rarely needed; default in CI)
 ```
 
 Provenance proves the package was built from a specific commit on a specific workflow. It shows up on the npm registry as a verified badge.
@@ -237,20 +237,20 @@ No `postinstall` hook, no `node-gyp`, no `nan`. npm picks the right binding via 
 
 ## Troubleshooting
 
-**`Scope @<name> not found or not accessible to <username>`** during `napi npm-init`.
-The org doesn't exist yet, or you're not a member. Create it at [npmjs.com/org/create](https://www.npmjs.com/org/create), or change the scope in `build.zig` to one you already own and re-run `napi build --release` before retrying.
+**`Scope @<name> not found or not accessible to <username>`** during `napi-zig npm-init`.
+The org doesn't exist yet, or you're not a member. Create it at [npmjs.com/org/create](https://www.npmjs.com/org/create), or change the scope in `build.zig` to one you already own and re-run `napi-zig build --release` before retrying.
 
-**`napi bump` fails on `git push --follow-tags`.**
+**`napi-zig bump` fails on `git push --follow-tags`.**
 Either the branch has no upstream, or you don't have push access. Set the upstream once with `git push -u origin main` and confirm the remote is correct with `git remote -v`.
 
 **The published main package's `optionalDependencies` versions don't match the bindings.**
-This shouldn't happen. `napi bump` updates every `package.json` in lockstep, and `napi build --release` reconciles `optionalDependencies` to the current main version. If you see drift, run `napi build --release` once more to re-sync.
+This shouldn't happen. `napi-zig bump` updates every `package.json` in lockstep, and `napi-zig build --release` reconciles `optionalDependencies` to the current main version. If you see drift, run `napi-zig build --release` once more to re-sync.
 
-**You changed `.scope` after the first `napi build --release`.**
-Run `napi build --release` again. It removes the old `<scope>/` directory, writes the new one, and updates the main package's `optionalDependencies` to match. The version (managed by `napi bump`) and your user fields are preserved.
+**You changed `.scope` after the first `napi-zig build --release`.**
+Run `napi-zig build --release` again. It removes the old `<scope>/` directory, writes the new one, and updates the main package's `optionalDependencies` to match. The version (managed by `napi-zig bump`) and your user fields are preserved.
 
 **You changed `.platforms` (added or removed targets).**
-Run `napi build --release` again. Bindings for removed targets are deleted and `optionalDependencies` is updated; bindings for added targets are created.
+Run `napi-zig build --release` again. Bindings for removed targets are deleted and `optionalDependencies` is updated; bindings for added targets are created.
 
 **You renamed the addon's `.name`.**
-Run `napi build --release` again. The build creates a new `npm/<new-name>/` tree, then warns about the old `npm/<old-name>/` orphan. Copy any user fields you want to keep onto the new main `package.json`, then delete the orphan folder. Renaming a published npm package itself is a separate concern: see npm's [renaming guide](https://docs.npmjs.com/about-package-name-collisions).
+Run `napi-zig build --release` again. The build creates a new `npm/<new-name>/` tree, then warns about the old `npm/<old-name>/` orphan. Copy any user fields you want to keep onto the new main `package.json`, then delete the orphan folder. Renaming a published npm package itself is a separate concern: see npm's [renaming guide](https://docs.npmjs.com/about-package-name-collisions).

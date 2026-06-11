@@ -26,7 +26,7 @@ export function isExtraPackageDir(dir: string): boolean {
 export function discoverPackages(): NpmPackage[] {
   const npmDir = join(process.cwd(), "npm");
   if (!existsSync(npmDir)) {
-    throw new Error("npm/ directory not found. Run 'napi build --release' first.");
+    throw new Error("npm/ directory not found. Run 'napi-zig build --release' first.");
   }
 
   const packages: NpmPackage[] = [];
@@ -73,7 +73,7 @@ export function discoverPackages(): NpmPackage[] {
   }
 
   if (packages.length === 0) {
-    throw new Error("No npm packages found. Run 'napi build --release' first.");
+    throw new Error("No npm packages found. Run 'napi-zig build --release' first.");
   }
 
   return packages;

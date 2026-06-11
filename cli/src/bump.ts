@@ -163,10 +163,10 @@ export async function bump(options: BumpOptions): Promise<void> {
   blank();
 
   if (options.release && valid(options.release)) {
-    // explicit version, napi bump 1.2.3
+    // explicit version, napi-zig bump 1.2.3
     newVersion = clean(options.release)!;
   } else if (options.release && RELEASE_TYPES.includes(options.release)) {
-    // release type, napi bump patch
+    // release type, napi-zig bump patch
     newVersion = nextVersion(currentVersion, options.release as ReleaseType, preid);
   } else if (options.release === "next") {
     const parsed = parse(currentVersion);

@@ -70,7 +70,7 @@ export async function npmInit(options: NpmInitOptions): Promise<void> {
 
   // configure trusted publishing for new packages only
   if (newPackages.length > 0) {
-    requireNpmVersion(11, 10, "trusted publishing");
+    requireNpmVersion(11, 16, "trusted publishing");
 
     const trustList = new TaskList(
       `Configuring trusted publishing`,
@@ -86,7 +86,7 @@ export async function npmInit(options: NpmInitOptions): Promise<void> {
 
       try {
         await run(
-          `npm trust github "${pkg.name}" --file "${options.workflow}" --repo "${options.repo}" --yes`,
+          `npm trust github "${pkg.name}" --file "${options.workflow}" --repo "${options.repo}" --allow-publish --yes`,
         );
         trustList.setState(pkg.name, "ok");
       } catch (error: unknown) {

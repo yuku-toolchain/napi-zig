@@ -80,7 +80,7 @@ export async function ensureNpmScope(scope: string): Promise<void> {
     );
     plain(`     (it's fine and recommended to match the org name to the package name).`);
     plain(`  2. Change the scope in build.zig (the .scope field inside the .npm block)`);
-    plain(`     to a scope you already own, then re-run 'napi build --release'.`);
+    plain(`     to a scope you already own, then re-run 'napi-zig build --release'.`);
     process.exit(1);
   }
 }

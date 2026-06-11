@@ -2,7 +2,7 @@
 
 `napi_zig.addLib` is the only `build.zig` API you need. It registers your addon as a Zig artifact, applies the right linker flags for each OS, sets up the `.d.ts` install, and (with `-Dnpm=true`) builds the cross-compile graph and generates the npm package skeleton.
 
-You can call it more than once in the same `build.zig` to ship multiple addons from one repo. Each call writes its own `zig-out/lib/<name>.node` and its own `npm/<name>/` tree, and the CLI (`napi build`, `napi build --release`, `napi bump`, `napi publish`, `napi npm-init`) picks up every one. Give each addon its own `.scope`; per-platform binding package names are derived from the scope, so two addons sharing a scope would publish under the same binding names.
+You can call it more than once in the same `build.zig` to ship multiple addons from one repo. Each call writes its own `zig-out/lib/<name>.node` and its own `npm/<name>/` tree, and the CLI (`napi-zig build`, `napi-zig build --release`, `napi-zig bump`, `napi-zig publish`, `napi-zig npm-init`) picks up every one. Give each addon its own `.scope`; per-platform binding package names are derived from the scope, so two addons sharing a scope would publish under the same binding names.
 
 ```zig
 const std = @import("std");
@@ -60,7 +60,7 @@ Pass via `.imports = &.{ .{ .name = "parser", .module = parser } }`. See [Projec
 
 ### `.repository`
 
-npm requires a `repository` field on every published package for [provenance](https://docs.npmjs.com/generating-provenance-statements/) to verify against the source tree, otherwise `napi publish` fails in CI with "package must specify a repository". An addon ships as the main package plus one binding per platform (twelve `package.json` files with the default platform set), and setting `.repository` once in `build.zig` writes the field into every one of them on each release build, so you never have to keep them in sync by hand.
+npm requires a `repository` field on every published package for [provenance](https://docs.npmjs.com/generating-provenance-statements/) to verify against the source tree, otherwise `napi-zig publish` fails in CI with "package must specify a repository". An addon ships as the main package plus one binding per platform (twelve `package.json` files with the default platform set), and setting `.repository` once in `build.zig` writes the field into every one of them on each release build, so you never have to keep them in sync by hand.
 
 Two accepted forms:
 
@@ -120,4 +120,4 @@ Override the default set with:
 6. If `.npm` is set, installs the `.d.ts` next to the binary in the right format.
 7. If both `.npm` is set and `-Dnpm=true` is passed, generates the full cross-compile graph and the `npm/` package tree.
 
-`napi build --release` is exactly `zig build -Dnpm=true -Doptimize=ReleaseFast` with the per-platform target loop applied to every entry in `.npm.platforms`. You can run it directly if you prefer.
+`napi-zig build --release` is exactly `zig build -Dnpm=true -Doptimize=ReleaseFast` with the per-platform target loop applied to every entry in `.npm.platforms`. You can run it directly if you prefer.

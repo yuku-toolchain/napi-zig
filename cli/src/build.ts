@@ -29,7 +29,7 @@ import { CLI_VERSION, run } from "./utils";
 
 export interface BuildDevOptions {
   // Suppress the per-file `info` lines about created/copied loader and .d.ts
-  // files. Used by `napi new` for a quiet scaffold flow.
+  // files. Used by `napi-zig new` for a quiet scaffold flow.
   quiet?: boolean;
 }
 

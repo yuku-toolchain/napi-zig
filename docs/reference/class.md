@@ -34,15 +34,18 @@ For the conceptual model, see [Classes](/classes).
 
 ## Recognized members
 
-| Member           | Required | Signature                                    | Purpose                                          |
-| ---------------- | -------- | -------------------------------------------- | ------------------------------------------------ |
-| `init`           | Yes      | `fn(...args) T` or `fn(env: Env, ...args) T` | Constructor. Returns the struct value (or `!T`). |
-| Mutating method  | No       | `fn(self: *Self, ...args) R`                 | Becomes a JS method.                             |
-| Read-only method | No       | `fn(self: *const Self, ...args) R`           | Becomes a JS method.                             |
-| `deinit`         | No       | `fn(self: *Self) void`                       | Runs on JS GC.                                   |
-| Other `pub fn`   | No       | (no `*Self` first param)                     | Skipped silently.                                |
+| Member           | Required | Signature                                    | Purpose                                            |
+| ---------------- | -------- | -------------------------------------------- | -------------------------------------------------- |
+| `init`           | Yes      | `fn(...args) T` or `fn(env: Env, ...args) T` | Constructor. Returns the struct value (or `!T`).   |
+| Mutating method  | No       | `fn(self: *Self, ...args) R`                 | Becomes a JS method.                               |
+| Read-only method | No       | `fn(self: *const Self, ...args) R`           | Becomes a JS method.                               |
+| `next`           | No       | `fn(self: *Self) ?Item`                      | Zig-style iterator: also adds `[Symbol.iterator]`. |
+| `deinit`         | No       | `fn(self: *Self) void`                       | Runs on JS GC.                                     |
+| Other `pub fn`   | No       | (no `*Self` first param)                     | Skipped silently.                                  |
 
 `init` may also return `!T` to make construction fallible. `Env` is recognized in the constructor's first slot and any method's second slot, and does not consume a JS argument.
+
+A `next` taking only `self` (plus optional `Env`) and returning an optional (or `!?Item`) makes instances iterable: they work with `for..of`, spread, and `Array.from`, and the generated `.d.ts` declares `[Symbol.iterator](): IterableIterator<Item>`. `next` is still exposed as a regular method. See [Classes › Iterators](/classes#iterators).
 
 ## Allocation
 

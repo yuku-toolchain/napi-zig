@@ -82,6 +82,55 @@ pub const Greeter = napi.class("Greeter", struct {
 The general rule: state that lives on the instance uses a long-lived allocator; scratch within a single method uses `env.allocator()`.
 :::
 
+## Iterators
+
+If your class follows Zig's iterator convention (a `next` method that takes only `self`, plus an optional `Env`, and returns an optional), instances automatically implement the JS [iterator protocol](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Iteration_protocols). They work with `for..of`, spread, `Array.from`, and anything else that consumes an iterable. No extra code needed.
+
+```zig
+pub const Range = napi.class("Range", struct {
+    i: u32,
+    end: u32,
+
+    pub fn init(end: u32) @This() {
+        return .{ .i = 0, .end = end };
+    }
+
+    pub fn next(self: *@This()) ?u32 {
+        if (self.i >= self.end) return null;
+        defer self.i += 1;
+        return self.i;
+    }
+});
+```
+
+```js
+for (const n of new Range(3)) console.log(n); // 0, 1, 2
+[...new Range(3)]; // [0, 1, 2]
+Array.from(new Range(3)); // [0, 1, 2]
+```
+
+The generated `.d.ts` includes both views:
+
+```ts
+export class Range {
+  constructor(a0: number);
+  next(): number | null;
+  [Symbol.iterator](): IterableIterator<number>;
+}
+```
+
+What qualifies as an iterator:
+
+- `pub fn next(self: *Self) ?Item`: the canonical shape.
+- `next` may take `Env` after `self` and may return an error union (`!?Item`). A thrown error propagates to the consuming loop.
+- `next` must take no other parameters. A `next` with extra arguments, or one returning a non-optional, is treated as a regular method and the class is not iterable.
+
+Details worth knowing:
+
+- `next` stays exposed as a regular JS method returning `Item | null`, exactly like any other method. The iterator protocol is layered on top.
+- Iteration state lives in the Zig instance, matching Zig semantics: if you `break` out of a `for..of` loop, a second loop over the same instance **continues** where the first stopped rather than restarting. Construct a fresh instance to iterate from the start.
+- Each `[Symbol.iterator]()` call returns an iterator object that keeps the instance alive, so the underlying Zig memory cannot be collected mid-iteration.
+
 ## Why not just use `pub const`?
 
 A `pub const` struct with `pub fn` declarations becomes a [namespace](/namespaces): a static set of functions on a JS object. It has no `this`. `napi.class` is for stateful instances backed by a Zig struct, instantiated with `new`, with methods that take `*Self`.

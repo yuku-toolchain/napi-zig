@@ -87,6 +87,11 @@ fn emitClass(comptime js_name: []const u8, comptime Wrapper: type, comptime inde
                 paramList(m_info.params, m_skip) ++ "): " ++ returnTs(m_info) ++ ";\n";
         }
 
+        if (class_mod.isIterator(T)) {
+            out = out ++ inner ++ "[Symbol.iterator](): IterableIterator<" ++
+                tsType(class_mod.IteratorItem(T)) ++ ">;\n";
+        }
+
         return out ++ pad ++ "}\n\n";
     }
 }
@@ -250,6 +255,26 @@ test "generate emits export class for napi.class wrapper" {
     try testing.expect(std.mem.indexOf(u8, dts, "constructor(a0: number);") != null);
     try testing.expect(std.mem.indexOf(u8, dts, "increment(): number;") != null);
     try testing.expect(std.mem.indexOf(u8, dts, "get(): number;") != null);
+}
+
+test "generate emits Symbol.iterator for iterator classes" {
+    const M = struct {
+        pub const Range = class_mod.class("Range", struct {
+            i: u32,
+            end: u32,
+            pub fn init(end: u32) @This() {
+                return .{ .i = 0, .end = end };
+            }
+            pub fn next(self: *@This()) ?u32 {
+                if (self.i >= self.end) return null;
+                defer self.i += 1;
+                return self.i;
+            }
+        });
+    };
+    const dts = comptime generate(M);
+    try testing.expect(std.mem.indexOf(u8, dts, "[Symbol.iterator](): IterableIterator<number>;") != null);
+    try testing.expect(std.mem.indexOf(u8, dts, "next(): number | null;") != null);
 }
 
 test "tsType maps enums to string union" {

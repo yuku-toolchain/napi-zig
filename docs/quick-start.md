@@ -67,11 +67,11 @@ Every iteration is the same two-step:
 
 ```sh
 # edit src/lib.zig, then:
-napi build
+napi-zig build
 node test.mjs
 ```
 
-`napi build` compiles for the current host. When you are ready to ship, `napi build --release` cross-compiles every platform at once. See [Cross-compiling](/cross-compiling).
+`napi-zig build` compiles for the current host. When you are ready to ship, `napi-zig build --release` cross-compiles every platform at once. See [Cross-compiling](/cross-compiling).
 
 ## Next steps
 
