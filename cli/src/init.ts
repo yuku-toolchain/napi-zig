@@ -1,12 +1,11 @@
 import { discoverPackages } from "./npm";
-import { Spinner, TaskList, banner, blank, bullet, c, done, info, plain } from "./ui";
+import { Spinner, banner, blank, bullet, c, done, fail, info, note, plain } from "./ui";
 import {
   CLI_VERSION,
   ensureNpmScope,
   packageExistsOnNpm,
-  packageHasTrust,
+  packageTrustStatus,
   requireNpmVersion,
-  run,
   runInherit,
   sleep,
 } from "./utils";
@@ -70,52 +69,56 @@ export async function npmInit(options: NpmInitOptions): Promise<void> {
   }
 
   const existingPackages = ordered.filter((_, i) => existsResults[i]);
-  let untrustedExisting: typeof existingPackages = [];
+  let retryExisting: typeof existingPackages = [];
+  let unverified = 0;
   if (existingPackages.length > 0) {
     const trustCheck = new Spinner(
       `Checking trusted publishing on ${existingPackages.length} existing packages`,
     ).start();
-    const hasTrust = await Promise.all(existingPackages.map((p) => packageHasTrust(p.name)));
-    untrustedExisting = existingPackages.filter((_, i) => !hasTrust[i]);
-    trustCheck.succeed(
-      untrustedExisting.length === 0
-        ? `All existing packages already have trusted publishing`
-        : `${c.bold(String(untrustedExisting.length))} existing ${
-            untrustedExisting.length === 1 ? "package needs" : "packages need"
-          } trusted publishing`,
-    );
+    const statuses = await Promise.all(existingPackages.map((p) => packageTrustStatus(p.name)));
+    retryExisting = existingPackages.filter((_, i) => statuses[i] !== "trusted");
+    unverified = statuses.filter((s) => s === "unknown").length;
+    if (retryExisting.length === 0) {
+      trustCheck.succeed(`All existing packages already have trusted publishing`);
+    } else {
+      const missing = retryExisting.length - unverified;
+      const parts: string[] = [];
+      if (missing > 0) parts.push(`${missing} missing`);
+      if (unverified > 0) parts.push(`${unverified} unverifiable with 2FA`);
+      trustCheck.warn(
+        `${c.bold(String(retryExisting.length))} existing ${
+          retryExisting.length === 1 ? "package" : "packages"
+        } to re-apply  ${c.dim(parts.join(", "))}`,
+      );
+    }
   }
 
-  const trustNames = new Set([...newPackages, ...untrustedExisting].map((p) => p.name));
+  const trustNames = new Set([...newPackages, ...retryExisting].map((p) => p.name));
   const trustTargets = ordered.filter((p) => trustNames.has(p.name));
 
-  // configure trusted publishing for packages that still need it
   if (trustTargets.length > 0) {
     requireNpmVersion(11, 16, "trusted publishing");
 
-    const trustList = new TaskList(
-      `Configuring trusted publishing`,
-      trustTargets.map((p) => ({ id: p.name, label: p.name })),
-      { columns: 1, hint: c.dim(`${options.repo} · ${options.workflow}`) },
-    ).start();
+    blank();
+    plain(
+      c.dim(`Configuring trusted publishing  ${c.gray("(npm prompts pass through for OTP/2FA)")}`),
+    );
+    note(`${options.repo} · ${options.workflow}`);
+    blank();
 
-    let firstError: string | undefined;
-
+    let failures = 0;
     for (let i = 0; i < trustTargets.length; i++) {
       const pkg = trustTargets[i]!;
-      trustList.setState(pkg.name, "active");
-
+      info(`[${i + 1}/${trustTargets.length}]  Trusting ${c.bold(pkg.name)}`);
       try {
-        await run(
+        await runInherit(
           `npm trust github "${pkg.name}" --file "${options.workflow}" --repo "${options.repo}" --allow-publish --yes`,
         );
-        trustList.setState(pkg.name, "ok");
-      } catch (error: unknown) {
-        const stderr = String((error as { stderr?: string }).stderr ?? "");
-        const firstLine = stderr.split("\n")[0] ?? "trust failed";
-        trustList.setState(pkg.name, "fail", c.red(firstLine));
-        firstError = firstError ?? firstLine;
+      } catch {
+        failures++;
+        fail(`Trusted publishing failed for ${c.bold(pkg.name)}`);
       }
+      blank();
 
       // rate-limit: 2s between calls to avoid npm throttling
       if (i < trustTargets.length - 1) {
@@ -123,12 +126,15 @@ export async function npmInit(options: NpmInitOptions): Promise<void> {
       }
     }
 
-    trustList.finish(
-      !firstError,
-      firstError
-        ? `Trusted publishing failed`
-        : `Trusted publishing configured for ${c.bold(String(trustTargets.length))} packages`,
-    );
+    if (failures > 0) {
+      fail(
+        `Trusted publishing failed for ${c.bold(String(failures))} of ${trustTargets.length} ${
+          trustTargets.length === 1 ? "package" : "packages"
+        }. Re-run init to retry.`,
+      );
+    } else {
+      done(`Trusted publishing configured for ${c.bold(String(trustTargets.length))} packages`);
+    }
   }
 
   blank();

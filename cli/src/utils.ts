@@ -46,12 +46,20 @@ export async function packageExistsOnNpm(name: string): Promise<boolean> {
   }
 }
 
-export async function packageHasTrust(name: string): Promise<boolean> {
+export type TrustStatus = "trusted" | "untrusted" | "unknown";
+
+export async function packageTrustStatus(name: string): Promise<TrustStatus> {
   try {
     const { stdout } = await execAsync(`npm trust list "${name}" --json`, { timeout: 15000 });
-    return stdout.trim().length > 0;
+    const out = stdout.trim();
+    if (out.length === 0) return "untrusted";
+    try {
+      const parsed = JSON.parse(out) as { error?: unknown };
+      if (parsed && typeof parsed === "object" && "error" in parsed) return "unknown";
+    } catch {}
+    return "trusted";
   } catch {
-    return false;
+    return "unknown";
   }
 }
 
