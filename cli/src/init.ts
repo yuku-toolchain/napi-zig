@@ -4,6 +4,7 @@ import {
   CLI_VERSION,
   ensureNpmScope,
   packageExistsOnNpm,
+  packageHasTrust,
   requireNpmVersion,
   run,
   runInherit,
@@ -68,20 +69,40 @@ export async function npmInit(options: NpmInitOptions): Promise<void> {
     }
   }
 
-  // configure trusted publishing for new packages only
-  if (newPackages.length > 0) {
+  const existingPackages = ordered.filter((_, i) => existsResults[i]);
+  let untrustedExisting: typeof existingPackages = [];
+  if (existingPackages.length > 0) {
+    const trustCheck = new Spinner(
+      `Checking trusted publishing on ${existingPackages.length} existing packages`,
+    ).start();
+    const hasTrust = await Promise.all(existingPackages.map((p) => packageHasTrust(p.name)));
+    untrustedExisting = existingPackages.filter((_, i) => !hasTrust[i]);
+    trustCheck.succeed(
+      untrustedExisting.length === 0
+        ? `All existing packages already have trusted publishing`
+        : `${c.bold(String(untrustedExisting.length))} existing ${
+            untrustedExisting.length === 1 ? "package needs" : "packages need"
+          } trusted publishing`,
+    );
+  }
+
+  const trustNames = new Set([...newPackages, ...untrustedExisting].map((p) => p.name));
+  const trustTargets = ordered.filter((p) => trustNames.has(p.name));
+
+  // configure trusted publishing for packages that still need it
+  if (trustTargets.length > 0) {
     requireNpmVersion(11, 16, "trusted publishing");
 
     const trustList = new TaskList(
       `Configuring trusted publishing`,
-      newPackages.map((p) => ({ id: p.name, label: p.name })),
+      trustTargets.map((p) => ({ id: p.name, label: p.name })),
       { columns: 1, hint: c.dim(`${options.repo} · ${options.workflow}`) },
     ).start();
 
     let firstError: string | undefined;
 
-    for (let i = 0; i < newPackages.length; i++) {
-      const pkg = newPackages[i]!;
+    for (let i = 0; i < trustTargets.length; i++) {
+      const pkg = trustTargets[i]!;
       trustList.setState(pkg.name, "active");
 
       try {
@@ -97,7 +118,7 @@ export async function npmInit(options: NpmInitOptions): Promise<void> {
       }
 
       // rate-limit: 2s between calls to avoid npm throttling
-      if (i < newPackages.length - 1) {
+      if (i < trustTargets.length - 1) {
         await sleep(2000);
       }
     }
@@ -106,7 +127,7 @@ export async function npmInit(options: NpmInitOptions): Promise<void> {
       !firstError,
       firstError
         ? `Trusted publishing failed`
-        : `Trusted publishing configured for ${c.bold(String(newPackages.length))} packages`,
+        : `Trusted publishing configured for ${c.bold(String(trustTargets.length))} packages`,
     );
   }
 

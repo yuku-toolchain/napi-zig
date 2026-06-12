@@ -46,6 +46,15 @@ export async function packageExistsOnNpm(name: string): Promise<boolean> {
   }
 }
 
+export async function packageHasTrust(name: string): Promise<boolean> {
+  try {
+    const { stdout } = await execAsync(`npm trust list "${name}" --json`, { timeout: 15000 });
+    return stdout.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
 export async function ensureNpmScope(scope: string): Promise<void> {
   const scopeName = scope.replace(/^@/, "");
 
