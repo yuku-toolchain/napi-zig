@@ -40,7 +40,7 @@ After scaffolding, it runs `npm install` (or your detected PM), `zig fetch` for 
 ## `napi-zig build`
 
 ```sh
-napi-zig build [--release]
+napi-zig build [--release] [--only <names>] [--current] [--optimize <mode>]
 ```
 
 Without `--release`, builds for the current platform in the optimization mode set by your `build.zig` (defaults to `Debug`). Produces:
@@ -54,6 +54,15 @@ zig-out/lib/
 The CLI also drops a top-level `my-addon.js` re-exporter so the import path matches what users will see after publish.
 
 With `--release`, cross-compiles every platform listed in `.npm.platforms` and lays out the full `npm/` package tree. See [Cross-compiling](/cross-compiling).
+
+| Option           | Default | Description                                                 |
+| ---------------- | ------- | ----------------------------------------------------------- |
+| `--release`      |         | Cross-compile every platform and reconcile the `npm/` tree. |
+| `--only <names>` | all     | Comma-separated addon `.name`s to build (with `--release`). |
+| `--current`      |         | Build only the host platform's binding (with `--release`).  |
+| `--optimize <m>` | `fast`  | Release optimization: `safe`, `fast`, or `small`.           |
+
+`--only` and `--current` speed up local iteration; both are additive and leave the rest of `npm/` untouched. See [Building a subset](/cross-compiling#building-a-subset).
 
 ## `napi-zig bump`
 

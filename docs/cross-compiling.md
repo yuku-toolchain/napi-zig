@@ -56,6 +56,30 @@ The practical guarantee: **edit `build.zig`, then re-run `napi-zig build --relea
 
 The one exception is renaming the addon's `.name` itself. The new tree is created fresh under `npm/<new-name>/`, the old `npm/<old-name>/` becomes an orphan, and the build prints a warning that asks you to copy any user fields you want to keep on the new main `package.json` and delete the old folder. (Renaming a published npm package is a rare and disruptive event; this is intentional.)
 
+## Building a subset
+
+A full release build cross-compiles every platform for every addon. During local development you often want something faster.
+
+`--current` builds only the host platform's binding:
+
+```sh
+napi-zig build --release --current
+```
+
+This compiles a single `.node` for the machine you are on and skips the others. The main `package.json` still lists every platform in `optionalDependencies`, and the build is additive: bindings already in `npm/` from a previous full build are left in place, not deleted. Run a full `napi-zig build --release` before publishing so every platform is present.
+
+`--only` narrows the build to specific addons by `.name`, useful when `build.zig` calls `addLib` more than once:
+
+```sh
+napi-zig build --release --only math,crypto
+```
+
+Unlisted addons are skipped entirely and their `npm/` subtrees are left untouched. Combine the two flags to rebuild just one addon for just your platform:
+
+```sh
+napi-zig build --release --only math --current
+```
+
 ## What `index.js` is for
 
 `binding.js` is fully owned by the build. It implements platform detection and loads the matching `<scope>/binding-…` package. Do not edit it; your changes will be overwritten on the next build.

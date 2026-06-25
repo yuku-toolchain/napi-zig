@@ -58,6 +58,19 @@ pub const Platform = enum {
         return .{ .cpu_arch = i.cpu_arch, .os_tag = i.os_tag, .abi = i.abi };
     }
 
+    /// Maps a resolved target (usually the build host) to a known Platform,
+    /// or null when the host is not in the platform list.
+    pub fn fromTarget(t: std.Target) ?Platform {
+        for (defaults) |p| {
+            const i = p.info();
+            if (i.cpu_arch != t.cpu.arch) continue;
+            if (i.os_tag != t.os.tag) continue;
+            if (t.os.tag == .linux and i.abi.isMusl() != t.abi.isMusl()) continue;
+            return p;
+        }
+        return null;
+    }
+
     pub fn npmOs(self: Platform) []const u8 {
         return self.info().npm_os;
     }

@@ -89,7 +89,14 @@ pub fn addLib(b: *std.Build, napi_dep: *std.Build.Dependency, options: LibOption
 
     // npm release mode (cross-compile and scaffold)
     if (options.npm) |npm| {
-        if (npmFlag(b)) addNpmRelease(b, napi_dep, napi_module, options, npm, node_api_def);
+        if (npmFlag(b)) {
+            // read before the filter so -Dnpm-host stays registered even when
+            // every addon is filtered out
+            const host_only = npmHostOnly(b);
+            if (npmSelected(b, options.name)) {
+                addNpmRelease(b, napi_dep, napi_module, options, npm, node_api_def, host_only);
+            }
+        }
     }
 }
 
@@ -107,6 +114,45 @@ fn npmFlag(b: *std.Build) bool {
         };
     }
     return b.option(bool, "npm", "Cross-compile and generate npm packages") orelse false;
+}
+
+// duplicate-declaration guard like npmFlag, the first addLib call declares the
+// option and later calls read the cached input
+fn npmHostOnly(b: *std.Build) bool {
+    if (b.available_options_map.contains("npm-host")) {
+        const opt_ptr = b.user_input_options.getPtr("npm-host") orelse return false;
+        opt_ptr.used = true;
+        return switch (opt_ptr.value) {
+            .flag => true,
+            .scalar => |s| std.mem.eql(u8, s, "true"),
+            else => false,
+        };
+    }
+    return b.option(bool, "npm-host", "Cross-compile only the host platform") orelse false;
+}
+
+fn npmSelected(b: *std.Build, name: []const u8) bool {
+    const raw = npmOnlyRaw(b) orelse return true;
+    if (raw.len == 0) return true;
+    var it = std.mem.splitScalar(u8, raw, ',');
+    while (it.next()) |part| {
+        const trimmed = std.mem.trim(u8, part, " ");
+        if (trimmed.len == 0) continue;
+        if (std.mem.eql(u8, trimmed, name)) return true;
+    }
+    return false;
+}
+
+fn npmOnlyRaw(b: *std.Build) ?[]const u8 {
+    if (b.available_options_map.contains("npm-only")) {
+        const opt_ptr = b.user_input_options.getPtr("npm-only") orelse return null;
+        opt_ptr.used = true;
+        return switch (opt_ptr.value) {
+            .scalar => |s| s,
+            else => null,
+        };
+    }
+    return b.option([]const u8, "npm-only", "Comma-separated addon names to build (default: all)");
 }
 
 fn installDts(
@@ -165,6 +211,7 @@ fn addNpmRelease(
     options: LibOptions,
     npm: NpmConfig,
     node_api_def: std.Build.LazyPath,
+    host_only: bool,
 ) void {
     const wf = b.addWriteFiles();
 
@@ -172,12 +219,22 @@ fn addNpmRelease(
         b.fmt("npm/{s}/binding.js", .{options.name}),
         bindingJs(b.allocator, options.name, npm.scope),
     );
+    // always lists every platform so a later full build and publish stay complete
     _ = wf.add(
         b.fmt("npm/{s}/package.json", .{options.name}),
         rootPackageJson(b.allocator, options.name, npm),
     );
 
-    for (npm.platforms) |platform| {
+    // host_only compiles just the host binding for fast local iteration
+    const platforms = if (host_only) blk: {
+        const host = Platform.fromTarget(b.graph.host.result) orelse
+            std.debug.panic("napi-zig: host platform is not in the npm platform list; cannot use --current", .{});
+        const one = b.allocator.alloc(Platform, 1) catch @panic("OOM");
+        one[0] = host;
+        break :blk @as([]const Platform, one);
+    } else npm.platforms;
+
+    for (platforms) |platform| {
         _ = wf.add(
             b.fmt("npm/{s}/{s}/binding-{s}/package.json", .{ options.name, npm.scope, platform.suffix() }),
             platformPackageJson(b.allocator, options.name, npm, platform),
@@ -192,7 +249,7 @@ fn addNpmRelease(
     b.getInstallStep().dependOn(&install_wf.step);
 
     // cross-compile a .node for each platform.
-    for (npm.platforms) |platform| {
+    for (platforms) |platform| {
         const target = b.resolveTargetQuery(platform.zigTarget());
 
         const lib_mod = b.createModule(.{

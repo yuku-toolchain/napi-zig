@@ -48,6 +48,44 @@ function normalizeArch(a: string): string {
   return a;
 }
 
+function parseOnly(only: string | undefined): string[] {
+  if (!only) return [];
+  return only
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+// matches the suffix zig emits for the host, linux carries a -gnu or -musl tag
+function hostBindingSuffix(): string {
+  const p = normalizePlatform(platform());
+  const a = normalizeArch(arch());
+  if (p === "linux") return `${p}-${a}-${isMuslHost() ? "musl" : "gnu"}`;
+  return `${p}-${a}`;
+}
+
+function isMuslHost(): boolean {
+  if (platform() !== "linux") return false;
+  try {
+    const report = (process as { report?: { getReport?: () => unknown } }).report;
+    const raw = typeof report?.getReport === "function" ? report.getReport() : null;
+    if (raw) {
+      const parsed = (typeof raw === "string" ? JSON.parse(raw) : raw) as {
+        header?: { glibcVersionRuntime?: string };
+        sharedObjects?: string[];
+      };
+      if (parsed.header?.glibcVersionRuntime) return false;
+      if (
+        Array.isArray(parsed.sharedObjects) &&
+        parsed.sharedObjects.some((f) => f.includes("libc.musl-") || f.includes("ld-musl-"))
+      ) {
+        return true;
+      }
+    }
+  } catch {}
+  return false;
+}
+
 function formatOptimize(opt: string | undefined): string {
   if (!opt) return "Debug";
   switch (opt) {
@@ -133,17 +171,35 @@ export async function buildDev(
   }
 }
 
-export async function buildRelease(optimize: string): Promise<void> {
+export interface BuildReleaseOptions {
+  // comma-separated addon names, empty means all
+  only?: string;
+  // compile only the host platform binding
+  current?: boolean;
+}
+
+export async function buildRelease(optimize: string, options?: BuildReleaseOptions): Promise<void> {
   const optFlag = ` --release=${optimize}`;
 
-  banner("napi-zig", `${CLI_VERSION}  ·  cross-compile  ·  ${formatOptimize(optimize)}`);
+  const onlyNames = parseOnly(options?.only);
+  const current = options?.current ?? false;
+
+  let cmd = `zig build -Dnpm=true${optFlag}`;
+  if (onlyNames.length > 0) cmd += ` -Dnpm-only=${onlyNames.join(",")}`;
+  if (current) cmd += " -Dnpm-host=true";
+
+  const mode = current ? "host-only" : "cross-compile";
+  banner("napi-zig", `${CLI_VERSION}  ·  ${mode}  ·  ${formatOptimize(optimize)}`);
+  if (current) bullet(`Scope   ${c.bold(`host only (${hostBindingSuffix()})`)}`);
+  if (onlyNames.length > 0) bullet(`Filter  ${c.bold(onlyNames.join(", "))}`);
+  if (current || onlyNames.length > 0) blank();
 
   // zig's WriteFiles step adds without removing, so a renamed scope leaves
   // stale dirs in zig-out/npm that the reconciler would otherwise copy back.
   const srcBase = join(process.cwd(), "zig-out", "npm");
   if (existsSync(srcBase)) rmSync(srcBase, { recursive: true, force: true });
 
-  const expectedTargets = detectExpectedTargets();
+  const expectedTargets = current ? [hostBindingSuffix()] : detectExpectedTargets();
   const targets = expectedTargets.length > 0 ? expectedTargets : ["all platforms"];
 
   const grid = new TaskList(
@@ -165,7 +221,7 @@ export async function buildRelease(optimize: string): Promise<void> {
 
   let buildErr: unknown;
   try {
-    await run(`zig build -Dnpm=true${optFlag}`);
+    await run(cmd);
   } catch (e) {
     buildErr = e;
   }
@@ -186,14 +242,22 @@ export async function buildRelease(optimize: string): Promise<void> {
     throw buildErr;
   }
 
-  grid.finish(true, `Compiled ${c.bold(String(built.size))} platforms`);
+  grid.finish(
+    true,
+    `Compiled ${c.bold(String(built.size))} ${built.size === 1 ? "platform" : "platforms"}`,
+  );
 
   const destBase = join(process.cwd(), "npm");
 
   if (!existsSync(srcBase)) {
     blank();
-    uiFail("No npm output found in zig-out/npm/.");
-    uiNote("Make sure your build.zig uses addLib with .npm config.");
+    if (onlyNames.length > 0) {
+      uiFail(`No addon matched --only=${onlyNames.join(",")}.`);
+      uiNote("Check the names against the .name fields in build.zig.");
+    } else {
+      uiFail("No npm output found in zig-out/npm/.");
+      uiNote("Make sure your build.zig uses addLib with .npm config.");
+    }
     process.exit(1);
   }
 
@@ -224,9 +288,14 @@ export async function buildRelease(optimize: string): Promise<void> {
     mkdirSync(destPkg, { recursive: true });
 
     syncList.setState(`main:${pkgName}`, "active");
-    const result = reconcilePackage(srcPkg, destPkg, (rel) => {
-      syncList.setState(`bind:${pkgName}:${rel}`, "active");
-    });
+    const result = reconcilePackage(
+      srcPkg,
+      destPkg,
+      (rel) => {
+        syncList.setState(`bind:${pkgName}:${rel}`, "active");
+      },
+      !current,
+    );
     notes.push(...result.notes);
     syncList.setState(`main:${pkgName}`, "ok", fresh ? "created" : "reconciled");
     for (const rel of result.bindings) {
@@ -246,7 +315,8 @@ export async function buildRelease(optimize: string): Promise<void> {
     for (const n of notes) plain(`   ${c.gray("›")}  ${n}`);
   }
 
-  if (existsSync(destBase)) {
+  // under --only the unselected packages are absent by design, not orphans
+  if (existsSync(destBase) && onlyNames.length === 0) {
     const generated = new Set(generatedPkgs);
     const orphans = readdirSync(destBase)
       .filter((n) => statSync(join(destBase, n)).isDirectory())
@@ -267,7 +337,7 @@ export async function buildRelease(optimize: string): Promise<void> {
   }
 
   blank();
-  done(`Cross-compilation complete`);
+  done(current ? `Host build complete` : `Cross-compilation complete`);
 }
 
 function detectExpectedTargets(): string[] {
@@ -336,6 +406,7 @@ function reconcilePackage(
   src: string,
   dest: string,
   onBindingStart?: (rel: string) => void,
+  prune = true,
 ): ReconcileResult {
   const notes: string[] = [];
 
@@ -390,18 +461,22 @@ function reconcilePackage(
     writeJson(join(destBind, "package.json"), mergedBind);
   }
 
-  for (const rel of listBindingDirs(dest)) {
-    if (!newBindingSet.has(rel)) {
-      rmSync(join(dest, rel), { recursive: true, force: true });
+  // host-only builds emit one binding, skip pruning to keep the other
+  // platforms already in npm/
+  if (prune) {
+    for (const rel of listBindingDirs(dest)) {
+      if (!newBindingSet.has(rel)) {
+        rmSync(join(dest, rel), { recursive: true, force: true });
+      }
     }
-  }
 
-  // an entire scope renamed will leave the old scope dir empty after the loop above.
-  for (const entry of readdirSync(dest)) {
-    if (!entry.startsWith("@")) continue;
-    const scopeDir = join(dest, entry);
-    if (!statSync(scopeDir).isDirectory()) continue;
-    if (readdirSync(scopeDir).length === 0) rmSync(scopeDir, { recursive: true });
+    // an entire scope renamed will leave the old scope dir empty after the loop above.
+    for (const entry of readdirSync(dest)) {
+      if (!entry.startsWith("@")) continue;
+      const scopeDir = join(dest, entry);
+      if (!statSync(scopeDir).isDirectory()) continue;
+      if (readdirSync(scopeDir).length === 0) rmSync(scopeDir, { recursive: true });
+    }
   }
 
   return { notes, bindings: newBindings, freshBindings };

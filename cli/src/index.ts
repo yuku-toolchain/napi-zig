@@ -21,13 +21,20 @@ cli
 cli
   .command("build", "Build for current platform")
   .option("--release", "Cross-compile all platforms and sync npm folder")
+  .option("--only <names>", "Comma-separated addon names to build (with --release)")
+  .option("--current", "Build only the host platform's binding (with --release)")
   .option("--optimize <mode>", "Optimization: safe, fast, small (default: fast with --release)")
-  .action((options: { release?: boolean; optimize?: string }) => {
+  .action((options: { release?: boolean; only?: string; current?: boolean; optimize?: string }) => {
     if (options.release) {
-      return buildRelease(options.optimize ?? "fast");
-    } else {
-      return buildDev(options.optimize);
+      return buildRelease(options.optimize ?? "fast", {
+        only: options.only,
+        current: options.current,
+      });
     }
+    if (options.only || options.current) {
+      console.error("Note: --only and --current only apply with --release; ignoring.");
+    }
+    return buildDev(options.optimize);
   });
 
 cli

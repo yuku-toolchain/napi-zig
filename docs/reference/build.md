@@ -121,3 +121,12 @@ Override the default set with:
 7. If both `.npm` is set and `-Dnpm=true` is passed, generates the full cross-compile graph and the `npm/` package tree.
 
 `napi-zig build --release` is exactly `zig build -Dnpm=true -Doptimize=ReleaseFast` with the per-platform target loop applied to every entry in `.npm.platforms`. You can run it directly if you prefer.
+
+Two build options narrow that loop, set for you by the matching CLI flags:
+
+| Build option      | CLI flag     | Effect                                                        |
+| ----------------- | ------------ | ------------------------------------------------------------- |
+| `-Dnpm-only=a,b`  | `--only a,b` | Only run the npm release for addons whose `.name` is listed.  |
+| `-Dnpm-host=true` | `--current`  | Cross-compile only the host platform instead of `.platforms`. |
+
+Under `-Dnpm-host` the main `package.json` still lists every platform in `optionalDependencies`, so a later full build stays complete. See [Building a subset](/cross-compiling#building-a-subset).
