@@ -7,6 +7,7 @@ import {
   packageTrustStatus,
   requireNpmVersion,
   runInherit,
+  runInteractive,
   sleep,
 } from "./utils";
 
@@ -106,17 +107,24 @@ export async function npmInit(options: NpmInitOptions): Promise<void> {
     note(`${options.repo} · ${options.workflow}`);
     blank();
 
+    let configured = 0;
+    let already = 0;
     let failures = 0;
     for (let i = 0; i < trustTargets.length; i++) {
       const pkg = trustTargets[i]!;
       info(`[${i + 1}/${trustTargets.length}]  Trusting ${c.bold(pkg.name)}`);
-      try {
-        await runInherit(
-          `npm trust github "${pkg.name}" --file "${options.workflow}" --repo "${options.repo}" --allow-publish --yes`,
-        );
-      } catch {
+      const { code, stderr } = await runInteractive(
+        `npm trust github "${pkg.name}" --file "${options.workflow}" --repo "${options.repo}" --allow-publish --yes`,
+      );
+      if (code === 0) {
+        configured++;
+      } else if (/409|conflict/i.test(stderr)) {
+        already++;
+        note(`${pkg.name} already trusted`);
+      } else {
         failures++;
         fail(`Trusted publishing failed for ${c.bold(pkg.name)}`);
+        if (stderr.trim()) process.stderr.write(stderr.endsWith("\n") ? stderr : stderr + "\n");
       }
       blank();
 
@@ -126,14 +134,13 @@ export async function npmInit(options: NpmInitOptions): Promise<void> {
       }
     }
 
+    const summary = `${configured} configured, ${already} already trusted`;
     if (failures > 0) {
       fail(
-        `Trusted publishing failed for ${c.bold(String(failures))} of ${trustTargets.length} ${
-          trustTargets.length === 1 ? "package" : "packages"
-        }. Re-run init to retry.`,
+        `Trusted publishing: ${summary}, ${c.bold(String(failures))} failed. Re-run init to retry.`,
       );
     } else {
-      done(`Trusted publishing configured for ${c.bold(String(trustTargets.length))} packages`);
+      done(`Trusted publishing: ${summary}`);
     }
   }
 

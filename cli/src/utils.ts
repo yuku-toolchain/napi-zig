@@ -33,6 +33,24 @@ export function runInherit(cmd: string, options?: { cwd?: string }): Promise<voi
   });
 }
 
+export function runInteractive(
+  cmd: string,
+  options?: { cwd?: string },
+): Promise<{ code: number; stderr: string }> {
+  return new Promise((resolve) => {
+    const child = spawn(cmd, {
+      stdio: ["inherit", "inherit", "pipe"],
+      shell: true,
+      cwd: options?.cwd,
+    });
+    let stderr = "";
+    child.stderr?.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    child.on("close", (code) => resolve({ code: code ?? 0, stderr }));
+  });
+}
+
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
