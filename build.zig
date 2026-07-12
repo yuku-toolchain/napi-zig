@@ -32,6 +32,11 @@ pub const LibOptions = struct {
     optimize: std.builtin.OptimizeMode,
     imports: []const Import = &.{},
     npm: ?NpmConfig = null,
+    /// strip debug info and the symbol table from the addon. defaults
+    /// to true for non-debug builds, where it cuts the binary size by
+    /// several times on ELF targets. the dynamic symbols Node loads
+    /// through are always kept.
+    strip: ?bool = null,
     /// windows host binary the addon loads into (`"electron.exe"` etc).
     /// only affects windows import-library generation.
     host_exe: []const u8 = "node.exe",
@@ -66,6 +71,7 @@ pub fn addLib(b: *std.Build, napi_dep: *std.Build.Dependency, options: LibOption
         .root_source_file = options.root,
         .target = options.target,
         .optimize = options.optimize,
+        .strip = options.strip orelse (options.optimize != .Debug),
     });
     lib_mod.addImport("napi-zig", napi_module);
     for (options.imports) |imp| lib_mod.addImport(imp.name, imp.module);
@@ -256,6 +262,7 @@ fn addNpmRelease(
             .root_source_file = options.root,
             .target = target,
             .optimize = .ReleaseFast,
+            .strip = options.strip orelse true,
         });
         lib_mod.addImport("napi-zig", napi_module);
         for (options.imports) |imp| lib_mod.addImport(imp.name, imp.module);
