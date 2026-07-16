@@ -266,7 +266,8 @@ describe("napi-zig build --release", () => {
     const buildZig = readFileSync(buildZigPath, "utf-8");
     require("node:fs").writeFileSync(
       buildZigPath,
-      buildZig.replace("                .freebsd_x64,\n", ""),
+      // \r?\n: on windows CI the checkout may carry CRLF endings
+      buildZig.replace(/[ ]*\.freebsd_x64,\r?\n/, ""),
     );
 
     await withCwd(dir, () => buildRelease("fast"));
