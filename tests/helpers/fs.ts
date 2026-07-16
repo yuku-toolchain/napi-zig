@@ -1,10 +1,16 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync, statSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createHash, randomBytes } from "node:crypto";
 
+// under the repo instead of os.tmpdir(): staged fixtures reference the repo
+// by a relative path in build.zig.zon, and on windows CI the system temp dir
+// sits on a different drive (C:) than the checkout (D:), where no relative
+// path exists.
+const tempRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", ".zig-cache", "test-tmp");
+
 export function tempDir(): string {
-  const dir = join(tmpdir(), "napi-zig-test-" + randomBytes(8).toString("hex"));
+  const dir = join(tempRoot, "napi-zig-test-" + randomBytes(8).toString("hex"));
   mkdirSync(dir, { recursive: true });
   return dir;
 }

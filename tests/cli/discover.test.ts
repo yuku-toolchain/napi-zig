@@ -97,7 +97,7 @@ describe("discoverPackages", () => {
 
       const extra = pkgs.find((p) => p.kind === "extra");
       expect(extra?.name).toBe("my-helper");
-      expect(extra?.dir.endsWith("/npm/my-helper")).toBe(true);
+      expect(extra?.dir.replaceAll("\\", "/").endsWith("/npm/my-helper")).toBe(true);
 
       expect(pkgs.filter((p) => p.kind === "main").map((p) => p.name)).toEqual(["myaddon"]);
       expect(pkgs.filter((p) => p.kind === "binding")).toHaveLength(1);
