@@ -16,10 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # windows-latest excluded, bun crashes on windows during `bun test`
-        # (upstream bun bug). re-add when fixed, node coverage on windows
-        # comes from node-abi + cross-install.
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
       - uses: actions/checkout@v4
@@ -76,9 +73,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # windows-latest excluded, deno + windows currently fails with an
-        # opaque exit 1 we haven't been able to reproduce or diagnose.
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
       - uses: actions/checkout@v4

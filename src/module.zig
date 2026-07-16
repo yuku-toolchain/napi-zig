@@ -7,6 +7,7 @@ const util = @import("util.zig");
 const val_mod = @import("val.zig");
 const class_mod = @import("class.zig");
 const bridge = @import("bridge.zig");
+const win_napi = @import("win_napi.zig");
 
 const Env = env_mod.Env;
 const Val = val_mod.Val;
@@ -29,6 +30,10 @@ pub fn registerModule(comptime Module: type) void {
 fn ModuleInit(comptime Module: type) type {
     return struct {
         fn init(raw_env: c.napi_env, exports: c.napi_value) callconv(.c) ?c.napi_value {
+            // windows resolves napi symbols at runtime. this must happen
+            // before any c.* call. no-op elsewhere.
+            if (comptime builtin.os.tag == .windows) win_napi.init();
+
             var arena = std.heap.ArenaAllocator.init(std.heap.smp_allocator);
             defer arena.deinit();
             const env: Env = .{ .handle = raw_env, .arena = &arena };

@@ -37,9 +37,6 @@ pub const LibOptions = struct {
     /// several times on ELF targets. the dynamic symbols Node loads
     /// through are always kept.
     strip: ?bool = null,
-    /// windows host binary the addon loads into (`"electron.exe"` etc).
-    /// only affects windows import-library generation.
-    host_exe: []const u8 = "node.exe",
 };
 
 pub fn build(b: *std.Build) void {
@@ -65,7 +62,6 @@ pub fn build(b: *std.Build) void {
 /// cross-compiles every platform listed in the npm config.
 pub fn addLib(b: *std.Build, napi_dep: *std.Build.Dependency, options: LibOptions) void {
     const napi_module = napi_dep.module("napi");
-    const node_api_def = napi_dep.path("build/node_api.def");
 
     const lib_mod = b.createModule(.{
         .root_source_file = options.root,
@@ -81,7 +77,7 @@ pub fn addLib(b: *std.Build, napi_dep: *std.Build.Dependency, options: LibOption
         .root_module = lib_mod,
         .linkage = .dynamic,
     });
-    configureLinkerFlags(b, lib, options.target, node_api_def, options.host_exe, napi_dep);
+    configureLinkerFlags(lib, options.target, napi_dep);
 
     const install = b.addInstallArtifact(lib, .{
         .dest_dir = .{ .override = .lib },
@@ -100,7 +96,7 @@ pub fn addLib(b: *std.Build, napi_dep: *std.Build.Dependency, options: LibOption
             // every addon is filtered out
             const host_only = npmHostOnly(b);
             if (npmSelected(b, options.name)) {
-                addNpmRelease(b, napi_dep, napi_module, options, npm, node_api_def, host_only);
+                addNpmRelease(b, napi_dep, napi_module, options, npm, host_only);
             }
         }
     }
@@ -216,7 +212,6 @@ fn addNpmRelease(
     napi_module: *std.Build.Module,
     options: LibOptions,
     npm: NpmConfig,
-    node_api_def: std.Build.LazyPath,
     host_only: bool,
 ) void {
     const wf = b.addWriteFiles();
@@ -272,7 +267,7 @@ fn addNpmRelease(
             .root_module = lib_mod,
             .linkage = .dynamic,
         });
-        configureLinkerFlags(b, lib, target, node_api_def, options.host_exe, napi_dep);
+        configureLinkerFlags(lib, target, napi_dep);
 
         const node_install = b.addInstallArtifact(lib, .{
             .dest_dir = .{ .override = .{
@@ -326,7 +321,7 @@ fn installIndexJs(
     b.getInstallStep().dependOn(&step.step);
 }
 
-fn configureLinkerFlags(b: *std.Build, lib: *std.Build.Step.Compile, target: std.Build.ResolvedTarget, node_api_def: std.Build.LazyPath, host_exe: []const u8, napi_dep: *std.Build.Dependency) void {
+fn configureLinkerFlags(lib: *std.Build.Step.Compile, target: std.Build.ResolvedTarget, napi_dep: *std.Build.Dependency) void {
     lib.root_module.red_zone = false;
     lib.root_module.unwind_tables = .none;
     // drop unreferenced sections, meaningful saving on small addons.
@@ -342,26 +337,9 @@ fn configureLinkerFlags(b: *std.Build, lib: *std.Build.Step.Compile, target: std
             // no symbol collisions across addons in the same process.
             lib.setVersionScript(napi_dep.path("build/exports.ld"));
         },
-        .windows => {
-            // pe/coff needs all symbols resolved at link time. generate
-            // an import library from node_api.def so the linker knows the
-            // n-api symbols come from the host exe at runtime.
-            const machine = switch (target.result.cpu.arch) {
-                .x86_64 => "i386:x86-64",
-                .aarch64 => "arm64",
-                else => @panic("unsupported Windows architecture for Node.js addon"),
-            };
-            const dlltool = b.addSystemCommand(&.{ b.graph.zig_exe, "dlltool" });
-            dlltool.addArg("-d");
-            dlltool.addFileArg(node_api_def);
-            dlltool.addArg("-D");
-            dlltool.addArg(host_exe);
-            dlltool.addArg("-m");
-            dlltool.addArg(machine);
-            dlltool.addArg("-l");
-            const node_lib = dlltool.addOutputFileArg("node.lib");
-            lib.root_module.addObjectFile(node_lib);
-        },
+        // windows needs no import library: n-api symbols are satisfied by
+        // trampolines (src/win_napi.zig) resolved at load time from the
+        // host executable, whatever its name (node, bun, deno, electron).
         else => {},
     }
 }
