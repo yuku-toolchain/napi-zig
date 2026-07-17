@@ -7,7 +7,13 @@ import { createHash, randomBytes } from "node:crypto";
 // by a relative path in build.zig.zon, and on windows CI the system temp dir
 // sits on a different drive (C:) than the checkout (D:), where no relative
 // path exists.
-const tempRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", ".zig-cache", "test-tmp");
+const tempRoot = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+  ".zig-cache",
+  "test-tmp",
+);
 
 export function tempDir(): string {
   const dir = join(tempRoot, "napi-zig-test-" + randomBytes(8).toString("hex"));

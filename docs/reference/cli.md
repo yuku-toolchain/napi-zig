@@ -53,16 +53,16 @@ zig-out/lib/
 
 The CLI also drops a top-level `my-addon.js` re-exporter so the import path matches what users will see after publish.
 
-With `--release`, cross-compiles every platform listed in `.npm.platforms` and lays out the full `npm/` package tree. See [Cross-compiling](/cross-compiling).
+With `--release`, cross-compiles every platform listed in `.npm.platforms` and lays out the full `bindings/` package tree. See [Cross-compiling](/cross-compiling).
 
-| Option           | Default | Description                                                 |
-| ---------------- | ------- | ----------------------------------------------------------- |
-| `--release`      |         | Cross-compile every platform and reconcile the `npm/` tree. |
-| `--only <names>` | all     | Comma-separated addon `.name`s to build (with `--release`). |
-| `--current`      |         | Build only the host platform's binding (with `--release`).  |
-| `--optimize <m>` | `fast`  | Release optimization: `safe`, `fast`, or `small`.           |
+| Option           | Default | Description                                                      |
+| ---------------- | ------- | ---------------------------------------------------------------- |
+| `--release`      |         | Cross-compile every platform and reconcile the `bindings/` tree. |
+| `--only <names>` | all     | Comma-separated addon `.name`s to build (with `--release`).      |
+| `--current`      |         | Build only the host platform's binding (with `--release`).       |
+| `--optimize <m>` | `fast`  | Release optimization: `safe`, `fast`, or `small`.                |
 
-`--only` and `--current` speed up local iteration; both are additive and leave the rest of `npm/` untouched. See [Building a subset](/cross-compiling#building-a-subset).
+`--only` and `--current` speed up local iteration; both are additive and leave the rest of `bindings/` untouched. See [Building a subset](/cross-compiling#building-a-subset).
 
 ## `napi-zig bump`
 
@@ -88,7 +88,7 @@ The push triggers your tag-based CI workflow.
 napi-zig publish [options]
 ```
 
-For each package in `npm/`, runs `npm publish --access public`. Designed to be run in CI after `napi-zig build --release`.
+For each package in `bindings/`, runs `npm publish --access public`. Designed to be run in CI after `napi-zig build --release`.
 
 | Option            | Default    | Description                      |
 | ----------------- | ---------- | -------------------------------- |

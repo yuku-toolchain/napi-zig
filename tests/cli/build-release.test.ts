@@ -27,17 +27,17 @@ function listAllFiles(root: string): string[] {
 }
 
 describe("napi-zig build --release", () => {
-  test("produces the expected npm scaffolding", async () => {
+  test("produces the expected bindings scaffolding", async () => {
     const dir = stageCliFixture();
     cleanup.push(dir);
 
     await withCwd(dir, () => buildRelease("fast"));
 
-    expect(fileExists(join(dir, "npm", "fcli", "package.json"))).toBe(true);
-    expect(fileExists(join(dir, "npm", "fcli", "index.js"))).toBe(true);
-    expect(fileExists(join(dir, "npm", "fcli", "binding.js"))).toBe(true);
+    expect(fileExists(join(dir, "bindings", "fcli", "package.json"))).toBe(true);
+    expect(fileExists(join(dir, "bindings", "fcli", "index.js"))).toBe(true);
+    expect(fileExists(join(dir, "bindings", "fcli", "binding.js"))).toBe(true);
 
-    const bindingDir = join(dir, "npm", "fcli", "@fixture", "binding-darwin-arm64");
+    const bindingDir = join(dir, "bindings", "fcli", "@fixture", "binding-darwin-arm64");
     expect(fileExists(join(bindingDir, "package.json"))).toBe(true);
     expect(fileExists(join(bindingDir, "fcli.node"))).toBe(true);
   }, 120_000);
@@ -48,7 +48,7 @@ describe("napi-zig build --release", () => {
 
     await withCwd(dir, () => buildRelease("fast"));
 
-    const main = readJson(join(dir, "npm", "fcli", "package.json"));
+    const main = readJson(join(dir, "bindings", "fcli", "package.json"));
     expect(main.name).toBe("fcli");
     expect(main.type).toBe("module");
     expect(main.main).toBe("index.js");
@@ -77,7 +77,7 @@ describe("napi-zig build --release", () => {
 
     await withCwd(dir, () => buildRelease("fast"));
 
-    const binding = readFileSync(join(dir, "npm", "fcli", "binding.js"), "utf-8");
+    const binding = readFileSync(join(dir, "bindings", "fcli", "binding.js"), "utf-8");
     expect(binding).toContain("isMusl");
     expect(binding).toContain("@fixture");
     expect(binding).toContain("fcli.node");
@@ -90,7 +90,7 @@ describe("napi-zig build --release", () => {
     await withCwd(dir, () => buildRelease("fast"));
 
     const pkg = readJson(
-      join(dir, "npm", "fcli", "@fixture", "binding-darwin-arm64", "package.json"),
+      join(dir, "bindings", "fcli", "@fixture", "binding-darwin-arm64", "package.json"),
     );
     expect(pkg.name).toBe("@fixture/binding-darwin-arm64");
     expect(pkg.os).toEqual(["darwin"]);
@@ -103,20 +103,20 @@ describe("napi-zig build --release", () => {
     cleanup.push(dir);
 
     await withCwd(dir, () => buildRelease("fast"));
-    const npmRoot = join(dir, "npm");
-    const initial = listAllFiles(npmRoot);
+    const bindingsRoot = join(dir, "bindings");
+    const initial = listAllFiles(bindingsRoot);
     const initialHashes: Record<string, string> = {};
-    for (const f of initial) initialHashes[f] = sha256(join(npmRoot, f));
+    for (const f of initial) initialHashes[f] = sha256(join(bindingsRoot, f));
 
     await new Promise((r) => setTimeout(r, 50));
 
     await withCwd(dir, () => buildRelease("fast"));
 
-    const second = listAllFiles(npmRoot);
+    const second = listAllFiles(bindingsRoot);
     expect(second).toEqual(initial);
 
     for (const f of initial) {
-      const newHash = sha256(join(npmRoot, f));
+      const newHash = sha256(join(bindingsRoot, f));
       if (f.endsWith(".node")) {
         expect(newHash).toBeDefined();
       } else {
@@ -131,7 +131,7 @@ describe("napi-zig build --release", () => {
 
     await withCwd(dir, () => buildRelease("fast"));
 
-    const pkgPath = join(dir, "npm", "fcli", "package.json");
+    const pkgPath = join(dir, "bindings", "fcli", "package.json");
     const pkg = readJson(pkgPath);
     pkg.description = "user-set description";
     pkg.repository = { type: "git", url: "https://example.com/me" };
@@ -157,7 +157,7 @@ describe("napi-zig build --release", () => {
 
     await withCwd(dir, () => buildRelease("fast"));
 
-    const pkgPath = join(dir, "npm", "fcli", "package.json");
+    const pkgPath = join(dir, "bindings", "fcli", "package.json");
     const pkg = readJson(pkgPath);
     pkg.files = [...pkg.files, "CHANGELOG.md", "assets/"];
     require("node:fs").writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
@@ -180,7 +180,7 @@ describe("napi-zig build --release", () => {
 
     await withCwd(dir, () => buildRelease("fast"));
 
-    const pkgPath = join(dir, "npm", "fcli", "package.json");
+    const pkgPath = join(dir, "bindings", "fcli", "package.json");
     const pkg = readJson(pkgPath);
     pkg.files = ["CHANGELOG.md"];
     require("node:fs").writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
@@ -200,7 +200,7 @@ describe("napi-zig build --release", () => {
 
     await withCwd(dir, () => buildRelease("fast"));
 
-    const indexPath = join(dir, "npm", "fcli", "index.js");
+    const indexPath = join(dir, "bindings", "fcli", "index.js");
     const customIndex =
       "// user wrapper\nimport binding from './binding.js';\nexport default { ...binding, hello: () => 'world' };\n";
     require("node:fs").writeFileSync(indexPath, customIndex);
@@ -217,7 +217,7 @@ describe("napi-zig build --release", () => {
     await withCwd(dir, () => buildRelease("fast"));
 
     // Pretend the user got further along: bumped the version, edited the scope.
-    const mainPath = join(dir, "npm", "fcli", "package.json");
+    const mainPath = join(dir, "bindings", "fcli", "package.json");
     const main = readJson(mainPath);
     main.version = "1.4.2";
     for (const k of Object.keys(main.optionalDependencies)) {
@@ -242,8 +242,8 @@ describe("napi-zig build --release", () => {
     expect(Object.values(after.optionalDependencies).every((v) => v === "1.4.2")).toBe(true);
 
     // Old scope dir is gone, new one has the bindings.
-    const oldScopeDir = join(dir, "npm", "fcli", "@fixture");
-    const newScopeDir = join(dir, "npm", "fcli", "@renamed");
+    const oldScopeDir = join(dir, "bindings", "fcli", "@fixture");
+    const newScopeDir = join(dir, "bindings", "fcli", "@renamed");
     expect(require("node:fs").existsSync(oldScopeDir)).toBe(false);
     expect(require("node:fs").existsSync(newScopeDir)).toBe(true);
 
@@ -259,7 +259,7 @@ describe("napi-zig build --release", () => {
 
     await withCwd(dir, () => buildRelease("fast"));
 
-    const dropped = join(dir, "npm", "fcli", "@fixture", "binding-freebsd-x64");
+    const dropped = join(dir, "bindings", "fcli", "@fixture", "binding-freebsd-x64");
     expect(require("node:fs").existsSync(dropped)).toBe(true);
 
     const buildZigPath = join(dir, "build.zig");
@@ -273,7 +273,7 @@ describe("napi-zig build --release", () => {
     await withCwd(dir, () => buildRelease("fast"));
 
     expect(require("node:fs").existsSync(dropped)).toBe(false);
-    const main = readJson(join(dir, "npm", "fcli", "package.json"));
+    const main = readJson(join(dir, "bindings", "fcli", "package.json"));
     expect(main.optionalDependencies["@fixture/binding-freebsd-x64"]).toBeUndefined();
   }, 240_000);
 
@@ -283,7 +283,7 @@ describe("napi-zig build --release", () => {
 
     await withCwd(dir, () => buildRelease("fast"));
 
-    const bindingPath = join(dir, "npm", "fcli", "binding.js");
+    const bindingPath = join(dir, "bindings", "fcli", "binding.js");
     const original = readFileSync(bindingPath, "utf-8");
     require("node:fs").writeFileSync(bindingPath, "// stale junk\n");
 

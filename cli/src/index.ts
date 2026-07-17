@@ -20,7 +20,7 @@ cli
 
 cli
   .command("build", "Build for current platform")
-  .option("--release", "Cross-compile all platforms and sync npm folder")
+  .option("--release", "Cross-compile all platforms and sync bindings folder")
   .option("--only <names>", "Comma-separated addon names to build (with --release)")
   .option("--current", "Build only the host platform's binding (with --release)")
   .option("--optimize <mode>", "Optimization: safe, fast, small (default: fast with --release)")

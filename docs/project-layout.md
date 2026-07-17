@@ -46,7 +46,7 @@ zig-out/lib/
 ## After `napi-zig build --release`
 
 ```
-npm/<name>/
+bindings/<name>/
 ├── package.json
 ├── index.js               # your seam over the addon
 ├── binding.js             # platform detection + dynamic require
@@ -57,9 +57,9 @@ npm/<name>/
         └── <name>.node
 ```
 
-This is the publishable tree. `napi-zig publish` ships every directory under `npm/` to npm. The tree is reconciled on every release build: policy fields come from `build.zig`, your version and user-edited fields are preserved. See [Cross-compiling](/cross-compiling#what-every-release-build-does) for the full rules.
+This is the publishable tree. `napi-zig publish` ships every directory under `bindings/` to npm. The tree is reconciled on every release build: policy fields come from `build.zig`, your version and user-edited fields are preserved. See [Cross-compiling](/cross-compiling#what-every-release-build-does) for the full rules.
 
-If `build.zig` calls `addLib` more than once, each addon gets its own `npm/<name>/` subtree alongside the others. See [Multiple addons in one repo](/publishing#multiple-addons-in-one-repo).
+If `build.zig` calls `addLib` more than once, each addon gets its own `bindings/<name>/` subtree alongside the others. See [Multiple addons in one repo](/publishing#multiple-addons-in-one-repo).
 
 ## Where to put your code
 
@@ -69,4 +69,4 @@ If `build.zig` calls `addLib` more than once, each addon gets its own `npm/<name
 
 ## Generated and ignored
 
-Exclude everything derived from version control: `node_modules`, `zig-out`, `.zig-cache`, `zig-pkg`, and the project-root `<name>.js` / `<name>.d.ts` re-exporters. (`napi-zig new` writes a `.gitignore` with all of these; if you set up by hand, see [Manual setup, step 5](/manual-setup#_5-add-a-gitignore).) Commit `npm/` once you start publishing. Every release build keeps it in sync with `build.zig` automatically.
+Exclude everything derived from version control: `node_modules`, `zig-out`, `.zig-cache`, `zig-pkg`, and the project-root `<name>.js` / `<name>.d.ts` re-exporters. (`napi-zig new` writes a `.gitignore` with all of these; if you set up by hand, see [Manual setup, step 5](/manual-setup#_5-add-a-gitignore).) Commit `bindings/` once you start publishing. Every release build keeps it in sync with `build.zig` automatically.

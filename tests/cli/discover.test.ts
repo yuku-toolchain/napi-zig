@@ -20,7 +20,7 @@ function setup(files: Record<string, unknown>): string {
 describe("discoverPackages", () => {
   test("finds main package + bindings from optionalDependencies", async () => {
     const root = setup({
-      "npm/myaddon/package.json": {
+      "bindings/myaddon/package.json": {
         name: "myaddon",
         version: "1.0.0",
         optionalDependencies: {
@@ -28,11 +28,11 @@ describe("discoverPackages", () => {
           "@scope/binding-linux-x64-gnu": "1.0.0",
         },
       },
-      "npm/myaddon/@scope/binding-darwin-arm64/package.json": {
+      "bindings/myaddon/@scope/binding-darwin-arm64/package.json": {
         name: "@scope/binding-darwin-arm64",
         version: "1.0.0",
       },
-      "npm/myaddon/@scope/binding-linux-x64-gnu/package.json": {
+      "bindings/myaddon/@scope/binding-linux-x64-gnu/package.json": {
         name: "@scope/binding-linux-x64-gnu",
         version: "1.0.0",
       },
@@ -54,16 +54,16 @@ describe("discoverPackages", () => {
     });
   });
 
-  test("throws when npm/ directory is missing", async () => {
+  test("throws when bindings/ directory is missing", async () => {
     const root = setup({});
     await withCwd(root, () => {
-      expect(() => discoverPackages()).toThrow("npm/ directory not found");
+      expect(() => discoverPackages()).toThrow("bindings/ directory not found");
     });
   });
 
   test("discovers a package without optionalDependencies as an extra", async () => {
     const root = setup({
-      "npm/somewhere/package.json": { name: "somewhere", version: "1.0.0" },
+      "bindings/somewhere/package.json": { name: "somewhere", version: "1.0.0" },
     });
     await withCwd(root, () => {
       const pkgs = discoverPackages();
@@ -75,16 +75,16 @@ describe("discoverPackages", () => {
 
   test("includes extra packages alongside napi-generated ones", async () => {
     const root = setup({
-      "npm/myaddon/package.json": {
+      "bindings/myaddon/package.json": {
         name: "myaddon",
         version: "1.0.0",
         optionalDependencies: { "@scope/binding-darwin-arm64": "1.0.0" },
       },
-      "npm/myaddon/@scope/binding-darwin-arm64/package.json": {
+      "bindings/myaddon/@scope/binding-darwin-arm64/package.json": {
         name: "@scope/binding-darwin-arm64",
         version: "1.0.0",
       },
-      "npm/my-helper/package.json": {
+      "bindings/my-helper/package.json": {
         name: "my-helper",
         version: "1.0.0",
         dependencies: { myaddon: "^1.0.0" },
@@ -97,7 +97,7 @@ describe("discoverPackages", () => {
 
       const extra = pkgs.find((p) => p.kind === "extra");
       expect(extra?.name).toBe("my-helper");
-      expect(extra?.dir.replaceAll("\\", "/").endsWith("/npm/my-helper")).toBe(true);
+      expect(extra?.dir.replaceAll("\\", "/").endsWith("/bindings/my-helper")).toBe(true);
 
       expect(pkgs.filter((p) => p.kind === "main").map((p) => p.name)).toEqual(["myaddon"]);
       expect(pkgs.filter((p) => p.kind === "binding")).toHaveLength(1);
@@ -106,13 +106,13 @@ describe("discoverPackages", () => {
 
   test("skips directories without a usable package.json", async () => {
     const root = setup({
-      "npm/x/package.json": {
+      "bindings/x/package.json": {
         name: "x",
         version: "1.0.0",
         optionalDependencies: { "@s/binding-a": "1.0.0" },
       },
-      "npm/x/@s/binding-a/package.json": { name: "@s/binding-a", version: "1.0.0" },
-      "npm/nameless/package.json": { version: "1.0.0" },
+      "bindings/x/@s/binding-a/package.json": { name: "@s/binding-a", version: "1.0.0" },
+      "bindings/nameless/package.json": { version: "1.0.0" },
     });
     await withCwd(root, () => {
       const pkgs = discoverPackages();
@@ -122,7 +122,7 @@ describe("discoverPackages", () => {
 
   test("ignores binding entries listed in optionalDependencies but missing on disk", async () => {
     const root = setup({
-      "npm/x/package.json": {
+      "bindings/x/package.json": {
         name: "x",
         version: "1.0.0",
         optionalDependencies: {
@@ -130,7 +130,7 @@ describe("discoverPackages", () => {
           "@scope/binding-bar": "1.0.0",
         },
       },
-      "npm/x/@scope/binding-foo/package.json": {
+      "bindings/x/@scope/binding-foo/package.json": {
         name: "@scope/binding-foo",
         version: "1.0.0",
       },
@@ -141,16 +141,16 @@ describe("discoverPackages", () => {
     });
   });
 
-  test("ignores non-directory entries in npm/", async () => {
+  test("ignores non-directory entries in bindings/", async () => {
     const root = setup({
-      "npm/x/package.json": {
+      "bindings/x/package.json": {
         name: "x",
         version: "1.0.0",
         optionalDependencies: { "@s/binding-a": "1.0.0" },
       },
-      "npm/x/@s/binding-a/package.json": { name: "@s/binding-a", version: "1.0.0" },
+      "bindings/x/@s/binding-a/package.json": { name: "@s/binding-a", version: "1.0.0" },
     });
-    writeJsonTree(root, { "npm/.junk": "x" });
+    writeJsonTree(root, { "bindings/.junk": "x" });
     await withCwd(root, () => {
       const pkgs = discoverPackages();
       expect(pkgs).toHaveLength(2);
@@ -161,7 +161,7 @@ describe("discoverPackages", () => {
 describe("updateVersions", () => {
   test("rewrites version on every package + main's optionalDependencies", async () => {
     const root = setup({
-      "npm/x/package.json": {
+      "bindings/x/package.json": {
         name: "x",
         version: "1.0.0",
         optionalDependencies: {
@@ -169,37 +169,37 @@ describe("updateVersions", () => {
           "@s/binding-b": "1.0.0",
         },
       },
-      "npm/x/@s/binding-a/package.json": { name: "@s/binding-a", version: "1.0.0" },
-      "npm/x/@s/binding-b/package.json": { name: "@s/binding-b", version: "1.0.0" },
+      "bindings/x/@s/binding-a/package.json": { name: "@s/binding-a", version: "1.0.0" },
+      "bindings/x/@s/binding-b/package.json": { name: "@s/binding-b", version: "1.0.0" },
     });
 
     await withCwd(root, () => {
       const pkgs = discoverPackages();
       updateVersions(pkgs, "2.5.0");
 
-      const main = readJson(`${root}/npm/x/package.json`);
+      const main = readJson(`${root}/bindings/x/package.json`);
       expect(main.version).toBe("2.5.0");
       expect(main.optionalDependencies["@s/binding-a"]).toBe("2.5.0");
       expect(main.optionalDependencies["@s/binding-b"]).toBe("2.5.0");
 
-      const a = readJson(`${root}/npm/x/@s/binding-a/package.json`);
+      const a = readJson(`${root}/bindings/x/@s/binding-a/package.json`);
       expect(a.version).toBe("2.5.0");
 
-      const b = readJson(`${root}/npm/x/@s/binding-b/package.json`);
+      const b = readJson(`${root}/bindings/x/@s/binding-b/package.json`);
       expect(b.version).toBe("2.5.0");
     });
   });
 
   test("preserves unrelated fields untouched", async () => {
     const root = setup({
-      "npm/x/package.json": {
+      "bindings/x/package.json": {
         name: "x",
         version: "1.0.0",
         description: "should stay",
         license: "MIT",
         optionalDependencies: { "@s/binding-a": "1.0.0" },
       },
-      "npm/x/@s/binding-a/package.json": {
+      "bindings/x/@s/binding-a/package.json": {
         name: "@s/binding-a",
         version: "1.0.0",
         os: ["darwin"],
@@ -210,24 +210,24 @@ describe("updateVersions", () => {
       const pkgs = discoverPackages();
       updateVersions(pkgs, "1.2.3");
 
-      const main = readJson(`${root}/npm/x/package.json`);
+      const main = readJson(`${root}/bindings/x/package.json`);
       expect(main.description).toBe("should stay");
       expect(main.license).toBe("MIT");
 
-      const a = readJson(`${root}/npm/x/@s/binding-a/package.json`);
+      const a = readJson(`${root}/bindings/x/@s/binding-a/package.json`);
       expect(a.os).toEqual(["darwin"]);
     });
   });
 
   test("bumps extra packages but leaves their dependency ranges untouched", async () => {
     const root = setup({
-      "npm/myaddon/package.json": {
+      "bindings/myaddon/package.json": {
         name: "myaddon",
         version: "1.0.0",
         optionalDependencies: { "@s/binding-a": "1.0.0" },
       },
-      "npm/myaddon/@s/binding-a/package.json": { name: "@s/binding-a", version: "1.0.0" },
-      "npm/my-helper/package.json": {
+      "bindings/myaddon/@s/binding-a/package.json": { name: "@s/binding-a", version: "1.0.0" },
+      "bindings/my-helper/package.json": {
         name: "my-helper",
         version: "1.0.0",
         dependencies: { myaddon: "^1.0.0" },
@@ -238,7 +238,7 @@ describe("updateVersions", () => {
       const pkgs = discoverPackages();
       updateVersions(pkgs, "2.0.0");
 
-      const helper = readJson(`${root}/npm/my-helper/package.json`);
+      const helper = readJson(`${root}/bindings/my-helper/package.json`);
       expect(helper.version).toBe("2.0.0");
       expect(helper.dependencies.myaddon).toBe("^1.0.0");
     });

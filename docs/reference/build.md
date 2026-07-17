@@ -2,7 +2,7 @@
 
 `napi_zig.addLib` is the only `build.zig` API you need. It registers your addon as a Zig artifact, applies the right linker flags for each OS, sets up the `.d.ts` install, and (with `-Dnpm=true`) builds the cross-compile graph and generates the npm package skeleton.
 
-You can call it more than once in the same `build.zig` to ship multiple addons from one repo. Each call writes its own `zig-out/lib/<name>.node` and its own `npm/<name>/` tree, and the CLI (`napi-zig build`, `napi-zig build --release`, `napi-zig bump`, `napi-zig publish`, `napi-zig npm-init`) picks up every one. Give each addon its own `.scope`; per-platform binding package names are derived from the scope, so two addons sharing a scope would publish under the same binding names.
+You can call it more than once in the same `build.zig` to ship multiple addons from one repo. Each call writes its own `zig-out/lib/<name>.node` and its own `bindings/<name>/` tree, and the CLI (`napi-zig build`, `napi-zig build --release`, `napi-zig bump`, `napi-zig publish`, `napi-zig npm-init`) picks up every one. Give each addon its own `.scope`; per-platform binding package names are derived from the scope, so two addons sharing a scope would publish under the same binding names.
 
 ```zig
 const std = @import("std");
@@ -118,7 +118,7 @@ Override the default set with:
    - Windows: generates an import library from `node_api.def` so the linker resolves N-API symbols against the host `.exe` at runtime.
 5. Drops red zone, unwind tables, and unreferenced sections (smaller binaries, no surprise symbols).
 6. If `.npm` is set, installs the `.d.ts` next to the binary in the right format.
-7. If both `.npm` is set and `-Dnpm=true` is passed, generates the full cross-compile graph and the `npm/` package tree.
+7. If both `.npm` is set and `-Dnpm=true` is passed, generates the full cross-compile graph and the `bindings/` package tree.
 
 `napi-zig build --release` is exactly `zig build -Dnpm=true -Doptimize=ReleaseFast` with the per-platform target loop applied to every entry in `.npm.platforms`. You can run it directly if you prefer.
 

@@ -248,7 +248,7 @@ export async function bump(options: BumpOptions): Promise<void> {
 
   try {
     const commitSpinner = new Spinner("Committing").start();
-    execFileSync("git", ["add", "npm/"], { stdio: "pipe" });
+    execFileSync("git", ["add", "bindings/"], { stdio: "pipe" });
     execFileSync("git", ["commit", "-m", commitMsg], { stdio: "pipe" });
     commitSpinner.succeed(`Committed: ${c.dim(commitMsg)}`);
 

@@ -24,16 +24,16 @@ export function isExtraPackageDir(dir: string): boolean {
 }
 
 export function discoverPackages(): NpmPackage[] {
-  const npmDir = join(process.cwd(), "npm");
-  if (!existsSync(npmDir)) {
-    throw new Error("npm/ directory not found. Run 'napi-zig build --release' first.");
+  const bindingsDir = join(process.cwd(), "bindings");
+  if (!existsSync(bindingsDir)) {
+    throw new Error("bindings/ directory not found. Run 'napi-zig build --release' first.");
   }
 
   const packages: NpmPackage[] = [];
 
-  for (const entry of readdirSync(npmDir, { withFileTypes: true })) {
+  for (const entry of readdirSync(bindingsDir, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
-    const dir = join(npmDir, entry.name);
+    const dir = join(bindingsDir, entry.name);
     const pkgJsonPath = join(dir, "package.json");
     if (!existsSync(pkgJsonPath)) continue;
 

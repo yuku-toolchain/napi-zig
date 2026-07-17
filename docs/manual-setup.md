@@ -104,7 +104,7 @@ zig-pkg
 /my-addon.d.ts
 ```
 
-Replace `my-addon` with your addon's `.name`. The two project-root files are re-exporters that `napi-zig build` writes so `import addon from "./my-addon.js"` works locally; they are derived artifacts and should not be committed. The `npm/` directory **is** committed once you start publishing; it is the publishable tree, kept in sync with `build.zig` by every release build.
+Replace `my-addon` with your addon's `.name`. The two project-root files are re-exporters that `napi-zig build` writes so `import addon from "./my-addon.js"` works locally; they are derived artifacts and should not be committed. The `bindings/` directory **is** committed once you start publishing; it is the publishable tree, kept in sync with `build.zig` by every release build.
 
 ## 6. Build and use
 
