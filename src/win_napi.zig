@@ -76,8 +76,16 @@ fn trampolines() []const u8 {
     return s;
 }
 
+// called when the host runtime does not export a Node-API symbol the
+// addon uses at runtime. @trap, not @panic: the panic machinery brings
+// std.debug threadlocals into the addon, and zig's aarch64-windows
+// codegen currently miscompiles TLS accesses to variables at a nonzero
+// .tls$ offset (the SECREL high half receives the raw byte offset, so
+// the access lands offset*4096 bytes past the TLS block). keeping
+// napi-zig free of threadlocals keeps SmpAllocator's thread_index at
+// offset 0, where every layout resolves correctly.
 fn missingSymbol() callconv(.c) noreturn {
-    @panic("napi-zig: the host runtime does not export a Node-API symbol required by this addon");
+    @trap();
 }
 
 const HMODULE = std.os.windows.HMODULE;
