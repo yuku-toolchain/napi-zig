@@ -35,9 +35,20 @@ pub const LibOptions = struct {
     /// strip debug info and the symbol table from the addon. defaults
     /// to true for non-debug builds, where it cuts the binary size by
     /// several times on ELF targets. the dynamic symbols Node loads
-    /// through are always kept.
+    /// through are always kept. on aarch64-windows the default is false:
+    /// stripping makes the compiler emit section-relative TLS
+    /// relocations, which zig currently resolves incorrectly for any
+    /// threadlocal at a nonzero offset (the access lands offset*4096
+    /// bytes past the thread's TLS block and corrupts or crashes).
     strip: ?bool = null,
 };
+
+// see the `strip` doc comment. keep symbols on aarch64-windows so TLS
+// relocations stay symbol-relative until the zig codegen bug is fixed.
+fn defaultStrip(target: std.Build.ResolvedTarget, non_debug: bool) bool {
+    if (target.result.os.tag == .windows and target.result.cpu.arch == .aarch64) return false;
+    return non_debug;
+}
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -67,7 +78,7 @@ pub fn addLib(b: *std.Build, napi_dep: *std.Build.Dependency, options: LibOption
         .root_source_file = options.root,
         .target = options.target,
         .optimize = options.optimize,
-        .strip = options.strip orelse (options.optimize != .Debug),
+        .strip = options.strip orelse defaultStrip(options.target, options.optimize != .Debug),
     });
     lib_mod.addImport("napi-zig", napi_module);
     for (options.imports) |imp| lib_mod.addImport(imp.name, imp.module);
@@ -257,7 +268,7 @@ fn addNpmRelease(
             .root_source_file = options.root,
             .target = target,
             .optimize = .ReleaseFast,
-            .strip = options.strip orelse true,
+            .strip = options.strip orelse defaultStrip(target, true),
         });
         lib_mod.addImport("napi-zig", napi_module);
         for (options.imports) |imp| lib_mod.addImport(imp.name, imp.module);
