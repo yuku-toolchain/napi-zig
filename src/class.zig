@@ -141,9 +141,9 @@ fn ConstructorBridge(comptime T: type) type {
 
     return struct {
         fn call(raw_env: c.napi_env, raw_info: c.napi_callback_info) callconv(.c) ?c.napi_value {
-            var arena = std.heap.ArenaAllocator.init(std.heap.smp_allocator);
-            defer arena.deinit();
-            const env: Env = .{ .handle = raw_env, .arena = &arena };
+            const scope = env_mod.callScope(raw_env);
+            defer scope.deinit();
+            const env = scope.env;
 
             var this_val: c.napi_value = undefined;
             var args: std.meta.ArgsTuple(Init) = undefined;
@@ -187,9 +187,9 @@ fn MethodBridge(comptime T: type, comptime method_name: []const u8) type {
 
     return struct {
         fn call(raw_env: c.napi_env, raw_info: c.napi_callback_info) callconv(.c) ?c.napi_value {
-            var arena = std.heap.ArenaAllocator.init(std.heap.smp_allocator);
-            defer arena.deinit();
-            const env: Env = .{ .handle = raw_env, .arena = &arena };
+            const scope = env_mod.callScope(raw_env);
+            defer scope.deinit();
+            const env = scope.env;
 
             var this_val: c.napi_value = undefined;
             var args: std.meta.ArgsTuple(Method) = undefined;
@@ -221,9 +221,9 @@ fn IteratorBridge(comptime T: type) type {
 
     return struct {
         fn symbolIterator(raw_env: c.napi_env, raw_info: c.napi_callback_info) callconv(.c) ?c.napi_value {
-            var arena = std.heap.ArenaAllocator.init(std.heap.smp_allocator);
-            defer arena.deinit();
-            const env: Env = .{ .handle = raw_env, .arena = &arena };
+            const scope = env_mod.callScope(raw_env);
+            defer scope.deinit();
+            const env = scope.env;
             return make(env, raw_info) catch {
                 if (!env.isExceptionPending()) env.throwError("napi-zig: [Symbol.iterator] failed");
                 return null;
@@ -248,9 +248,9 @@ fn IteratorBridge(comptime T: type) type {
         }
 
         fn step(raw_env: c.napi_env, raw_info: c.napi_callback_info) callconv(.c) ?c.napi_value {
-            var arena = std.heap.ArenaAllocator.init(std.heap.smp_allocator);
-            defer arena.deinit();
-            const env: Env = .{ .handle = raw_env, .arena = &arena };
+            const scope = env_mod.callScope(raw_env);
+            defer scope.deinit();
+            const env = scope.env;
 
             var this_val: c.napi_value = undefined;
             if (c.napi_get_cb_info(env.handle, raw_info, null, null, &this_val, null) != .ok) {

@@ -34,9 +34,9 @@ fn ModuleInit(comptime Module: type) type {
             // before any c.* call. no-op elsewhere.
             if (comptime builtin.os.tag == .windows) win_napi.init();
 
-            var arena = std.heap.ArenaAllocator.init(std.heap.smp_allocator);
-            defer arena.deinit();
-            const env: Env = .{ .handle = raw_env, .arena = &arena };
+            const scope = env_mod.callScope(raw_env);
+            defer scope.deinit();
+            const env = scope.env;
 
             registerInto(env, .{ .handle = exports }, Module) catch {
                 if (!env.isExceptionPending()) env.throwError("napi-zig: module init failed");
@@ -99,9 +99,9 @@ fn FnBridge(comptime Module: type, comptime name: []const u8) type {
 
     return struct {
         fn call(raw_env: c.napi_env, raw_info: c.napi_callback_info) callconv(.c) ?c.napi_value {
-            var arena = std.heap.ArenaAllocator.init(std.heap.smp_allocator);
-            defer arena.deinit();
-            const env: Env = .{ .handle = raw_env, .arena = &arena };
+            const scope = env_mod.callScope(raw_env);
+            defer scope.deinit();
+            const env = scope.env;
 
             var args: std.meta.ArgsTuple(Fn) = undefined;
             if (inject_env) args[0] = env;
@@ -116,9 +116,9 @@ fn FnBridge(comptime Module: type, comptime name: []const u8) type {
 fn RawBridge(comptime Module: type, comptime name: []const u8) type {
     return struct {
         fn call(raw_env: c.napi_env, raw_info: c.napi_callback_info) callconv(.c) ?c.napi_value {
-            var arena = std.heap.ArenaAllocator.init(std.heap.smp_allocator);
-            defer arena.deinit();
-            const env: Env = .{ .handle = raw_env, .arena = &arena };
+            const scope = env_mod.callScope(raw_env);
+            defer scope.deinit();
+            const env = scope.env;
 
             const result = @field(Module, name)(env, .{ .handle = raw_info }) catch |e| {
                 if (!env.isExceptionPending()) env.throwError(@errorName(e));

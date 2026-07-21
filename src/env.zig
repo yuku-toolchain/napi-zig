@@ -9,6 +9,51 @@ const Deferred = val_mod.Deferred;
 
 const check = err.check;
 
+// the call arena is per thread and reused across native calls: it is
+// reset (retaining up to `arena_retain_limit` of capacity) when the
+// outermost call on the thread returns, so repeated calls stop paying
+// the backing allocator for every string or slice conversion. nested
+// native calls (js re-entered during a call) share the arena and only
+// the outermost `CallScope.deinit` resets it. an env cleanup hook
+// frees the retained memory when the environment shuts down (worker
+// threads would otherwise leak their retained capacity on exit).
+const arena_retain_limit = 1 << 20;
+
+threadlocal var call_arena: std.heap.ArenaAllocator = undefined;
+threadlocal var call_arena_ready: bool = false;
+threadlocal var call_depth: u32 = 0;
+
+fn freeCallArena(_: ?*anyopaque) callconv(.c) void {
+    if (!call_arena_ready) return;
+    call_arena.deinit();
+    call_arena_ready = false;
+}
+
+/// one native call: `const scope = callScope(raw_env); defer scope.deinit();`.
+/// `scope.env` carries the thread's reused arena.
+pub const CallScope = struct {
+    env: Env,
+
+    pub fn deinit(_: CallScope) void {
+        call_depth -= 1;
+        if (call_depth == 0) {
+            _ = call_arena.reset(.{ .retain_with_limit = arena_retain_limit });
+        }
+    }
+};
+
+pub fn callScope(raw_env: c.napi_env) CallScope {
+    if (!call_arena_ready) {
+        call_arena = std.heap.ArenaAllocator.init(std.heap.smp_allocator);
+        call_arena_ready = true;
+        // arg distinguishes registrations per thread; the hook itself
+        // only touches threadlocals of the env's own thread.
+        _ = c.napi_add_env_cleanup_hook(raw_env, &freeCallArena, @ptrCast(&call_arena));
+    }
+    call_depth += 1;
+    return .{ .env = .{ .handle = raw_env, .arena = &call_arena } };
+}
+
 /// node-api environment handle. carries a per-call arena allocator.
 pub const Env = struct {
     handle: c.napi_env,
@@ -213,9 +258,9 @@ fn WorkerState(comptime T: type) type {
             const state: *Self = @ptrCast(@alignCast(data));
             defer std.heap.smp_allocator.destroy(state);
 
-            var arena = std.heap.ArenaAllocator.init(std.heap.smp_allocator);
-            defer arena.deinit();
-            const env: Env = .{ .handle = raw_env, .arena = &arena };
+            const scope = callScope(raw_env);
+            defer scope.deinit();
+            const env = scope.env;
 
             _ = c.napi_delete_async_work(raw_env, state.work);
 

@@ -104,7 +104,7 @@ fn paramList(comptime params: []const std.builtin.Type.Fn.Param, comptime start:
             if (i > start) out = out ++ ", ";
             const opt = @typeInfo(T) == .optional or
                 (@typeInfo(T) == .@"struct" and isAllDefaults(T));
-            out = out ++ std.fmt.comptimePrint("a{d}", .{i - start}) ++ (if (opt) "?: " else ": ") ++ tsType(T);
+            out = out ++ std.fmt.comptimePrint("a{d}", .{i - start}) ++ (if (opt) "?: " else ": ") ++ tsParamType(T);
         }
         return out;
     }
@@ -118,6 +118,22 @@ fn returnTs(comptime info: std.builtin.Type.Fn) []const u8 {
             else => Return,
         };
         return if (Payload == Val) "unknown" else tsType(Payload);
+    }
+}
+
+/// parameter-position types. `[]const u8` arguments also accept a
+/// Uint8Array (zero-copy bytes), which only makes sense going js→zig,
+/// so return types and struct fields keep the plain mapping.
+fn tsParamType(comptime T: type) []const u8 {
+    comptime {
+        return switch (@typeInfo(T)) {
+            .optional => |opt| tsParamType(opt.child) ++ " | null",
+            .pointer => |info| if (info.size == .slice and info.child == u8)
+                "string | Uint8Array"
+            else
+                tsType(T),
+            else => tsType(T),
+        };
     }
 }
 

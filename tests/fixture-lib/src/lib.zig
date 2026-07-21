@@ -1120,30 +1120,36 @@ pub fn returnSliceWithDeferredFree(env: napi.Env, n: u32, fill: u8) !napi.Val {
     return env.toJs(buf);
 }
 
-// arena introspection: returns true iff the per-call arena has zero
-// backing pages allocated. used by tests to prove the lazy-arena claim
-// and the napi.Val zero-copy escape hatch.
+// arena introspection: returns true iff nothing was allocated on the
+// call arena during this call. the arena is reused across calls with
+// retained capacity, so "untouched" means the bump offset is still at
+// zero, not that no backing pages exist. used by tests to prove the
+// lazy-arena claim and the napi.Val zero-copy escape hatch.
 //
-// these two have the same body but different parameter types: the Val
-// variant should always report empty, the slice variant should always
-// report non-empty (because the bridge has to allocate to copy the
-// utf-8 bytes in).
+// these have the same body but different parameter types: the Val and
+// i32 variants should always report untouched, the slice variant
+// reports touched for string arguments (the bridge copies the utf-8
+// bytes in) and untouched for Uint8Array arguments (borrowed zero-copy).
+fn arenaUntouched(env: napi.Env) bool {
+    return env.arena.state.end_index == 0;
+}
+
 pub fn arenaIsEmptyWithVal(env: napi.Env, _: napi.Val) bool {
-    return env.arena.queryCapacity() == 0;
+    return arenaUntouched(env);
 }
 
 pub fn arenaIsEmptyWithSlice(env: napi.Env, _: []const u8) bool {
-    return env.arena.queryCapacity() == 0;
+    return arenaUntouched(env);
 }
 
 pub fn arenaIsEmptyWithI32(env: napi.Env, _: i32) bool {
-    return env.arena.queryCapacity() == 0;
+    return arenaUntouched(env);
 }
 
 // proves Val.getStringLength does not allocate on the arena.
 pub fn stringLengthZeroAlloc(env: napi.Env, value: napi.Val) !u64 {
     const len = try value.getStringLength(env);
-    if (env.arena.queryCapacity() != 0) return error.ArenaTouched;
+    if (!arenaUntouched(env)) return error.ArenaTouched;
     return len;
 }
 

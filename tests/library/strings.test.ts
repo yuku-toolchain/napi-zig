@@ -53,3 +53,51 @@ describe("strings", () => {
     expect(() => m.roundtripString(null)).toThrow(TypeError);
   });
 });
+
+describe("Uint8Array arguments for []const u8", () => {
+  const enc = new TextEncoder();
+
+  test("encoded bytes round-trip like the equivalent string", () => {
+    expect(m.roundtripString(enc.encode("hello"))).toBe("hello");
+    expect(m.roundtripString(enc.encode(""))).toBe("");
+    expect(m.roundtripString(enc.encode("héllo 世界 🦀"))).toBe("héllo 世界 🦀");
+  });
+
+  test("node Buffers are Uint8Arrays and work too", () => {
+    expect(m.roundtripString(Buffer.from("hello", "utf8"))).toBe("hello");
+  });
+
+  test("byte length matches the typed array length", () => {
+    expect(m.stringByteLength(enc.encode("é"))).toBe(2);
+    expect(m.stringByteLength(new Uint8Array(1000))).toBe(1000);
+  });
+
+  test("subarray views respect byte offset and length", () => {
+    const bytes = enc.encode("xxhelloxx");
+    expect(m.roundtripString(bytes.subarray(2, 7))).toBe("hello");
+  });
+
+  test("mixes with string arguments", () => {
+    expect(m.concatStrings(enc.encode("foo"), "bar")).toBe("foobar");
+  });
+
+  test("throws TypeError on non-u8 typed arrays", () => {
+    expect(() => m.roundtripString(new Int32Array(4))).toThrow(TypeError);
+    expect(() => m.roundtripString(new Float64Array(4))).toThrow(TypeError);
+  });
+
+  test("large payloads round-trip", () => {
+    const big = "a".repeat(1_000_000);
+    expect(m.roundtripString(enc.encode(big))).toBe(big);
+  });
+});
+
+describe("strings above the single-pass conversion threshold", () => {
+  // > 2^20 utf-16 units falls back to the exact two-pass conversion
+  test("multibyte content round-trips through the exact path", () => {
+    const n = (1 << 20) + 5;
+    const big = "é".repeat(n);
+    expect(m.stringByteLength(big)).toBe(n * 2);
+    expect(m.roundtripString(big)).toBe(big);
+  });
+});

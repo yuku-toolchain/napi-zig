@@ -11,6 +11,7 @@ const _b: boolean = m.roundtripBool(true);
 const _i: number = m.roundtripI32(42);
 const _l: bigint = m.roundtripI64(123n);
 const _s: string = m.roundtripString("hi");
+const _sb: string = m.roundtripString(new Uint8Array([104, 105]));
 
 // optional
 const _o1: number | null = m.roundtripOptionalI32(null);
@@ -54,6 +55,7 @@ void _b;
 void _i;
 void _l;
 void _s;
+void _sb;
 void _o1;
 void _o2;
 void _opt;

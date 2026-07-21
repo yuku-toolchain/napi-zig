@@ -34,6 +34,13 @@ describe("primitive function signatures", () => {
   test("void return type", () => {
     expect(dts).toContain("export function returnsVoid(): void;");
   });
+
+  test("[]const u8 params accept string | Uint8Array, returns stay string", () => {
+    expect(dts).toContain("export function roundtripString(a0: string | Uint8Array): string;");
+    expect(dts).toContain(
+      "export function concatStrings(a0: string | Uint8Array, a1: string | Uint8Array): string;",
+    );
+  });
 });
 
 describe("constants", () => {
@@ -105,7 +112,7 @@ describe("classes", () => {
 
   test("Greeter constructor params start at a0 (Env is dropped)", () => {
     expect(dts).toContain("export class Greeter {");
-    expect(dts).toContain("constructor(a0: string);");
+    expect(dts).toContain("constructor(a0: string | Uint8Array);");
     expect(dts).toContain("greet(): string;");
   });
 

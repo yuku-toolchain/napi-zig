@@ -18,10 +18,19 @@ describe("the per-call arena is lazy", () => {
     expect(m.arenaIsEmptyWithVal(null)).toBe(true);
   });
 
-  test("a []const u8 parameter triggers an arena alloc", () => {
+  test("a string passed to []const u8 triggers an arena alloc", () => {
     expect(m.arenaIsEmptyWithSlice("hello")).toBe(false);
-    expect(m.arenaIsEmptyWithSlice("")).toBe(false);
     expect(m.arenaIsEmptyWithSlice("a".repeat(10_000))).toBe(false);
+  });
+
+  test("an empty string passed to []const u8 does not allocate", () => {
+    expect(m.arenaIsEmptyWithSlice("")).toBe(true);
+  });
+
+  test("a Uint8Array passed to []const u8 is borrowed zero-copy", () => {
+    expect(m.arenaIsEmptyWithSlice(new TextEncoder().encode("hello"))).toBe(true);
+    expect(m.arenaIsEmptyWithSlice(new Uint8Array(10_000))).toBe(true);
+    expect(m.arenaIsEmptyWithSlice(new Uint8Array(0))).toBe(true);
   });
 
   test("Val.getStringLength returns the UTF-8 byte length without allocating", () => {

@@ -143,6 +143,7 @@ pub extern fn napi_get_element(env: napi_env, object: napi_value, index: u32, re
 pub extern fn napi_create_string_utf8(env: napi_env, str: [*]const u8, length: usize, result: *napi_value) napi_status;
 pub extern fn napi_create_string_latin1(env: napi_env, str: [*]const u8, length: usize, result: *napi_value) napi_status;
 pub extern fn napi_get_value_string_utf8(env: napi_env, value: napi_value, buf: ?[*]u8, bufsize: usize, result: ?*usize) napi_status;
+pub extern fn napi_get_value_string_utf16(env: napi_env, value: napi_value, buf: ?[*]u16, bufsize: usize, result: ?*usize) napi_status;
 
 // numbers
 pub extern fn napi_create_int32(env: napi_env, value: i32, result: *napi_value) napi_status;
@@ -224,6 +225,10 @@ pub extern fn napi_get_value_external(env: napi_env, value: napi_value, result: 
 // instance data (per-addon-load module state)
 pub extern fn napi_set_instance_data(env: napi_env, data: ?*anyopaque, finalize_cb: ?napi_finalize, finalize_hint: ?*anyopaque) napi_status;
 pub extern fn napi_get_instance_data(env: napi_env, data: *?*anyopaque) napi_status;
+
+// environment lifecycle
+pub extern fn napi_add_env_cleanup_hook(env: napi_env, fun: *const fn (?*anyopaque) callconv(.c) void, arg: ?*anyopaque) napi_status;
+pub extern fn napi_remove_env_cleanup_hook(env: napi_env, fun: *const fn (?*anyopaque) callconv(.c) void, arg: ?*anyopaque) napi_status;
 
 // version / runtime
 pub extern fn napi_get_version(env: napi_env, result: *u32) napi_status;

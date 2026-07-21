@@ -154,7 +154,7 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
         },
 
         .pointer => |info| {
-            if (info.size == .slice and info.child == u8) return readString(env, value);
+            if (info.size == .slice and info.child == u8) return readBytes(env, value);
             if (info.size == .slice) {
                 var len: u32 = undefined;
                 try expect(env, value, c.napi_get_array_length(env.handle, value.handle, &len), "expected array");
@@ -255,11 +255,52 @@ fn readCallback(env: Env, value: Val) !Callback {
     return .{ .val = value };
 }
 
-// probe length, then read. napi_get_value_string_utf8 doesn't distinguish
-// "fit exactly" from "truncated", so a stack fast path can't be correct.
-fn readString(env: Env, value: Val) ![]const u8 {
+/// a `[]const u8` argument accepts either a Uint8Array (including
+/// node Buffers) or a string. typed array bytes are borrowed zero-copy
+/// from the backing store, so large payloads cross the boundary
+/// without a conversion walk; encode with `TextEncoder` on the js side
+/// to take that path. the returned slice is only valid for the
+/// duration of the native call, same as arena-backed conversions.
+fn readBytes(env: Env, value: Val) ![]const u8 {
+    var is_typed_array = false;
+    _ = c.napi_is_typedarray(env.handle, value.handle, &is_typed_array);
+    if (!is_typed_array) return readString(env, value);
+
+    var ty: c.napi_typedarray_type = undefined;
     var len: usize = 0;
-    try expect(env, value, c.napi_get_value_string_utf8(env.handle, value.handle, null, 0, &len), "expected string");
+    var data: ?*anyopaque = null;
+    try check(c.napi_get_typedarray_info(env.handle, value.handle, &ty, &len, &data, null, null));
+    if (ty != .uint8_array) {
+        env.throwTypeError("expected string or Uint8Array");
+        return err.Error.InvalidArg;
+    }
+    if (len == 0) return "";
+    return @as([*]const u8, @ptrCast(data.?))[0..len];
+}
+
+// strings at most this many utf-16 units convert in a single pass into
+// a worst-case (3 bytes per unit) buffer: the utf-16 length probe is
+// O(1), unlike the utf-8 length probe, which walks the string. longer
+// strings fall back to the exact two-pass path so the transient
+// allocation stays proportional.
+const single_pass_max_utf16_len = 1 << 20;
+
+fn readString(env: Env, value: Val) ![]const u8 {
+    var len16: usize = 0;
+    try expect(env, value, c.napi_get_value_string_utf16(env.handle, value.handle, null, 0, &len16), "expected string");
+
+    if (len16 <= single_pass_max_utf16_len) {
+        if (len16 == 0) return "";
+        const buf = try env.allocator().alloc(u8, 3 * len16 + 1);
+        var written: usize = 0;
+        try check(c.napi_get_value_string_utf8(env.handle, value.handle, buf.ptr, buf.len, &written));
+        // return the unused tail to the arena; buf is its most recent allocation
+        _ = env.allocator().resize(buf, written + 1);
+        return buf[0..written];
+    }
+
+    var len: usize = 0;
+    try check(c.napi_get_value_string_utf8(env.handle, value.handle, null, 0, &len));
     const buf = try env.allocator().alloc(u8, len + 1);
     var written: usize = 0;
     try check(c.napi_get_value_string_utf8(env.handle, value.handle, buf.ptr, buf.len, &written));
