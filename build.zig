@@ -403,6 +403,7 @@ fn platformPackageJson(alloc: std.mem.Allocator, name: []const u8, npm: NpmConfi
         \\{{
         \\  "name": "{s}/binding-{s}",
         \\  "version": "0.0.0",
+        \\  "license": "{s}",
         \\  "os": ["{s}"],
         \\  "cpu": ["{s}"],
         \\{s}{s}  "main": "{s}.node",
@@ -412,9 +413,9 @@ fn platformPackageJson(alloc: std.mem.Allocator, name: []const u8, npm: NpmConfi
         \\}}
         \\
     , .{
-        npm.scope,         platform.suffix(), platform.npmOs(),
-        platform.npmCpu(), libc_line,         repo_line,
-        name,              name,
+        npm.scope,         platform.suffix(), npm.license,
+        platform.npmOs(),  platform.npmCpu(),  libc_line,
+        repo_line,         name,               name,
     }) catch "";
 }
 
