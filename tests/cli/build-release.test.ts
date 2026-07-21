@@ -52,6 +52,7 @@ describe("napi-zig build --release", () => {
     expect(main.name).toBe("fcli");
     expect(main.type).toBe("module");
     expect(main.main).toBe("index.js");
+    expect(main.license).toBe("MIT");
     expect(Object.keys(main.optionalDependencies).sort()).toEqual([
       "@fixture/binding-darwin-arm64",
       "@fixture/binding-freebsd-x64",
@@ -93,9 +94,35 @@ describe("napi-zig build --release", () => {
       join(dir, "npm", "fcli", "@fixture", "binding-darwin-arm64", "package.json"),
     );
     expect(pkg.name).toBe("@fixture/binding-darwin-arm64");
+    expect(pkg.license).toBe("MIT");
     expect(pkg.os).toEqual(["darwin"]);
     expect(pkg.cpu).toEqual(["arm64"]);
     expect(pkg.main).toBe("fcli.node");
+  }, 120_000);
+
+  test("custom npm.license is reflected in root and binding package.json", async () => {
+    const dir = stageCliFixture();
+    cleanup.push(dir);
+
+    const buildZigPath = join(dir, "build.zig");
+    const buildZig = readFileSync(buildZigPath, "utf-8");
+    require("node:fs").writeFileSync(
+      buildZigPath,
+      buildZig.replace(
+        `.description = "fixture for cli tests",`,
+        `.description = "fixture for cli tests",\n            .license = "Apache-2.0",`,
+      ),
+    );
+
+    await withCwd(dir, () => buildRelease("fast"));
+
+    const main = readJson(join(dir, "npm", "fcli", "package.json"));
+    expect(main.license).toBe("Apache-2.0");
+
+    const pkg = readJson(
+      join(dir, "npm", "fcli", "@fixture", "binding-darwin-arm64", "package.json"),
+    );
+    expect(pkg.license).toBe("Apache-2.0");
   }, 120_000);
 
   test("subsequent runs are idempotent: byte-identical for all non-.node files", async () => {
