@@ -1,9 +1,11 @@
 import { execFileSync } from "node:child_process";
+import { existsSync, rmSync } from "node:fs";
 import prompts from "prompts";
 import { inc, valid, clean, parse } from "semver";
 import { discoverPackages, updateVersions } from "./npm";
+import { detectPm } from "./pm";
 import { Spinner, banner, blank, bullet, c, done, fail as uiFail, info as uiInfo } from "./ui";
-import { CLI_VERSION, runArgs } from "./utils";
+import { CLI_VERSION, run, runArgs } from "./utils";
 
 type ReleaseType =
   | "major"
@@ -246,9 +248,36 @@ export async function bump(options: BumpOptions): Promise<void> {
   const doTag = options.tag !== false;
   const doPush = options.push !== false;
 
+  // Keep the lockfile in sync with the bumped versions so a checkout of
+  // the release tag installs consistently.
+  const LOCKFILES = ["bun.lock", "bun.lockb", "package-lock.json", "pnpm-lock.yaml", "yarn.lock"];
+  if (LOCKFILES.some((f) => existsSync(f))) {
+    const lockSpinner = new Spinner("Refreshing lockfile").start();
+    try {
+      const pm = await detectPm();
+      if (pm === "bun") {
+        for (const f of ["bun.lock", "bun.lockb"]) if (existsSync(f)) rmSync(f);
+      }
+      await run(`${pm} install`);
+      lockSpinner.succeed("Lockfile refreshed");
+    } catch (e) {
+      lockSpinner.fail("Lockfile refresh failed");
+      uiFail((e as Error).message);
+      process.exit(1);
+    }
+  }
+
   try {
     const commitSpinner = new Spinner("Committing").start();
     execFileSync("git", ["add", "npm/"], { stdio: "pipe" });
+    for (const f of LOCKFILES) {
+      if (!existsSync(f)) continue;
+      try {
+        execFileSync("git", ["add", f], { stdio: "pipe" });
+      } catch {
+        // lockfile is gitignored in this repo, leave it alone
+      }
+    }
     execFileSync("git", ["commit", "-m", commitMsg], { stdio: "pipe" });
     commitSpinner.succeed(`Committed: ${c.dim(commitMsg)}`);
 
