@@ -89,6 +89,7 @@ pub fn addLib(b: *std.Build, napi_dep: *std.Build.Dependency, options: LibOption
         .linkage = .dynamic,
     });
     configureLinkerFlags(lib, options.target, napi_dep);
+    applyLibcFile(b, lib, options.target);
 
     const install = b.addInstallArtifact(lib, .{
         .dest_dir = .{ .override = .lib },
@@ -142,6 +143,30 @@ fn npmHostOnly(b: *std.Build) bool {
         };
     }
     return b.option(bool, "npm-host", "Cross-compile only the host platform") orelse false;
+}
+
+// Zig bundles no bionic libc, so android compiles need explicit libc paths
+// (`zig libc` format): crt objects plus libc/libm/libdl stubs — the Termux
+// host toolchain or the Android NDK provides them. Forwarded per compile via
+// -Dlibc-file because the top-level `zig build --libc` flag does not reach
+// child compilations. Non-android targets keep Zig's bundled libc behavior.
+fn applyLibcFile(b: *std.Build, lib: *std.Build.Step.Compile, target: std.Build.ResolvedTarget) void {
+    if (!target.result.abi.isAndroid()) return;
+    if (libcFilePath(b)) |p| lib.setLibCFile(.{ .cwd_relative = p });
+}
+
+// duplicate-declaration guard like npmFlag, the first addLib call declares the
+// option and later calls read the cached input
+fn libcFilePath(b: *std.Build) ?[]const u8 {
+    if (b.available_options_map.contains("libc-file")) {
+        const opt_ptr = b.user_input_options.getPtr("libc-file") orelse return null;
+        opt_ptr.used = true;
+        return switch (opt_ptr.value) {
+            .scalar => |s| s,
+            else => null,
+        };
+    }
+    return b.option([]const u8, "libc-file", "libc paths file applied to android addon compiles (see `zig libc`)");
 }
 
 fn npmSelected(b: *std.Build, name: []const u8) bool {
@@ -279,6 +304,7 @@ fn addNpmRelease(
             .linkage = .dynamic,
         });
         configureLinkerFlags(lib, target, napi_dep);
+        applyLibcFile(b, lib, target);
 
         const node_install = b.addInstallArtifact(lib, .{
             .dest_dir = .{ .override = .{
