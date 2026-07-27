@@ -371,6 +371,7 @@ function detectExpectedTargets(): string[] {
     "win32-x64",
     "win32-arm64",
     "freebsd-x64",
+    "android-arm64",
   ];
 }
 

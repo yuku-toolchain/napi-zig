@@ -12,6 +12,7 @@ pub const Platform = enum {
     windows_x64,
     windows_arm64,
     freebsd_x64,
+    android_arm64,
 
     pub const defaults: []const Platform = &.{
         .linux_x64_gnu,
@@ -25,6 +26,7 @@ pub const Platform = enum {
         .windows_x64,
         .windows_arm64,
         .freebsd_x64,
+        .android_arm64,
     };
 
     const Info = struct {
@@ -50,6 +52,9 @@ pub const Platform = enum {
             .windows_x64 => .{ .cpu_arch = .x86_64, .os_tag = .windows, .npm_os = "win32", .npm_cpu = "x64", .suffix = "win32-x64" },
             .windows_arm64 => .{ .cpu_arch = .aarch64, .os_tag = .windows, .npm_os = "win32", .npm_cpu = "arm64", .suffix = "win32-arm64" },
             .freebsd_x64 => .{ .cpu_arch = .x86_64, .os_tag = .freebsd, .npm_os = "freebsd", .npm_cpu = "x64", .suffix = "freebsd-x64" },
+            // Termux/Android: node reports process.platform === "android"; bionic
+            // libc, so neither -gnu nor -musl. Zig models it as linux + android ABI.
+            .android_arm64 => .{ .cpu_arch = .aarch64, .os_tag = .linux, .abi = .android, .npm_os = "android", .npm_cpu = "arm64", .suffix = "android-arm64" },
         };
     }
 
@@ -66,6 +71,9 @@ pub const Platform = enum {
             if (i.cpu_arch != t.cpu.arch) continue;
             if (i.os_tag != t.os.tag) continue;
             if (t.os.tag == .linux and i.abi.isMusl() != t.abi.isMusl()) continue;
+            // Android is os_tag .linux with the android ABI; without this check a
+            // bionic host would be misclassified as linux-gnu.
+            if (t.os.tag == .linux and i.abi.isAndroid() != t.abi.isAndroid()) continue;
             return p;
         }
         return null;
