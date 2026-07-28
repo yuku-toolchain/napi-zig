@@ -88,8 +88,7 @@ pub fn addLib(b: *std.Build, napi_dep: *std.Build.Dependency, options: LibOption
         .root_module = lib_mod,
         .linkage = .dynamic,
     });
-    configureLinkerFlags(lib, options.target, napi_dep);
-    applyLibcFile(b, lib, options.target);
+    configureLinkerFlags(b, lib, options.target, napi_dep);
 
     const install = b.addInstallArtifact(lib, .{
         .dest_dir = .{ .override = .lib },
@@ -154,12 +153,27 @@ fn npmHostOnly(b: *std.Build) bool {
 // builds on stock GitHub runners. Non-android targets keep Zig's bundled
 // libc behavior.
 fn applyLibcFile(b: *std.Build, lib: *std.Build.Step.Compile, target: std.Build.ResolvedTarget) void {
+    // Read (and thereby declare) the option on every configure so it shows in
+    // `zig build --help` and is accepted on non-android builds; only android
+    // compiles consume it.
+    const explicit = libcFilePath(b);
     if (!target.result.abi.isAndroid()) return;
-    if (libcFilePath(b)) |p| {
+    if (explicit) |p| {
         lib.setLibCFile(.{ .cwd_relative = p });
         return;
     }
-    if (ndkLibcFile(b, target)) |generated| lib.setLibCFile(generated);
+    if (ndkLibcFile(b, target)) |generated| {
+        lib.setLibCFile(generated);
+        return;
+    }
+    // Without libc paths the link fails later with a hint about the top-level
+    // --libc flag, which cannot help here; fail this compile early with the
+    // two remedies that do.
+    const fail = b.addFail(b.fmt(
+        "{s}: android targets need bionic libc paths; pass -Dlibc-file=<file> (see `zig libc`) or set ANDROID_NDK_ROOT to an Android NDK install",
+        .{lib.name},
+    ));
+    lib.step.dependOn(&fail.step);
 }
 
 // Synthesizes a `zig libc` paths file from an Android NDK install. Layout
@@ -177,13 +191,22 @@ fn ndkLibcFile(b: *std.Build, target: std.Build.ResolvedTarget) ?std.Build.LazyP
         }
     } else return null;
 
-    // NDK prebuilt host dir; macs ship darwin-x86_64 only (universal binaries).
-    const host = switch (b.graph.host.result.os.tag) {
-        .linux => "linux-x86_64",
-        .macos => "darwin-x86_64",
-        .windows => "windows-x86_64",
-        else => return null,
-    };
+    // An NDK install ships exactly one host dir under toolchains/llvm/prebuilt
+    // (macs get a universal darwin-x86_64); enumerate it instead of hardcoding
+    // host names so unofficial ports (e.g. linux-aarch64 NDK builds used from
+    // Termux) work too.
+    const io = b.graph.io;
+    const prebuilt = b.pathJoin(&.{ ndk, "toolchains", "llvm", "prebuilt" });
+    var prebuilt_dir = std.Io.Dir.openDirAbsolute(io, prebuilt, .{ .iterate = true }) catch return null;
+    defer prebuilt_dir.close(io);
+    var host: ?[]const u8 = null;
+    var it = prebuilt_dir.iterate();
+    while (it.next(io) catch null) |entry| {
+        if (entry.kind == .directory) {
+            host = b.dupe(entry.name);
+            break;
+        }
+    }
     const triple = switch (target.result.cpu.arch) {
         .aarch64 => "aarch64-linux-android",
         .x86_64 => "x86_64-linux-android",
@@ -192,7 +215,7 @@ fn ndkLibcFile(b: *std.Build, target: std.Build.ResolvedTarget) ?std.Build.LazyP
         else => return null,
     };
     const api = target.result.os.version_range.linux.android;
-    const sysroot = b.pathJoin(&.{ ndk, "toolchains", "llvm", "prebuilt", host, "sysroot" });
+    const sysroot = b.pathJoin(&.{ prebuilt, host orelse return null, "sysroot" });
     const content = b.fmt(
         \\include_dir={s}/usr/include
         \\sys_include_dir={s}/usr/include/{s}
@@ -353,8 +376,7 @@ fn addNpmRelease(
             .root_module = lib_mod,
             .linkage = .dynamic,
         });
-        configureLinkerFlags(lib, target, napi_dep);
-        applyLibcFile(b, lib, target);
+        configureLinkerFlags(b, lib, target, napi_dep);
 
         const node_install = b.addInstallArtifact(lib, .{
             .dest_dir = .{ .override = .{
@@ -408,7 +430,8 @@ fn installIndexJs(
     b.getInstallStep().dependOn(&step.step);
 }
 
-fn configureLinkerFlags(lib: *std.Build.Step.Compile, target: std.Build.ResolvedTarget, napi_dep: *std.Build.Dependency) void {
+fn configureLinkerFlags(b: *std.Build, lib: *std.Build.Step.Compile, target: std.Build.ResolvedTarget, napi_dep: *std.Build.Dependency) void {
+    applyLibcFile(b, lib, target);
     lib.root_module.red_zone = false;
     lib.root_module.unwind_tables = .none;
     // drop unreferenced sections, meaningful saving on small addons.
