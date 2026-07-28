@@ -146,13 +146,63 @@ fn npmHostOnly(b: *std.Build) bool {
 }
 
 // Zig bundles no bionic libc, so android compiles need explicit libc paths
-// (`zig libc` format): crt objects plus libc/libm/libdl stubs — the Termux
-// host toolchain or the Android NDK provides them. Forwarded per compile via
-// -Dlibc-file because the top-level `zig build --libc` flag does not reach
-// child compilations. Non-android targets keep Zig's bundled libc behavior.
+// (`zig libc` format): crt objects plus libc/libm/libdl stubs. An explicit
+// -Dlibc-file wins (the top-level `zig build --libc` flag does not reach
+// child compilations, hence the dedicated option); without it, the Android
+// NDK is located through the usual environment variables and a paths file
+// pointing at its sysroot is generated, which is enough for `-Dnpm` release
+// builds on stock GitHub runners. Non-android targets keep Zig's bundled
+// libc behavior.
 fn applyLibcFile(b: *std.Build, lib: *std.Build.Step.Compile, target: std.Build.ResolvedTarget) void {
     if (!target.result.abi.isAndroid()) return;
-    if (libcFilePath(b)) |p| lib.setLibCFile(.{ .cwd_relative = p });
+    if (libcFilePath(b)) |p| {
+        lib.setLibCFile(.{ .cwd_relative = p });
+        return;
+    }
+    if (ndkLibcFile(b, target)) |generated| lib.setLibCFile(generated);
+}
+
+// Synthesizes a `zig libc` paths file from an Android NDK install. Layout
+// (NDK r19+): <ndk>/toolchains/llvm/prebuilt/<host>/sysroot with headers in
+// usr/include (+ a per-triple subdir) and crt objects plus libc/libm/libdl
+// stubs in usr/lib/<triple>/<api>. Returns null when no NDK is advertised in
+// the environment; a wrong NDK path surfaces as a link error naming the
+// missing file, which is actionable enough.
+fn ndkLibcFile(b: *std.Build, target: std.Build.ResolvedTarget) ?std.Build.LazyPath {
+    const ndk = for ([_][]const u8{
+        "ANDROID_NDK_ROOT", "ANDROID_NDK_HOME", "ANDROID_NDK_LATEST_HOME", "ANDROID_NDK",
+    }) |name| {
+        if (b.graph.environ_map.get(name)) |value| {
+            if (value.len != 0) break value;
+        }
+    } else return null;
+
+    // NDK prebuilt host dir; macs ship darwin-x86_64 only (universal binaries).
+    const host = switch (b.graph.host.result.os.tag) {
+        .linux => "linux-x86_64",
+        .macos => "darwin-x86_64",
+        .windows => "windows-x86_64",
+        else => return null,
+    };
+    const triple = switch (target.result.cpu.arch) {
+        .aarch64 => "aarch64-linux-android",
+        .x86_64 => "x86_64-linux-android",
+        .x86 => "i686-linux-android",
+        .arm, .thumb => "arm-linux-androideabi",
+        else => return null,
+    };
+    const api = target.result.os.version_range.linux.android;
+    const sysroot = b.pathJoin(&.{ ndk, "toolchains", "llvm", "prebuilt", host, "sysroot" });
+    const content = b.fmt(
+        \\include_dir={s}/usr/include
+        \\sys_include_dir={s}/usr/include/{s}
+        \\crt_dir={s}/usr/lib/{s}/{d}
+        \\msvc_lib_dir=
+        \\kernel32_lib_dir=
+        \\gcc_dir=
+        \\
+    , .{ sysroot, sysroot, triple, sysroot, triple, api });
+    return b.addWriteFiles().add(b.fmt("libc-{s}-{d}.txt", .{ triple, api }), content);
 }
 
 // duplicate-declaration guard like npmFlag, the first addLib call declares the
