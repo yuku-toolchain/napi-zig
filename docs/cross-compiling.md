@@ -97,14 +97,32 @@ That is already a working entry point. Keep it as-is, or use it for JS-side wrap
 
 If `.platforms` is omitted from `.npm`, you get this set:
 
-| OS      | Architectures   | libc           |
-| ------- | --------------- | -------------- |
-| Linux   | x64, arm64, arm | glibc and musl |
-| macOS   | x64, arm64      | n/a            |
-| Windows | x64, arm64      | n/a            |
-| FreeBSD | x64             | n/a            |
+| OS               | Architectures   | libc           |
+| ---------------- | --------------- | -------------- |
+| Linux            | x64, arm64, arm | glibc and musl |
+| macOS            | x64, arm64      | n/a            |
+| Windows          | x64, arm64      | n/a            |
+| FreeBSD          | x64             | n/a            |
+| Android (Termux) | arm64           | bionic         |
 
-That is 11 binaries from one `napi-zig build --release` call.
+That is 12 binaries from one `napi-zig build --release` call, or 11 on a machine without an Android NDK (see below).
+
+## Android
+
+Android is the one target Zig cannot link on its own. It needs bionic libc, which Zig does not bundle. The build looks for it in two places, in order:
+
+1. `-Dlibc-file=<file>`, a paths file in [`zig libc`](https://ziglang.org/documentation/master/#Zig-cc) format that you point at any bionic sysroot (a Termux prefix works).
+2. An Android NDK, found through `ANDROID_NDK_ROOT`, `ANDROID_NDK_HOME`, `ANDROID_NDK_LATEST_HOME`, or `ANDROID_NDK`. GitHub's hosted Linux and macOS runners set these already, so release CI needs no extra setup.
+
+If neither is available, `android-arm64` is **skipped** and the rest of the platforms build normally:
+
+```
+·  android-arm64  no Android NDK found (set ANDROID_NDK_ROOT) and no -Dlibc-file given
+```
+
+A local build on a laptop with no NDK is therefore still a complete build of everything else, rather than a failed one. The main `package.json` keeps listing `binding-android-arm64` in `optionalDependencies`, so a later build on a machine that does have an NDK fills the gap and publishes a complete release. The same rule applies to [`--current`](#building-a-subset).
+
+The skip only applies when there is something else to build. `.platforms = &.{ .android_arm64 }`, or `--current` on a Termux host, asked for android specifically, so those fail with the missing-libc error instead of quietly producing nothing.
 
 ## Custom platforms
 

@@ -87,25 +87,28 @@ See [TypeScript declarations](/typescript) for what each mode produces.
 
 A tagged enum of every supported (OS, architecture, libc) tuple. Used in `.npm.platforms`. Defaults are exposed as `Platform.defaults`:
 
-| Platform value          | OS      | Arch  | libc  |
-| ----------------------- | ------- | ----- | ----- |
-| `.linux_x64_gnu`        | Linux   | x64   | glibc |
-| `.linux_x64_musl`       | Linux   | x64   | musl  |
-| `.linux_arm64_gnu`      | Linux   | arm64 | glibc |
-| `.linux_arm64_musl`     | Linux   | arm64 | musl  |
-| `.linux_arm_gnueabihf`  | Linux   | arm   | glibc |
-| `.linux_arm_musleabihf` | Linux   | arm   | musl  |
-| `.darwin_x64`           | macOS   | x64   | n/a   |
-| `.darwin_arm64`         | macOS   | arm64 | n/a   |
-| `.win32_x64_msvc`       | Windows | x64   | n/a   |
-| `.win32_arm64_msvc`     | Windows | arm64 | n/a   |
-| `.freebsd_x64`          | FreeBSD | x64   | n/a   |
+| Platform value      | OS               | Arch  | libc   |
+| ------------------- | ---------------- | ----- | ------ |
+| `.linux_x64_gnu`    | Linux            | x64   | glibc  |
+| `.linux_x64_musl`   | Linux            | x64   | musl   |
+| `.linux_arm64_gnu`  | Linux            | arm64 | glibc  |
+| `.linux_arm64_musl` | Linux            | arm64 | musl   |
+| `.linux_arm_gnu`    | Linux            | arm   | glibc  |
+| `.linux_arm_musl`   | Linux            | arm   | musl   |
+| `.macos_x64`        | macOS            | x64   | n/a    |
+| `.macos_arm64`      | macOS            | arm64 | n/a    |
+| `.windows_x64`      | Windows          | x64   | n/a    |
+| `.windows_arm64`    | Windows          | arm64 | n/a    |
+| `.freebsd_x64`      | FreeBSD          | x64   | n/a    |
+| `.android_arm64`    | Android (Termux) | arm64 | bionic |
 
 Override the default set with:
 
 ```zig
-.platforms = &.{ .linux_x64_gnu, .darwin_arm64 },
+.platforms = &.{ .linux_x64_gnu, .macos_arm64 },
 ```
+
+`.android_arm64` needs bionic libc, which Zig does not bundle. See [Android](/cross-compiling#android) for how it is resolved and when it is skipped.
 
 ## What `addLib` does
 
@@ -124,9 +127,10 @@ Override the default set with:
 
 Two build options narrow that loop, set for you by the matching CLI flags:
 
-| Build option      | CLI flag     | Effect                                                        |
-| ----------------- | ------------ | ------------------------------------------------------------- |
-| `-Dnpm-only=a,b`  | `--only a,b` | Only run the npm release for addons whose `.name` is listed.  |
-| `-Dnpm-host=true` | `--current`  | Cross-compile only the host platform instead of `.platforms`. |
+| Build option        | CLI flag     | Effect                                                                    |
+| ------------------- | ------------ | ------------------------------------------------------------------------- |
+| `-Dnpm-only=a,b`    | `--only a,b` | Only run the npm release for addons whose `.name` is listed.              |
+| `-Dnpm-host=true`   | `--current`  | Cross-compile only the host platform instead of `.platforms`.             |
+| `-Dlibc-file=<file>` | n/a         | libc paths (`zig libc` format) for android compiles. See [Android](/cross-compiling#android). |
 
 Under `-Dnpm-host` the main `package.json` still lists every platform in `optionalDependencies`, so a later full build stays complete. See [Building a subset](/cross-compiling#building-a-subset).

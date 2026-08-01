@@ -79,6 +79,45 @@ export function discoverPackages(): NpmPackage[] {
   return packages;
 }
 
+export interface MissingBindings {
+  main: string;
+  missing: string[];
+}
+
+/// Platforms a main package lists in optionalDependencies that have no
+/// binding directory. `discoverPackages` skips those silently, so without
+/// this a release built where a platform was skipped (android with no NDK,
+/// or `--current`) would publish short with nothing said.
+export function findMissingBindings(): MissingBindings[] {
+  const npmDir = join(process.cwd(), "npm");
+  if (!existsSync(npmDir)) return [];
+
+  const out: MissingBindings[] = [];
+  for (const entry of readdirSync(npmDir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const dir = join(npmDir, entry.name);
+    const pkgJsonPath = join(dir, "package.json");
+    if (!existsSync(pkgJsonPath)) continue;
+
+    let pkg: { name?: string; optionalDependencies?: Record<string, string> };
+    try {
+      pkg = JSON.parse(readFileSync(pkgJsonPath, "utf-8")) as typeof pkg;
+    } catch {
+      continue;
+    }
+    if (typeof pkg.name !== "string" || !pkg.optionalDependencies) continue;
+
+    const missing: string[] = [];
+    for (const depName of Object.keys(pkg.optionalDependencies)) {
+      const [scope, bindingName] = depName.split("/");
+      if (!scope || !bindingName) continue;
+      if (!existsSync(join(dir, scope, bindingName, "package.json"))) missing.push(depName);
+    }
+    if (missing.length > 0) out.push({ main: pkg.name, missing });
+  }
+  return out;
+}
+
 export function updateVersions(packages: NpmPackage[], version: string): void {
   for (const pkg of packages) {
     const jsonPath = join(pkg.dir, "package.json");

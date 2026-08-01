@@ -63,6 +63,12 @@ pub const Platform = enum {
         return .{ .cpu_arch = i.cpu_arch, .os_tag = i.os_tag, .abi = i.abi };
     }
 
+    /// android is os_tag .linux with the android ABI, so the os tag alone
+    /// cannot tell the two apart.
+    pub fn isAndroid(self: Platform) bool {
+        return self.info().abi.isAndroid();
+    }
+
     /// Maps a resolved target (usually the build host) to a known Platform,
     /// or null when the host is not in the platform list.
     pub fn fromTarget(t: std.Target) ?Platform {

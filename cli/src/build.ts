@@ -220,18 +220,23 @@ export async function buildRelease(optimize: string, options?: BuildReleaseOptio
   }, 250);
 
   let buildErr: unknown;
+  let buildStderr = "";
   try {
-    await run(cmd);
+    buildStderr = (await run(cmd)).stderr;
   } catch (e) {
     buildErr = e;
   }
   clearInterval(poll);
 
+  // build.zig reports platforms it cannot compile here (android without an
+  // NDK) rather than failing the whole release. Surface the reason.
+  const skipped = parseSkippedTargets(buildStderr);
+
   const built = listBuiltTargets(srcBase);
   for (const t of targets) {
     if (built.has(t)) grid.setState(t, "ok");
     else if (buildErr) grid.setState(t, "fail");
-    else grid.setState(t, "skip", "not generated");
+    else grid.setState(t, "skip", skipped.get(t) ?? "not generated");
   }
 
   if (buildErr) {
@@ -278,7 +283,9 @@ export async function buildRelease(optimize: string, options?: BuildReleaseOptio
 
   const syncList = new TaskList(`Syncing npm packages`, syncTasks, { columns: 1 }).start();
 
-  const notes: string[] = [];
+  // listed here too, because a platform the project has never built is absent
+  // from `targets` and the grid alone would not mention it.
+  const notes: string[] = [...skipped].map(([target, reason]) => `${target} skipped: ${reason}`);
 
   for (const pkgName of generatedPkgs) {
     const srcPkg = join(srcBase, pkgName);
@@ -338,6 +345,20 @@ export async function buildRelease(optimize: string, options?: BuildReleaseOptio
 
   blank();
   done(current ? `Host build complete` : `Cross-compilation complete`);
+}
+
+// `napi-zig: skipping <target>: <reason>` lines emitted by build.zig when a
+// platform cannot be compiled in this environment. std.log prefixes them with
+// "warning: " and the build may repeat them, so match anywhere and dedupe.
+const SKIP_LINE = /napi-zig: skipping ([A-Za-z0-9_-]+): (.+)$/;
+
+function parseSkippedTargets(stderr: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const line of stderr.split("\n")) {
+    const m = SKIP_LINE.exec(line.trim());
+    if (m?.[1] && m[2]) out.set(m[1], m[2].trim());
+  }
+  return out;
 }
 
 function detectExpectedTargets(): string[] {

@@ -7,10 +7,24 @@ const here = dirname(fileURLToPath(import.meta.url));
 const napiRoot = resolve(here, "..", "..");
 const cliFixtureRoot = resolve(here, "..", "fixture-cli");
 
-export function stageCliFixture(): string {
+export interface StageCliFixtureOptions {
+  // Platform enum literals (e.g. ".macos_arm64") replacing the fixture's
+  // `.platforms` list. A short list keeps a test's cross-compile fast.
+  platforms?: string[];
+}
+
+export function stageCliFixture(options?: StageCliFixtureOptions): string {
   const dir = tempDir();
   mkdirSync(join(dir, "src"), { recursive: true });
-  copyFileSync(join(cliFixtureRoot, "build.zig"), join(dir, "build.zig"));
+
+  let buildZig = readFileSync(join(cliFixtureRoot, "build.zig"), "utf-8");
+  if (options?.platforms) {
+    buildZig = buildZig.replace(
+      /\.platforms = &\.\{[^}]*\}/,
+      `.platforms = &.{ ${options.platforms.join(", ")} }`,
+    );
+  }
+  writeFileSync(join(dir, "build.zig"), buildZig);
   copyFileSync(join(cliFixtureRoot, "src", "lib.zig"), join(dir, "src", "lib.zig"));
 
   const realDir = realpathSync(dir);

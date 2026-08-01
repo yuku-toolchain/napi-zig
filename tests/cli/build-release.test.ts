@@ -13,6 +13,25 @@ afterEach(() => {
   cleanup = [];
 });
 
+const NDK_ENV_VARS = [
+  "ANDROID_NDK_ROOT",
+  "ANDROID_NDK_HOME",
+  "ANDROID_NDK_LATEST_HOME",
+  "ANDROID_NDK",
+];
+
+// unsets every variable build.zig looks at for an NDK, returns a restore fn
+function withoutAndroidNdk(): () => void {
+  const saved = NDK_ENV_VARS.map((k) => [k, process.env[k]] as const);
+  for (const k of NDK_ENV_VARS) delete process.env[k];
+  return () => {
+    for (const [k, v] of saved) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  };
+}
+
 function listAllFiles(root: string): string[] {
   const out: string[] = [];
   function walk(dir: string) {
@@ -200,6 +219,29 @@ describe("napi-zig build --release", () => {
     // No duplicates after merge.
     expect(after.files.length).toBe(new Set(after.files).size);
   }, 180_000);
+
+  test("skips android when the machine has no NDK, without failing the build", async () => {
+    const dir = stageCliFixture({ platforms: [".macos_arm64", ".android_arm64"] });
+    cleanup.push(dir);
+
+    // github's ubuntu runners ship an NDK, so the no-NDK case has to be
+    // arranged. the zig build inherits this process's environment.
+    const restoreEnv = withoutAndroidNdk();
+    try {
+      await withCwd(dir, () => buildRelease("fast"));
+    } finally {
+      restoreEnv();
+    }
+
+    const scope = join(dir, "npm", "fcli", "@fixture");
+    expect(fileExists(join(scope, "binding-darwin-arm64", "fcli.node"))).toBe(true);
+    expect(fileExists(join(scope, "binding-android-arm64"))).toBe(false);
+
+    // the platform stays in optionalDependencies so the same build.zig on a
+    // machine that does have an NDK still publishes a complete release.
+    const main = readJson(join(dir, "npm", "fcli", "package.json"));
+    expect(Object.keys(main.optionalDependencies)).toContain("@fixture/binding-android-arm64");
+  }, 120_000);
 
   test("re-adds canonical entries to files if the user removed them", async () => {
     const dir = stageCliFixture();

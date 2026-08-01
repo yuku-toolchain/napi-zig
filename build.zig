@@ -166,9 +166,11 @@ fn applyLibcFile(b: *std.Build, lib: *std.Build.Step.Compile, target: std.Build.
         lib.setLibCFile(generated);
         return;
     }
-    // Without libc paths the link fails later with a hint about the top-level
-    // --libc flag, which cannot help here; fail this compile early with the
-    // two remedies that do.
+    // A full cross build drops android before it gets here (see
+    // buildablePlatforms), so this only fires when android was asked for on
+    // its own. Without libc paths the link fails later with a hint about the
+    // top-level --libc flag, which cannot help here. Fail this compile early
+    // with the two remedies that do.
     const fail = b.addFail(b.fmt(
         "{s}: android targets need bionic libc paths; pass -Dlibc-file=<file> (see `zig libc`) or set ANDROID_NDK_ROOT to an Android NDK install",
         .{lib.name},
@@ -176,13 +178,19 @@ fn applyLibcFile(b: *std.Build, lib: *std.Build.Step.Compile, target: std.Build.
     lib.step.dependOn(&fail.step);
 }
 
-// Synthesizes a `zig libc` paths file from an Android NDK install. Layout
-// (NDK r19+): <ndk>/toolchains/llvm/prebuilt/<host>/sysroot with headers in
-// usr/include (+ a per-triple subdir) and crt objects plus libc/libm/libdl
-// stubs in usr/lib/<triple>/<api>. Returns null when no NDK is advertised in
-// the environment; a wrong NDK path surfaces as a link error naming the
-// missing file, which is actionable enough.
-fn ndkLibcFile(b: *std.Build, target: std.Build.ResolvedTarget) ?std.Build.LazyPath {
+// True when an android compile can find bionic libc paths in this
+// environment, either from an explicit -Dlibc-file or from an NDK the build
+// can read.
+fn androidLibcAvailable(b: *std.Build) bool {
+    if (libcFilePath(b) != null) return true;
+    return ndkSysroot(b) != null;
+}
+
+// Locates the sysroot of an Android NDK advertised in the environment.
+// Layout (NDK r19+): <ndk>/toolchains/llvm/prebuilt/<host>/sysroot. Returns
+// null when no NDK is advertised or the install does not have that layout,
+// which is what makes android skippable rather than fatal.
+fn ndkSysroot(b: *std.Build) ?[]const u8 {
     const ndk = for ([_][]const u8{
         "ANDROID_NDK_ROOT", "ANDROID_NDK_HOME", "ANDROID_NDK_LATEST_HOME", "ANDROID_NDK",
     }) |name| {
@@ -199,14 +207,22 @@ fn ndkLibcFile(b: *std.Build, target: std.Build.ResolvedTarget) ?std.Build.LazyP
     const prebuilt = b.pathJoin(&.{ ndk, "toolchains", "llvm", "prebuilt" });
     var prebuilt_dir = std.Io.Dir.openDirAbsolute(io, prebuilt, .{ .iterate = true }) catch return null;
     defer prebuilt_dir.close(io);
-    var host: ?[]const u8 = null;
     var it = prebuilt_dir.iterate();
     while (it.next(io) catch null) |entry| {
         if (entry.kind == .directory) {
-            host = b.dupe(entry.name);
-            break;
+            return b.pathJoin(&.{ prebuilt, b.dupe(entry.name), "sysroot" });
         }
     }
+    return null;
+}
+
+// Synthesizes a `zig libc` paths file from an Android NDK install: headers in
+// usr/include (+ a per-triple subdir) and crt objects plus libc/libm/libdl
+// stubs in usr/lib/<triple>/<api>. Returns null when no NDK is advertised in
+// the environment; a wrong NDK path surfaces as a link error naming the
+// missing file, which is actionable enough.
+fn ndkLibcFile(b: *std.Build, target: std.Build.ResolvedTarget) ?std.Build.LazyPath {
+    const sysroot = ndkSysroot(b) orelse return null;
     const triple = switch (target.result.cpu.arch) {
         .aarch64 => "aarch64-linux-android",
         .x86_64 => "x86_64-linux-android",
@@ -215,7 +231,6 @@ fn ndkLibcFile(b: *std.Build, target: std.Build.ResolvedTarget) ?std.Build.LazyP
         else => return null,
     };
     const api = target.result.os.version_range.linux.android;
-    const sysroot = b.pathJoin(&.{ prebuilt, host orelse return null, "sysroot" });
     const content = b.fmt(
         \\include_dir={s}/usr/include
         \\sys_include_dir={s}/usr/include/{s}
@@ -240,6 +255,48 @@ fn libcFilePath(b: *std.Build) ?[]const u8 {
         };
     }
     return b.option([]const u8, "libc-file", "libc paths file applied to android addon compiles (see `zig libc`)");
+}
+
+// Why a platform in `.npm.platforms` cannot be compiled here, or null when it
+// can. Everything Zig links on its own is always buildable, so only android,
+// which depends on bionic files this machine may lack, can answer non-null.
+fn skipReason(b: *std.Build, platform: Platform) ?[]const u8 {
+    if (platform.isAndroid() and !androidLibcAvailable(b)) {
+        return "no Android NDK found (set ANDROID_NDK_ROOT) and no -Dlibc-file given";
+    }
+    return null;
+}
+
+// addLib runs once per addon, so without this the same skip would be reported
+// once per addon in a multi-addon repo.
+var skip_warned = std.EnumSet(Platform).initEmpty();
+
+// Drops platforms this machine cannot compile so a full cross build stays
+// usable (11 of 12 platforms beats a failed release build), and warns for each
+// one. When every requested platform is unbuildable the list is returned
+// untouched. Such a build was narrowed to that platform on purpose, so it
+// fails with the actionable message instead of quietly producing nothing.
+fn buildablePlatforms(b: *std.Build, requested: []const Platform) []const Platform {
+    var count: usize = 0;
+    for (requested) |platform| {
+        if (skipReason(b, platform) == null) count += 1;
+    }
+    if (count == requested.len or count == 0) return requested;
+
+    const kept = b.allocator.alloc(Platform, count) catch @panic("OOM");
+    var i: usize = 0;
+    for (requested) |platform| {
+        const reason = skipReason(b, platform) orelse {
+            kept[i] = platform;
+            i += 1;
+            continue;
+        };
+        if (skip_warned.contains(platform)) continue;
+        skip_warned.insert(platform);
+        // the CLI parses this line to label the platform in its target grid
+        std.log.warn("napi-zig: skipping {s}: {s}", .{ platform.suffix(), reason });
+    }
+    return kept;
 }
 
 fn npmSelected(b: *std.Build, name: []const u8) bool {
@@ -336,13 +393,18 @@ fn addNpmRelease(
     );
 
     // host_only compiles just the host binding for fast local iteration
-    const platforms = if (host_only) blk: {
+    const requested = if (host_only) blk: {
         const host = Platform.fromTarget(b.graph.host.result) orelse
             std.debug.panic("napi-zig: host platform is not in the npm platform list; cannot use --current", .{});
         const one = b.allocator.alloc(Platform, 1) catch @panic("OOM");
         one[0] = host;
         break :blk @as([]const Platform, one);
     } else npm.platforms;
+
+    // the main package.json above still lists every platform in
+    // optionalDependencies. only what this machine can compile is scaffolded
+    // and built here.
+    const platforms = buildablePlatforms(b, requested);
 
     for (platforms) |platform| {
         _ = wf.add(
@@ -512,9 +574,9 @@ fn platformPackageJson(alloc: std.mem.Allocator, name: []const u8, npm: NpmConfi
         \\}}
         \\
     , .{
-        npm.scope,         platform.suffix(), npm.license,
-        platform.npmOs(),  platform.npmCpu(),  libc_line,
-        repo_line,         name,               name,
+        npm.scope,        platform.suffix(), npm.license,
+        platform.npmOs(), platform.npmCpu(), libc_line,
+        repo_line,        name,              name,
     }) catch "";
 }
 

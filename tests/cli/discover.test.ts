@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { discoverPackages, updateVersions } from "../../cli/src/npm";
+import { discoverPackages, findMissingBindings, updateVersions } from "../../cli/src/npm";
 import { rmTemp, tempDir, writeJsonTree, readJson } from "../helpers/fs";
 import { withCwd } from "../helpers/withCwd";
 
@@ -154,6 +154,49 @@ describe("discoverPackages", () => {
     await withCwd(root, () => {
       const pkgs = discoverPackages();
       expect(pkgs).toHaveLength(2);
+    });
+  });
+});
+
+describe("findMissingBindings", () => {
+  test("reports optionalDependencies with no binding directory", async () => {
+    const root = setup({
+      "npm/myaddon/package.json": {
+        name: "myaddon",
+        version: "1.0.0",
+        optionalDependencies: {
+          "@scope/binding-darwin-arm64": "1.0.0",
+          "@scope/binding-android-arm64": "1.0.0",
+        },
+      },
+      "npm/myaddon/@scope/binding-darwin-arm64/package.json": {
+        name: "@scope/binding-darwin-arm64",
+        version: "1.0.0",
+      },
+    });
+
+    await withCwd(root, () => {
+      expect(findMissingBindings()).toEqual([
+        { main: "myaddon", missing: ["@scope/binding-android-arm64"] },
+      ]);
+    });
+  });
+
+  test("is empty when every platform was built", async () => {
+    const root = setup({
+      "npm/myaddon/package.json": {
+        name: "myaddon",
+        version: "1.0.0",
+        optionalDependencies: { "@scope/binding-darwin-arm64": "1.0.0" },
+      },
+      "npm/myaddon/@scope/binding-darwin-arm64/package.json": {
+        name: "@scope/binding-darwin-arm64",
+        version: "1.0.0",
+      },
+    });
+
+    await withCwd(root, () => {
+      expect(findMissingBindings()).toEqual([]);
     });
   });
 });

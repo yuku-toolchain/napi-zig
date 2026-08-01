@@ -1,8 +1,18 @@
 import { existsSync, readdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
-import { discoverPackages } from "./npm";
+import { discoverPackages, findMissingBindings } from "./npm";
 import { SUPPORTED_PMS, detectPm, isPm, type Pm } from "./pm";
-import { TaskList, banner, blank, bullet, c, done, fail as uiFail } from "./ui";
+import {
+  TaskList,
+  banner,
+  blank,
+  bullet,
+  c,
+  done,
+  fail as uiFail,
+  note as uiNote,
+  warn as uiWarn,
+} from "./ui";
 import { CLI_VERSION, run } from "./utils";
 
 export interface PublishOptions {
@@ -39,6 +49,18 @@ export async function publish(options: PublishOptions): Promise<void> {
     `Packages      ${c.bold(String(packages.length))}  ${c.gray(`(${breakdown.join(" + ")})`)}`,
   );
   blank();
+
+  // a platform the last build skipped (android with no NDK) or never ran
+  // (--current) is still in optionalDependencies but has nothing to publish.
+  const incomplete = findMissingBindings();
+  for (const { main, missing } of incomplete) {
+    uiWarn(`${main} has no built binding for: ${missing.join(", ")}`);
+  }
+  if (incomplete.length > 0) {
+    uiNote("Listed in optionalDependencies but not built, so they will not be published.");
+    uiNote("Run a full 'napi-zig build --release' on a machine that can build them.");
+    blank();
+  }
 
   const ordered = [...bindings, ...mains, ...extras];
 
