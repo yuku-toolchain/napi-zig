@@ -1131,7 +1131,8 @@ pub fn returnSliceWithDeferredFree(env: napi.Env, n: u32, fill: u8) !napi.Val {
 // reports touched for string arguments (the bridge copies the utf-8
 // bytes in) and untouched for Uint8Array arguments (borrowed zero-copy).
 fn arenaUntouched(env: napi.Env) bool {
-    return env.arena.state.end_index == 0;
+    const node = env.arena.state.used_list orelse return true;
+    return node.end_index == 0;
 }
 
 pub fn arenaIsEmptyWithVal(env: napi.Env, _: napi.Val) bool {
