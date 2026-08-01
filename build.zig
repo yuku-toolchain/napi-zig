@@ -88,7 +88,7 @@ pub fn addLib(b: *std.Build, napi_dep: *std.Build.Dependency, options: LibOption
         .root_module = lib_mod,
         .linkage = .dynamic,
     });
-    configureLinkerFlags(lib, options.target, napi_dep);
+    configureLinkerFlags(b, lib, options.target, napi_dep);
 
     const install = b.addInstallArtifact(lib, .{
         .dest_dir = .{ .override = .lib },
@@ -142,6 +142,104 @@ fn npmHostOnly(b: *std.Build) bool {
         };
     }
     return b.option(bool, "npm-host", "Cross-compile only the host platform") orelse false;
+}
+
+// Zig bundles no bionic libc, so android compiles need explicit libc paths
+// (`zig libc` format): crt objects plus libc/libm/libdl stubs. An explicit
+// -Dlibc-file wins (the top-level `zig build --libc` flag does not reach
+// child compilations, hence the dedicated option); without it, the Android
+// NDK is located through the usual environment variables and a paths file
+// pointing at its sysroot is generated, which is enough for `-Dnpm` release
+// builds on stock GitHub runners. Non-android targets keep Zig's bundled
+// libc behavior.
+fn applyLibcFile(b: *std.Build, lib: *std.Build.Step.Compile, target: std.Build.ResolvedTarget) void {
+    // Read (and thereby declare) the option on every configure so it shows in
+    // `zig build --help` and is accepted on non-android builds; only android
+    // compiles consume it.
+    const explicit = libcFilePath(b);
+    if (!target.result.abi.isAndroid()) return;
+    if (explicit) |p| {
+        lib.setLibCFile(.{ .cwd_relative = p });
+        return;
+    }
+    if (ndkLibcFile(b, target)) |generated| {
+        lib.setLibCFile(generated);
+        return;
+    }
+    // Without libc paths the link fails later with a hint about the top-level
+    // --libc flag, which cannot help here; fail this compile early with the
+    // two remedies that do.
+    const fail = b.addFail(b.fmt(
+        "{s}: android targets need bionic libc paths; pass -Dlibc-file=<file> (see `zig libc`) or set ANDROID_NDK_ROOT to an Android NDK install",
+        .{lib.name},
+    ));
+    lib.step.dependOn(&fail.step);
+}
+
+// Synthesizes a `zig libc` paths file from an Android NDK install. Layout
+// (NDK r19+): <ndk>/toolchains/llvm/prebuilt/<host>/sysroot with headers in
+// usr/include (+ a per-triple subdir) and crt objects plus libc/libm/libdl
+// stubs in usr/lib/<triple>/<api>. Returns null when no NDK is advertised in
+// the environment; a wrong NDK path surfaces as a link error naming the
+// missing file, which is actionable enough.
+fn ndkLibcFile(b: *std.Build, target: std.Build.ResolvedTarget) ?std.Build.LazyPath {
+    const ndk = for ([_][]const u8{
+        "ANDROID_NDK_ROOT", "ANDROID_NDK_HOME", "ANDROID_NDK_LATEST_HOME", "ANDROID_NDK",
+    }) |name| {
+        if (b.graph.environ_map.get(name)) |value| {
+            if (value.len != 0) break value;
+        }
+    } else return null;
+
+    // An NDK install ships exactly one host dir under toolchains/llvm/prebuilt
+    // (macs get a universal darwin-x86_64); enumerate it instead of hardcoding
+    // host names so unofficial ports (e.g. linux-aarch64 NDK builds used from
+    // Termux) work too.
+    const io = b.graph.io;
+    const prebuilt = b.pathJoin(&.{ ndk, "toolchains", "llvm", "prebuilt" });
+    var prebuilt_dir = std.Io.Dir.openDirAbsolute(io, prebuilt, .{ .iterate = true }) catch return null;
+    defer prebuilt_dir.close(io);
+    var host: ?[]const u8 = null;
+    var it = prebuilt_dir.iterate();
+    while (it.next(io) catch null) |entry| {
+        if (entry.kind == .directory) {
+            host = b.dupe(entry.name);
+            break;
+        }
+    }
+    const triple = switch (target.result.cpu.arch) {
+        .aarch64 => "aarch64-linux-android",
+        .x86_64 => "x86_64-linux-android",
+        .x86 => "i686-linux-android",
+        .arm, .thumb => "arm-linux-androideabi",
+        else => return null,
+    };
+    const api = target.result.os.version_range.linux.android;
+    const sysroot = b.pathJoin(&.{ prebuilt, host orelse return null, "sysroot" });
+    const content = b.fmt(
+        \\include_dir={s}/usr/include
+        \\sys_include_dir={s}/usr/include/{s}
+        \\crt_dir={s}/usr/lib/{s}/{d}
+        \\msvc_lib_dir=
+        \\kernel32_lib_dir=
+        \\gcc_dir=
+        \\
+    , .{ sysroot, sysroot, triple, sysroot, triple, api });
+    return b.addWriteFiles().add(b.fmt("libc-{s}-{d}.txt", .{ triple, api }), content);
+}
+
+// duplicate-declaration guard like npmFlag, the first addLib call declares the
+// option and later calls read the cached input
+fn libcFilePath(b: *std.Build) ?[]const u8 {
+    if (b.available_options_map.contains("libc-file")) {
+        const opt_ptr = b.user_input_options.getPtr("libc-file") orelse return null;
+        opt_ptr.used = true;
+        return switch (opt_ptr.value) {
+            .scalar => |s| s,
+            else => null,
+        };
+    }
+    return b.option([]const u8, "libc-file", "libc paths file applied to android addon compiles (see `zig libc`)");
 }
 
 fn npmSelected(b: *std.Build, name: []const u8) bool {
@@ -278,7 +376,7 @@ fn addNpmRelease(
             .root_module = lib_mod,
             .linkage = .dynamic,
         });
-        configureLinkerFlags(lib, target, napi_dep);
+        configureLinkerFlags(b, lib, target, napi_dep);
 
         const node_install = b.addInstallArtifact(lib, .{
             .dest_dir = .{ .override = .{
@@ -332,7 +430,8 @@ fn installIndexJs(
     b.getInstallStep().dependOn(&step.step);
 }
 
-fn configureLinkerFlags(lib: *std.Build.Step.Compile, target: std.Build.ResolvedTarget, napi_dep: *std.Build.Dependency) void {
+fn configureLinkerFlags(b: *std.Build, lib: *std.Build.Step.Compile, target: std.Build.ResolvedTarget, napi_dep: *std.Build.Dependency) void {
+    applyLibcFile(b, lib, target);
     lib.root_module.red_zone = false;
     lib.root_module.unwind_tables = .none;
     // drop unreferenced sections, meaningful saving on small addons.
