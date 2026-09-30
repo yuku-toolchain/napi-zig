@@ -678,7 +678,6 @@ fn bindingJs(alloc: std.mem.Allocator, name: []const u8, scope: []const u8) []co
         \\
         \\let binding;
         \\
-        \\// loads on the first call, so importing this module never throws
         \\export function load() {{
         \\  if (binding === undefined) binding = loadBinding();
         \\  return binding;
