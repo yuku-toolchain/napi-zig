@@ -127,10 +127,10 @@ Override the default set with:
 
 Two build options narrow that loop, set for you by the matching CLI flags:
 
-| Build option        | CLI flag     | Effect                                                                    |
-| ------------------- | ------------ | ------------------------------------------------------------------------- |
-| `-Dnpm-only=a,b`    | `--only a,b` | Only run the npm release for addons whose `.name` is listed.              |
-| `-Dnpm-host=true`   | `--current`  | Cross-compile only the host platform instead of `.platforms`.             |
-| `-Dlibc-file=<file>` | n/a         | libc paths (`zig libc` format) for android compiles. See [Android](/cross-compiling#android). |
+| Build option         | CLI flag     | Effect                                                                                        |
+| -------------------- | ------------ | --------------------------------------------------------------------------------------------- |
+| `-Dnpm-only=a,b`     | `--only a,b` | Only run the npm release for addons whose `.name` is listed.                                  |
+| `-Dnpm-host=true`    | `--current`  | Cross-compile only the host platform instead of `.platforms`.                                 |
+| `-Dlibc-file=<file>` | n/a          | libc paths (`zig libc` format) for android compiles. See [Android](/cross-compiling#android). |
 
 Under `-Dnpm-host` the main `package.json` still lists every platform in `optionalDependencies`, so a later full build stays complete. See [Building a subset](/cross-compiling#building-a-subset).

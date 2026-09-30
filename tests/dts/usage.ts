@@ -1,6 +1,6 @@
 // type-level smoke test. consumes the auto-generated .d.ts under strict
-// tsgo and exercises a representative slice. run via:
-//   tsgo --noEmit -p tests/dts
+// tsc and exercises a representative slice. run via:
+//   tsc --noEmit -p tests/dts
 
 import type * as fx from "../fixture-lib/zig-out/lib/fixture";
 
