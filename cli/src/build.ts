@@ -424,6 +424,37 @@ interface ReconcileResult {
   freshBindings: Set<string>;
 }
 
+// index.js exactly as releases before load() seeded it, so an edited file is never replaced
+const LEGACY_INDEX =
+  /^import binding from '\.\/binding\.js';\n(?:export const \{ [\w$, ]+ \} = binding;\n)?export default binding;\n$/;
+
+const DEFAULT_BINDING_IMPORT = /import\s+[\w$]+\s+from\s+['"]\.\/binding\.js['"]/;
+
+export interface IndexUpdate {
+  /** The content to write, or null to leave index.js as it is. */
+  content: string | null;
+  /** A migration hint for an edited index.js, or null. */
+  note: string | null;
+}
+
+/**
+ * index.js is the user's seam: seeded once, then left alone. The only exceptions are a seed
+ * from before `load`, which is replaced, and an edited file that still imports binding.js's
+ * old default export, which gets a note on how to migrate.
+ */
+export function reconcileIndex(existing: string | null, seed: string): IndexUpdate {
+  if (existing === null || LEGACY_INDEX.test(existing)) return { content: seed, note: null };
+  if (DEFAULT_BINDING_IMPORT.test(existing)) {
+    return {
+      content: null,
+      note:
+        "imports binding.js's default export, which is now a load() function. " +
+        "Use `import { load } from './binding.js'` and `const binding = load()`.",
+    };
+  }
+  return { content: null, note: null };
+}
+
 function reconcilePackage(
   src: string,
   dest: string,
@@ -452,11 +483,13 @@ function reconcilePackage(
     if (existsSync(srcF)) copyFileSync(srcF, join(dest, f));
   }
 
-  // index.js is the user's seam: seed once, then leave it alone.
   const srcIndex = join(src, "index.js");
   const destIndex = join(dest, "index.js");
-  if (!existsSync(destIndex) && existsSync(srcIndex)) {
-    copyFileSync(srcIndex, destIndex);
+  if (existsSync(srcIndex)) {
+    const existing = existsSync(destIndex) ? readFileSync(destIndex, "utf-8") : null;
+    const update = reconcileIndex(existing, readFileSync(srcIndex, "utf-8"));
+    if (update.content !== null) writeFileSync(destIndex, update.content);
+    if (update.note !== null) notes.push(`${relative(process.cwd(), destIndex)}: ${update.note}`);
   }
 
   const newBindings = listBindingDirs(src);

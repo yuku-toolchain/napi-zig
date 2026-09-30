@@ -49,7 +49,7 @@ zig-out/lib/
 npm/<name>/
 ├── package.json
 ├── index.js               # your seam over the addon
-├── binding.js             # platform detection + dynamic require
+├── binding.js             # load(): platform detection + require
 ├── index.d.ts             # types (if .dts is set)
 └── <scope>/
     └── binding-<os>-<arch>[-<libc>]/

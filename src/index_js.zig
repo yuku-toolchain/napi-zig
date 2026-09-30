@@ -1,5 +1,5 @@
-// comptime index.js generator. emits a thin esm wrapper around binding.js
-// that re-exports every js-visible top-level export by name.
+// comptime index.js generator. emits a thin esm wrapper that loads the binding
+// through binding.js and re-exports every js-visible top-level export by name.
 
 const std = @import("std");
 const util = @import("util.zig");
@@ -23,7 +23,7 @@ pub fn generate(comptime Module: type) []const u8 {
             }
         }
 
-        const head = "import binding from './binding.js';\n";
+        const head = "import { load } from './binding.js';\n\nconst binding = load();\n";
         const tail = "export default binding;\n";
         if (first) return head ++ tail;
         return head ++ "export const { " ++ names ++ " } = binding;\n" ++ tail;
@@ -58,7 +58,9 @@ test "generate emits no destructure when module has no exports" {
     const M = struct {};
     const js = comptime generate(M);
     try testing.expectEqualStrings(
-        \\import binding from './binding.js';
+        \\import { load } from './binding.js';
+        \\
+        \\const binding = load();
         \\export default binding;
         \\
     , js);

@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { readFileSync, readdirSync } from "node:fs";
+import { copyFileSync, readFileSync, readdirSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 import { buildRelease } from "../../cli/src/build";
 import { stageCliFixture } from "../helpers/cli-fixture";
-import { fileExists, readJson, rmTemp, sha256 } from "../helpers/fs";
+import { fileExists, readJson, rmTemp, sha256, tempDir } from "../helpers/fs";
 import { withCwd } from "../helpers/withCwd";
 
 let cleanup: string[] = [];
@@ -101,6 +102,22 @@ describe("napi-zig build --release", () => {
     expect(binding).toContain("isMusl");
     expect(binding).toContain("@fixture");
     expect(binding).toContain("fcli.node");
+  }, 120_000);
+
+  test("binding.js imports without loading, and load() reports a missing binding", async () => {
+    const dir = stageCliFixture();
+    cleanup.push(dir);
+
+    await withCwd(dir, () => buildRelease("fast"));
+
+    // a copy outside the package has no binding next to it or in node_modules
+    const lonely = tempDir();
+    cleanup.push(lonely);
+    const copy = join(lonely, "binding.js");
+    copyFileSync(join(dir, "npm", "fcli", "binding.js"), copy);
+
+    const { load } = await import(pathToFileURL(copy).href);
+    expect(() => load()).toThrow(/Failed to load native binding/);
   }, 120_000);
 
   test("platform package.json has correct os/cpu fields", async () => {
@@ -271,12 +288,32 @@ describe("napi-zig build --release", () => {
 
     const indexPath = join(dir, "npm", "fcli", "index.js");
     const customIndex =
-      "// user wrapper\nimport binding from './binding.js';\nexport default { ...binding, hello: () => 'world' };\n";
+      "// user wrapper\nimport { load } from './binding.js';\nexport default { ...load(), hello: () => 'world' };\n";
     require("node:fs").writeFileSync(indexPath, customIndex);
 
     await withCwd(dir, () => buildRelease("fast"));
 
     expect(readFileSync(indexPath, "utf-8")).toBe(customIndex);
+  }, 180_000);
+
+  test("replaces an index.js seeded before binding.js exported load()", async () => {
+    const dir = stageCliFixture();
+    cleanup.push(dir);
+
+    await withCwd(dir, () => buildRelease("fast"));
+
+    const indexPath = join(dir, "npm", "fcli", "index.js");
+    const seed = readFileSync(indexPath, "utf-8");
+    const legacy = seed.replace(
+      "import { load } from './binding.js';\n\nconst binding = load();\n",
+      "import binding from './binding.js';\n",
+    );
+    expect(legacy).not.toBe(seed);
+    require("node:fs").writeFileSync(indexPath, legacy);
+
+    await withCwd(dir, () => buildRelease("fast"));
+
+    expect(readFileSync(indexPath, "utf-8")).toBe(seed);
   }, 180_000);
 
   test("renaming the scope in build.zig migrates bindings on the next rebuild", async () => {

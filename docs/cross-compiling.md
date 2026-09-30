@@ -16,7 +16,7 @@ The first `napi-zig build --release` writes a complete `npm/` tree:
 npm/<name>/
 ├── package.json              # main package
 ├── index.js                  # your seam over the addon
-├── binding.js                # platform detection + dynamic require
+├── binding.js                # load(): platform detection + require
 ├── index.d.ts                # auto-generated or your hand-written file
 └── <scope>/
     ├── binding-darwin-arm64/
@@ -82,16 +82,18 @@ napi-zig build --release --only math --current
 
 ## What `index.js` is for
 
-`binding.js` is fully owned by the build. It implements platform detection and loads the matching `<scope>/binding-…` package. Do not edit it; your changes will be overwritten on the next build.
+`binding.js` is fully owned by the build. It exports `load()`, which detects the platform and loads the matching `<scope>/binding-…` package on its first call, and throws when none can be loaded. Importing `binding.js` never loads anything, so `index.js` decides when to load and what to do when no binding fits, such as falling back to another implementation. Do not edit it; your changes will be overwritten on the next build.
 
-`index.js` is your seam. The default `napi-zig build --release` writes is a plain re-export:
+`index.js` is your seam. The default `napi-zig build --release` writes loads the binding and re-exports it:
 
 ```js
-import binding from "./binding.js";
+import { load } from "./binding.js";
+
+const binding = load();
 export default binding;
 ```
 
-That is already a working entry point. Keep it as-is, or use it for JS-side wrapping, normalization, or higher-level helpers. Edits to `index.js` survive every rebuild.
+That is already a working entry point. Keep it as-is, or use it for JS-side wrapping, normalization, or higher-level helpers. Edits to `index.js` survive every rebuild. An `index.js` seeded by an older release, before `load()`, is replaced with the new seed, and an edited one that still imports `binding.js`'s default export gets a note on how to migrate.
 
 ## Default platforms
 
