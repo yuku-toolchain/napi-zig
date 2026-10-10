@@ -166,7 +166,7 @@ const Options = struct {
 };
 
 pub fn formatOptions(env: napi.Env, opts: Options) ![]const u8 {
-    return std.fmt.allocPrint(env.allocator(), "{s}:{d}:{}", .{
+    return env.allocator().print("{s}:{d}:{}", .{
         opts.file_path, opts.line_count, opts.verbose,
     });
 }
@@ -177,7 +177,7 @@ const Container = struct {
 };
 
 pub fn formatContainer(env: napi.Env, c: Container) ![]const u8 {
-    return std.fmt.allocPrint(env.allocator(), "{s}@{d},{d}", .{
+    return env.allocator().print("{s}@{d},{d}", .{
         c.name, c.point.x, c.point.y,
     });
 }
@@ -190,7 +190,7 @@ const FullStruct = struct {
 };
 
 pub fn formatFullStruct(env: napi.Env, s: FullStruct) ![]const u8 {
-    return std.fmt.allocPrint(env.allocator(), "{s}/{d}/{?s}/{}", .{
+    return env.allocator().print("{s}/{d}/{?s}/{}", .{
         s.name, s.age, s.nick_name, s.is_admin,
     });
 }
@@ -201,7 +201,7 @@ const Settings = struct {
 };
 
 pub fn formatSettings(env: napi.Env, s: Settings) ![]const u8 {
-    return std.fmt.allocPrint(env.allocator(), "{}/{d}", .{ s.debug, s.level });
+    return env.allocator().print("{}/{d}", .{ s.debug, s.level });
 }
 
 // enums
@@ -328,7 +328,7 @@ pub const Greeter = napi.class("Greeter", struct {
     }
 
     pub fn greet(self: *const @This(), env: napi.Env) ![]const u8 {
-        return std.fmt.allocPrint(env.allocator(), "Hello, {s}!", .{self.name});
+        return env.allocator().print("Hello, {s}!", .{self.name});
     }
 
     pub fn deinit(self: *@This()) void {
@@ -377,7 +377,7 @@ pub const Words = napi.class("Words", struct {
 
     pub fn next(self: *@This(), _: napi.Env) !?[]const u8 {
         if (self.pos >= self.text.len) return null;
-        const end = std.mem.indexOfScalarPos(u8, self.text, self.pos, ' ') orelse self.text.len;
+        const end = std.mem.findScalarPos(u8, self.text, self.pos, ' ') orelse self.text.len;
         const word = self.text[self.pos..end];
         self.pos = end + 1;
         return word;
@@ -457,13 +457,13 @@ const CustomPoint = struct {
     y: i32,
 
     pub fn toJs(self: @This(), env: napi.Env) !napi.Val {
-        const s = try std.fmt.allocPrint(env.allocator(), "{d},{d}", .{ self.x, self.y });
+        const s = try env.allocator().print("{d},{d}", .{ self.x, self.y });
         return env.toJs(s);
     }
 
     pub fn fromJs(env: napi.Env, val: napi.Val) !@This() {
         const s = try val.to(env, []const u8);
-        const comma = std.mem.indexOfScalar(u8, s, ',') orelse return error.InvalidFormat;
+        const comma = std.mem.findScalar(u8, s, ',') orelse return error.InvalidFormat;
         return .{
             .x = try std.fmt.parseInt(i32, s[0..comma], 10),
             .y = try std.fmt.parseInt(i32, s[comma + 1 ..], 10),
@@ -818,9 +818,9 @@ const Outer = struct {
 
 pub fn formatOuter(env: napi.Env, o: Outer) ![]const u8 {
     if (o.inner) |inner| {
-        return std.fmt.allocPrint(env.allocator(), "{s}/{?d}/{?s}", .{ o.name, inner.a, inner.b });
+        return env.allocator().print("{s}/{?d}/{?s}", .{ o.name, inner.a, inner.b });
     }
-    return std.fmt.allocPrint(env.allocator(), "{s}/null", .{o.name});
+    return env.allocator().print("{s}/null", .{o.name});
 }
 
 pub fn maybeI32(present: bool) ?i32 {
@@ -898,14 +898,14 @@ pub fn valGetArrayLength(env: napi.Env, arr: napi.Val) !u32 {
 }
 
 pub fn valHasNamedProperty(env: napi.Env, obj: napi.Val, key: []const u8) !bool {
-    const kz = try env.allocator().dupeZ(u8, key);
+    const kz = try env.allocator().dupeSentinel(u8, key, 0);
     return obj.hasNamedProperty(env, kz);
 }
 
 pub fn buildObjectFromKeys(env: napi.Env, keys: []const []const u8, values: []const i32) !napi.Val {
     const obj = try env.createObject();
     for (keys, values) |k, v| {
-        const kz = try env.allocator().dupeZ(u8, k);
+        const kz = try env.allocator().dupeSentinel(u8, k, 0);
         try obj.setNamedProperty(env, kz, try env.toJs(v));
     }
     return obj;
@@ -1019,16 +1019,16 @@ const WithTuple = struct {
 };
 
 pub fn formatWithEnum(env: napi.Env, w: WithEnum) ![]const u8 {
-    return std.fmt.allocPrint(env.allocator(), "{s}/{s}", .{ w.name, @tagName(w.level) });
+    return env.allocator().print("{s}/{s}", .{ w.name, @tagName(w.level) });
 }
 
 pub fn formatWithTuple(env: napi.Env, w: WithTuple) ![]const u8 {
-    return std.fmt.allocPrint(env.allocator(), "{s}/{d},{d}", .{ w.name, w.point[0], w.point[1] });
+    return env.allocator().print("{s}/{d},{d}", .{ w.name, w.point[0], w.point[1] });
 }
 
 pub fn sumLevels(items: []const Level) i32 {
     var total: i32 = 0;
-    for (items) |l| total += @intFromEnum(l);
+    for (items) |l| total += @backingInt(l);
     return total;
 }
 
@@ -1058,7 +1058,7 @@ pub fn usesHidden() i32 {
 //
 // these exercise the doc claim that user `defer` works exactly like in
 // regular zig inside an exported function, and that long-lived allocators
-// (smp_allocator, debug_allocator) can be used alongside the per-call arena.
+// (smp_allocator, SafeAllocator) can be used alongside the per-call arena.
 
 var defer_log: [16]u8 = undefined;
 var defer_log_len: usize = 0;
@@ -1165,21 +1165,18 @@ pub fn readBigIntU64(env: napi.Env, v: napi.Val) !napi.BigIntFit(u64) {
     return v.getBigIntU64(env);
 }
 
-// debug_allocator inside an addon function: alloc, free, then deinit
-// to verify the leak check. returns 0 on Check.ok, 1 on Check.leak.
-// always 0 in this happy-path version, but the `dbg.deinit()` switch
-// proves the user's leak-detection pattern actually runs to completion.
-pub fn debugAllocatorRoundTrip(n: u32) !u8 {
-    var dbg: std.heap.DebugAllocator(.{}) = .init;
-    errdefer _ = dbg.deinit();
+// SafeAllocator inside an addon function: alloc, free, then deinit
+// to verify the leak check. returns 0 when deinit reports no leaks, 1
+// otherwise. always 0 in this happy-path version, but the `deinit()`
+// call proves the user's leak-detection pattern actually runs to completion.
+pub fn safeAllocatorRoundTrip(n: u32) !u8 {
+    var safe: std.heap.SafeAllocator = .init(std.heap.page_allocator, .{});
+    errdefer _ = safe.deinit();
     {
-        const allocator = dbg.allocator();
+        const allocator = safe.allocator();
         const buf = try allocator.alloc(u8, n);
         defer allocator.free(buf);
         @memset(buf, 0xCD);
     }
-    return switch (dbg.deinit()) {
-        .ok => 0,
-        .leak => 1,
-    };
+    return @intFromBool(safe.deinit() != 0);
 }

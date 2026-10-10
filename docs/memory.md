@@ -4,7 +4,7 @@ Every JS-to-Zig call hands you an `Env` carrying an arena allocator. Use `env.al
 
 ```zig
 pub fn process(env: napi.Env, input: []const u8) ![]const u8 {
-    return std.fmt.allocPrint(env.allocator(), "processed: {s}", .{input});
+    return env.allocator().print("processed: {s}", .{input});
 }
 ```
 

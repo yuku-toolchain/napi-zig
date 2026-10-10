@@ -67,7 +67,7 @@ pub const Greeter = napi.class("Greeter", struct {
     }
 
     pub fn say(self: *const @This(), env: napi.Env, name: []const u8) ![]const u8 {
-        return std.fmt.allocPrint(env.allocator(), "{s}, {s}!", .{ self.prefix, name });
+        return env.allocator().print("{s}, {s}!", .{ self.prefix, name });
     }
 
     pub fn deinit(self: *@This()) void {

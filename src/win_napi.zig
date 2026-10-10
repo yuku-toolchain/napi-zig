@@ -15,7 +15,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const c = @import("c.zig");
 
-const emit = builtin.os.tag == .windows and builtin.output_mode == .Lib;
+const emit = builtin.target.os.tag == .windows and builtin.output_mode == .Lib;
 
 const slot_prefix = "__napi_zig_slot_";
 
@@ -24,11 +24,11 @@ const slot_prefix = "__napi_zig_slot_";
 const symbol_names = blk: {
     @setEvalBranchQuota(50_000);
     var names: []const [:0]const u8 = &.{};
-    for (@typeInfo(c).@"struct".decls) |d| {
-        const v = @field(c, d.name);
+    for (@typeInfo(c).@"struct".decl_names) |name| {
+        const v = @field(c, name);
         if (@TypeOf(v) == type) continue;
         if (@typeInfo(@TypeOf(v)) != .@"fn") continue;
-        names = names ++ [_][:0]const u8{d.name};
+        names = names ++ [_][:0]const u8{name};
     }
     break :blk names;
 };
@@ -59,7 +59,7 @@ comptime {
 fn trampolines() []const u8 {
     var s: []const u8 = ".text\n";
     for (symbol_names) |name| {
-        s = s ++ switch (builtin.cpu.arch) {
+        s = s ++ switch (builtin.target.cpu.arch) {
             .x86_64 => ".globl " ++ name ++ "\n" ++
                 ".p2align 4\n" ++
                 name ++ ":\n" ++

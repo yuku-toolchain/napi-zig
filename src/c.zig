@@ -1,5 +1,7 @@
 // raw n-api bindings. hand-translated from node_api.h.
 
+const std = @import("std");
+
 pub const napi_env = *opaque {};
 pub const napi_value = *opaque {};
 pub const napi_ref = *opaque {};
@@ -103,7 +105,7 @@ pub const napi_property_descriptor = extern struct {
     data: ?*anyopaque = null,
 };
 
-pub const NAPI_AUTO_LENGTH: usize = @as(usize, @bitCast(@as(isize, -1)));
+pub const NAPI_AUTO_LENGTH: usize = std.math.maxInt(usize);
 
 // callbacks / arg info
 pub extern fn napi_get_cb_info(env: napi_env, cbinfo: napi_callback_info, argc: ?*usize, argv: ?[*]napi_value, this_arg: ?*napi_value, data: ?*?*anyopaque) napi_status;

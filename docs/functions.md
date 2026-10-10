@@ -34,7 +34,7 @@ Add `env: napi.Env` as the first parameter when you need to allocate, build comp
 
 ```zig
 pub fn greet(env: napi.Env, name: []const u8) ![]const u8 {
-    return std.fmt.allocPrint(env.allocator(), "Hello, {s}!", .{name});
+    return env.allocator().print("Hello, {s}!", .{name});
 }
 ```
 

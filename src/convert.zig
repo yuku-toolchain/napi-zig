@@ -62,15 +62,15 @@ pub fn toJs(comptime T: type, env: Env, value: T) !Val {
             if (T == Val) return value;
             if (@hasDecl(T, "toJs")) return value.toJs(env);
             if (info.is_tuple) {
-                const arr = try env.createArrayWithLength(@intCast(info.fields.len));
-                inline for (info.fields, 0..) |field, i| {
-                    try arr.setElement(env, @intCast(i), try toJs(field.type, env, @field(value, field.name)));
+                const arr = try env.createArrayWithLength(@intCast(info.field_types.len));
+                inline for (info.field_types, 0..) |Field, i| {
+                    try arr.setElement(env, @intCast(i), try toJs(Field, env, value[i]));
                 }
                 return arr;
             }
             const obj = try env.createObject();
-            inline for (info.fields) |field| {
-                try obj.setNamedProperty(env, comptime util.snakeToCamel(field.name), try toJs(field.type, env, @field(value, field.name)));
+            inline for (info.field_names, info.field_types) |name, Field| {
+                try obj.setNamedProperty(env, comptime util.snakeToCamel(name), try toJs(Field, env, @field(value, name)));
             }
             return obj;
         },
@@ -142,13 +142,13 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
             var n: usize = 0;
             try expect(env, value, c.napi_get_value_string_utf8(env.handle, value.handle, &stack, stack.len, &n), "expected string");
             const str = stack[0..n];
-            inline for (info.fields) |field| {
-                if (std.mem.eql(u8, str, comptime util.snakeToCamel(field.name)) or std.mem.eql(u8, str, field.name)) {
-                    return @enumFromInt(field.value);
+            inline for (info.field_names) |name| {
+                if (std.mem.eql(u8, str, comptime util.snakeToCamel(name)) or std.mem.eql(u8, str, name)) {
+                    return @field(T, name);
                 }
             }
             var ebuf: [192]u8 = undefined;
-            const msg = std.fmt.bufPrintZ(&ebuf, "invalid enum value for " ++ @typeName(T) ++ ": '{s}'", .{str}) catch "invalid enum value";
+            const msg = std.mem.printSentinel(&ebuf, "invalid enum value for " ++ @typeName(T) ++ ": '{s}'", .{str}, 0) catch "invalid enum value";
             env.throwTypeError(msg);
             return err.Error.InvalidArg;
         },
@@ -181,28 +181,28 @@ pub fn fromJs(comptime T: type, env: Env, value: Val) !T {
             if (@hasDecl(T, "fromJs")) return T.fromJs(env, value);
             if (info.is_tuple) {
                 var out: T = undefined;
-                inline for (info.fields, 0..) |field, i| {
-                    @field(out, field.name) = try fromJs(field.type, env, try value.getElement(env, @intCast(i)));
+                inline for (info.field_types, 0..) |Field, i| {
+                    out[i] = try fromJs(Field, env, try value.getElement(env, @intCast(i)));
                 }
                 return out;
             }
 
             // undefined means "missing"; default-valued fields can be omitted.
             var out: T = undefined;
-            inline for (info.fields) |field| {
-                const key = comptime util.snakeToCamel(field.name);
+            inline for (info.field_names, info.field_types, info.field_attrs) |name, Field, attrs| {
+                const key = comptime util.snakeToCamel(name);
                 const prop = try value.getNamedProperty(env, key);
                 if (try prop.typeOf(env) == .undefined) {
-                    if (field.defaultValue()) |dflt| {
-                        @field(out, field.name) = dflt;
-                    } else if (@typeInfo(field.type) == .optional) {
-                        @field(out, field.name) = null;
+                    if (attrs.defaultValue(Field)) |default_value| {
+                        @field(out, name) = default_value;
+                    } else if (@typeInfo(Field) == .optional) {
+                        @field(out, name) = null;
                     } else {
                         env.throwTypeError("missing required field: " ++ key);
                         return err.Error.InvalidArg;
                     }
                 } else {
-                    @field(out, field.name) = try fromJs(field.type, env, prop);
+                    @field(out, name) = try fromJs(Field, env, prop);
                 }
             }
             return out;
@@ -248,7 +248,7 @@ inline fn narrow(comptime T: type, env: Env, v: anytype) !T {
 fn readCallback(env: Env, value: Val) !Callback {
     if (try value.typeOf(env) != .function) {
         var buf: [128]u8 = undefined;
-        const msg = std.fmt.bufPrintZ(&buf, "expected function, got {s}", .{jsTypeName(env, value)}) catch "expected function";
+        const msg = std.mem.printSentinel(&buf, "expected function, got {s}", .{jsTypeName(env, value)}, 0) catch "expected function";
         env.throwTypeError(msg);
         return err.Error.FunctionExpected;
     }
@@ -310,7 +310,7 @@ fn readString(env: Env, value: Val) ![]const u8 {
 fn expect(env: Env, value: Val, status: c.napi_status, comptime expected: [*:0]const u8) !void {
     if (status == .ok) return;
     var buf: [128]u8 = undefined;
-    const dyn = std.fmt.bufPrintZ(&buf, "{s}, got {s}", .{ expected, jsTypeName(env, value) });
+    const dyn = std.mem.printSentinel(&buf, "{s}, got {s}", .{ expected, jsTypeName(env, value) }, 0);
     env.throwTypeError(if (dyn) |s| s.ptr else |_| expected);
     return check(status);
 }

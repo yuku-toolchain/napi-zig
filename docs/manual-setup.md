@@ -25,7 +25,7 @@ pub fn add(a: i32, b: i32) i32 {
 }
 
 pub fn greet(env: napi.Env, name: []const u8) ![]const u8 {
-    return std.fmt.allocPrint(env.allocator(), "Hello, {s}!", .{name});
+    return env.allocator().print("Hello, {s}!", .{name});
 }
 ```
 

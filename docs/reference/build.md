@@ -123,7 +123,7 @@ Override the default set with:
 6. If `.npm` is set, installs the `.d.ts` next to the binary in the right format.
 7. If both `.npm` is set and `-Dnpm=true` is passed, generates the full cross-compile graph and the `npm/` package tree.
 
-`napi-zig build --release` is exactly `zig build -Dnpm=true -Doptimize=ReleaseFast` with the per-platform target loop applied to every entry in `.npm.platforms`. You can run it directly if you prefer.
+`napi-zig build --release` is exactly `zig build -Dnpm=true --release=fast` with the per-platform target loop applied to every entry in `.npm.platforms`. You can run it directly if you prefer.
 
 Two build options narrow that loop, set for you by the matching CLI flags:
 

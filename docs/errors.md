@@ -92,4 +92,4 @@ Zig **panics** (index out of bounds, unreachable, integer overflow in debug buil
 A panic in Zig code, especially on a worker thread, crashes the entire Node.js process. Errors are values; panics are bugs. Use `if`, `try`, and explicit error returns for anything that can fail at runtime.
 :::
 
-In production builds (`ReleaseFast`, `ReleaseSmall`), undefined behavior in Zig will not panic; it will silently misbehave. Test in `Debug` and `ReleaseSafe` to catch these.
+In production builds (the `fast` and `small` optimize modes), undefined behavior in Zig will not panic; it will silently misbehave. Test in `debug` and `safe` to catch these.

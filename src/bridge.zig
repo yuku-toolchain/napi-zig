@@ -21,8 +21,8 @@ pub fn invoke(
     this_out: ?*c.napi_value,
     comptime label: []const u8,
 ) bool {
-    const fields = @typeInfo(@typeInfo(@TypeOf(args)).pointer.child).@"struct".fields;
-    const js_count = fields.len - js_start;
+    const arg_types = @typeInfo(@typeInfo(@TypeOf(args)).pointer.child).@"struct".field_types;
+    const js_count = arg_types.len - js_start;
 
     var argv: [@max(js_count, 1)]c.napi_value = undefined;
     var argc: usize = js_count;
@@ -32,8 +32,7 @@ pub fn invoke(
         return false;
     }
 
-    inline for (fields[js_start..], js_start..) |field, i| {
-        const T = field.type;
+    inline for (arg_types[js_start..], js_start..) |T, i| {
         const js_i = i - js_start;
         if (js_i < argc) {
             args[i] = convert.fromJs(T, env, .{ .handle = argv[js_i] }) catch |e| {
@@ -75,8 +74,8 @@ pub fn returnResult(env: Env, raw: anytype) ?c.napi_value {
 }
 
 fn isAllDefaults(comptime T: type) bool {
-    inline for (@typeInfo(T).@"struct".fields) |f| {
-        if (f.default_value_ptr == null) return false;
+    inline for (@typeInfo(T).@"struct".field_attrs) |attrs| {
+        if (attrs.default_value_ptr == null) return false;
     }
     return true;
 }
