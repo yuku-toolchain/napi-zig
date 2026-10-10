@@ -72,11 +72,11 @@ pub fn register(env: Env, target: Val, comptime field_name: []const u8, comptime
 pub fn collectMethods(comptime T: type) []const []const u8 {
     comptime {
         var names: []const []const u8 = &.{};
-        for (@typeInfo(T).@"struct".decls) |d| {
-            if (d.name[0] == '_') continue;
-            if (std.mem.eql(u8, d.name, "init") or std.mem.eql(u8, d.name, "deinit")) continue;
-            if (!hasSelfReceiver(T, d.name)) continue;
-            names = names ++ &[_][]const u8{d.name};
+        for (@typeInfo(T).@"struct".decl_names) |name| {
+            if (name[0] == '_') continue;
+            if (std.mem.eql(u8, name, "init") or std.mem.eql(u8, name, "deinit")) continue;
+            if (!hasSelfReceiver(T, name)) continue;
+            names = names ++ &[_][]const u8{name};
         }
         return names;
     }
@@ -85,9 +85,9 @@ pub fn collectMethods(comptime T: type) []const []const u8 {
 fn hasSelfReceiver(comptime T: type, comptime name: []const u8) bool {
     const VT = @TypeOf(@field(T, name));
     if (@typeInfo(VT) != .@"fn") return false;
-    const params = @typeInfo(VT).@"fn".params;
-    if (params.len < 1) return false;
-    const first = params[0].type orelse return false;
+    const param_types = @typeInfo(VT).@"fn".param_types;
+    if (param_types.len < 1) return false;
+    const first = param_types[0] orelse return false;
     return @typeInfo(first) == .pointer and @typeInfo(first).pointer.child == T;
 }
 
@@ -98,8 +98,8 @@ pub fn isIterator(comptime T: type) bool {
     if (!@hasDecl(T, "next")) return false;
     if (!hasSelfReceiver(T, "next")) return false;
     const info = @typeInfo(@TypeOf(@field(T, "next"))).@"fn";
-    const inject_env = info.params.len > 1 and info.params[1].type.? == Env;
-    if (info.params.len != @as(usize, if (inject_env) 2 else 1)) return false;
+    const inject_env = info.param_types.len > 1 and info.param_types[1].? == Env;
+    if (info.param_types.len != @as(usize, if (inject_env) 2 else 1)) return false;
     const Return = info.return_type orelse return false;
     const Payload = switch (@typeInfo(Return)) {
         .error_union => |eu| eu.payload,
@@ -126,8 +126,8 @@ fn wellKnownSymbolIterator(env: Env) !Val {
 
 fn ConstructorBridge(comptime T: type) type {
     const Init = @TypeOf(@field(T, "init"));
-    const params = @typeInfo(Init).@"fn".params;
-    const inject_env = params.len > 0 and params[0].type.? == Env;
+    const param_types = @typeInfo(Init).@"fn".param_types;
+    const inject_env = param_types.len > 0 and param_types[0].? == Env;
     const js_start: usize = if (inject_env) 1 else 0;
     const Return = @typeInfo(Init).@"fn".return_type.?;
     const Payload = switch (@typeInfo(Return)) {
@@ -180,9 +180,9 @@ fn ConstructorBridge(comptime T: type) type {
 
 fn MethodBridge(comptime T: type, comptime method_name: []const u8) type {
     const Method = @TypeOf(@field(T, method_name));
-    const params = @typeInfo(Method).@"fn".params;
-    // params[0] is *Self, params[1] may be Env.
-    const inject_env = params.len > 1 and params[1].type.? == Env;
+    const param_types = @typeInfo(Method).@"fn".param_types;
+    // param_types[0] is *Self, param_types[1] may be Env.
+    const inject_env = param_types.len > 1 and param_types[1].? == Env;
     const js_start: usize = if (inject_env) 2 else 1;
 
     return struct {
@@ -216,8 +216,8 @@ fn MethodBridge(comptime T: type, comptime method_name: []const u8) type {
 // two loops over the same instance continue where the previous one stopped.
 fn IteratorBridge(comptime T: type) type {
     const Next = @TypeOf(@field(T, "next"));
-    const params = @typeInfo(Next).@"fn".params;
-    const inject_env = params.len > 1 and params[1].type.? == Env;
+    const param_types = @typeInfo(Next).@"fn".param_types;
+    const inject_env = param_types.len > 1 and param_types[1].? == Env;
 
     return struct {
         fn symbolIterator(raw_env: c.napi_env, raw_info: c.napi_callback_info) callconv(.c) ?c.napi_value {

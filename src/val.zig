@@ -168,13 +168,12 @@ pub const Callback = struct {
 
         const info = @typeInfo(T);
         if (info == .@"struct" and info.@"struct".is_tuple) {
-            const fields = info.@"struct".fields;
-            var argv: [fields.len]c.napi_value = undefined;
-            inline for (fields, 0..) |f, i| {
-                const v = @field(args, f.name);
+            const argc = info.@"struct".field_types.len;
+            var argv: [argc]c.napi_value = undefined;
+            inline for (args, 0..) |v, i| {
                 argv[i] = (if (@TypeOf(v) == Val) v else try env.toJs(v)).handle;
             }
-            return self.invoke(env, this, if (fields.len > 0) &argv else null, fields.len);
+            return self.invoke(env, this, if (argc > 0) &argv else null, argc);
         }
 
         @compileError("Callback args must be a tuple or []const Val, got " ++ @typeName(T));

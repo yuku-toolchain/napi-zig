@@ -32,7 +32,7 @@ fn ModuleInit(comptime Module: type) type {
         fn init(raw_env: c.napi_env, exports: c.napi_value) callconv(.c) ?c.napi_value {
             // windows resolves napi symbols at runtime. this must happen
             // before any c.* call. no-op elsewhere.
-            if (comptime builtin.os.tag == .windows) win_napi.init();
+            if (comptime builtin.target.os.tag == .windows) win_napi.init();
 
             const scope = env_mod.callScope(raw_env);
             defer scope.deinit();
@@ -57,14 +57,14 @@ pub fn registerInto(env: Env, target: Val, comptime Module: type) !void {
     // type classification, which together blow past the default 1000-branch
     // quota for modules with more than a handful of exports.
     @setEvalBranchQuota(100_000);
-    inline for (@typeInfo(Module).@"struct".decls) |decl| {
-        if (decl.name[0] == '_') continue;
-        switch (comptime classify(Module, decl.name)) {
+    inline for (@typeInfo(Module).@"struct".decl_names) |name| {
+        if (name[0] == '_') continue;
+        switch (comptime classify(Module, name)) {
             .skip => {},
-            .func => try registerFn(env, target, Module, decl.name),
-            .constant => try registerConst(env, target, Module, decl.name),
-            .namespace => try registerNamespace(env, target, Module, decl.name),
-            .class => try class_mod.register(env, target, decl.name, @field(Module, decl.name)),
+            .func => try registerFn(env, target, Module, name),
+            .constant => try registerConst(env, target, Module, name),
+            .namespace => try registerNamespace(env, target, Module, name),
+            .class => try class_mod.register(env, target, name, @field(Module, name)),
         }
     }
 }
@@ -93,8 +93,8 @@ inline fn registerNamespace(env: Env, target: Val, comptime Module: type, compti
 // param, converts the rest from js, converts the return back.
 fn FnBridge(comptime Module: type, comptime name: []const u8) type {
     const Fn = @TypeOf(@field(Module, name));
-    const params = @typeInfo(Fn).@"fn".params;
-    const inject_env = params.len > 0 and params[0].type.? == Env;
+    const param_types = @typeInfo(Fn).@"fn".param_types;
+    const inject_env = param_types.len > 0 and param_types[0].? == Env;
     const js_start: usize = if (inject_env) 1 else 0;
 
     return struct {
@@ -148,7 +148,7 @@ pub fn classify(comptime Module: type, comptime name: []const u8) Kind {
     };
 }
 
-fn isStringPointer(comptime ptr: std.builtin.Type.Pointer) bool {
+fn isStringPointer(comptime ptr: std.lang.Type.Pointer) bool {
     if (ptr.size == .slice and ptr.child == u8) return true;
     if (ptr.size == .one) {
         const child = @typeInfo(ptr.child);
@@ -158,18 +158,18 @@ fn isStringPointer(comptime ptr: std.builtin.Type.Pointer) bool {
 }
 
 pub fn hasExportable(comptime T: type) bool {
-    inline for (@typeInfo(T).@"struct".decls) |d| {
-        if (d.name[0] == '_') continue;
-        if (classify(T, d.name) != .skip) return true;
+    inline for (@typeInfo(T).@"struct".decl_names) |name| {
+        if (name[0] == '_') continue;
+        if (classify(T, name) != .skip) return true;
     }
     return false;
 }
 
 fn isRawFn(comptime Fn: type) bool {
     const info = @typeInfo(Fn);
-    if (info != .@"fn" or info.@"fn".params.len < 2) return false;
-    const p = info.@"fn".params;
-    return (p[0].type orelse return false) == Env and (p[1].type orelse return false) == CallInfo;
+    if (info != .@"fn" or info.@"fn".param_types.len < 2) return false;
+    const param_types = info.@"fn".param_types;
+    return (param_types[0] orelse return false) == Env and (param_types[1] orelse return false) == CallInfo;
 }
 
 const testing = std.testing;
@@ -242,9 +242,9 @@ test "underscore prefixed decls are skipped during enumeration" {
         pub fn _hidden() void {}
     };
     var count: usize = 0;
-    inline for (@typeInfo(M).@"struct".decls) |d| {
-        if (d.name[0] == '_') continue;
-        if (comptime classify(M, d.name) != .skip) count += 1;
+    inline for (@typeInfo(M).@"struct".decl_names) |name| {
+        if (name[0] == '_') continue;
+        if (comptime classify(M, name) != .skip) count += 1;
     }
     try testing.expectEqual(@as(usize, 1), count);
 }

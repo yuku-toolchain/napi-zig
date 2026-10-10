@@ -11,13 +11,13 @@ pub fn generate(comptime Module: type) []const u8 {
         var names: []const u8 = "";
         var first = true;
 
-        for (@typeInfo(Module).@"struct".decls) |decl| {
-            if (decl.name[0] == '_') continue;
-            switch (module.classify(Module, decl.name)) {
+        for (@typeInfo(Module).@"struct".decl_names) |name| {
+            if (name[0] == '_') continue;
+            switch (module.classify(Module, name)) {
                 .skip => {},
                 .func, .constant, .class, .namespace => {
                     if (!first) names = names ++ ", ";
-                    names = names ++ util.snakeToCamel(decl.name);
+                    names = names ++ util.snakeToCamel(name);
                     first = false;
                 },
             }
@@ -40,8 +40,8 @@ test "generate emits named exports for fns and constants" {
         pub const version: []const u8 = "1.0.0";
     };
     const js = comptime generate(M);
-    try testing.expect(std.mem.indexOf(u8, js, "export const { add, version } = binding;") != null);
-    try testing.expect(std.mem.indexOf(u8, js, "export default binding;") != null);
+    try testing.expect(std.mem.find(u8, js, "export const { add, version } = binding;") != null);
+    try testing.expect(std.mem.find(u8, js, "export default binding;") != null);
 }
 
 test "generate camelCases snake_case exports" {
@@ -51,7 +51,7 @@ test "generate camelCases snake_case exports" {
         }
     };
     const js = comptime generate(M);
-    try testing.expect(std.mem.indexOf(u8, js, "{ readFile }") != null);
+    try testing.expect(std.mem.find(u8, js, "{ readFile }") != null);
 }
 
 test "generate emits no destructure when module has no exports" {
@@ -72,6 +72,6 @@ test "generate skips underscore-prefixed decls" {
         pub fn visible() void {}
     };
     const js = comptime generate(M);
-    try testing.expect(std.mem.indexOf(u8, js, "{ visible }") != null);
-    try testing.expect(std.mem.indexOf(u8, js, "_internal") == null);
+    try testing.expect(std.mem.find(u8, js, "{ visible }") != null);
+    try testing.expect(std.mem.find(u8, js, "_internal") == null);
 }

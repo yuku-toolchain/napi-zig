@@ -50,19 +50,19 @@ describe("returning a long-lived allocation via env.toJs + defer free", () => {
   }, 60_000);
 });
 
-describe("DebugAllocator inside an exported function", () => {
-  test("alloc + free + deinit reports Check.ok", () => {
-    expect(m.debugAllocatorRoundTrip(64)).toBe(0);
-    expect(m.debugAllocatorRoundTrip(4096)).toBe(0);
-    expect(m.debugAllocatorRoundTrip(1)).toBe(0);
+describe("SafeAllocator inside an exported function", () => {
+  test("alloc + free + deinit reports no leaks", () => {
+    expect(m.safeAllocatorRoundTrip(64)).toBe(0);
+    expect(m.safeAllocatorRoundTrip(4096)).toBe(0);
+    expect(m.safeAllocatorRoundTrip(1)).toBe(0);
   });
 
   test("repeated round-trips do not leak", () => {
-    for (let i = 0; i < 1_000; i++) m.debugAllocatorRoundTrip(256);
+    for (let i = 0; i < 1_000; i++) m.safeAllocatorRoundTrip(256);
     Bun.gc(true);
     const baseline = process.memoryUsage().rss;
 
-    for (let i = 0; i < 50_000; i++) m.debugAllocatorRoundTrip(256);
+    for (let i = 0; i < 50_000; i++) m.safeAllocatorRoundTrip(256);
     Bun.gc(true);
     const after = process.memoryUsage().rss;
 

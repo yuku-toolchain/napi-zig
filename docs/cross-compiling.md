@@ -160,9 +160,9 @@ This only affects Windows import-library generation. On macOS and Linux the addo
 
 ## Optimization
 
-`napi-zig build --release` uses `ReleaseFast` for every cross-compiled binary. For development, `napi-zig build` uses whatever `-Doptimize` you specify (default `Debug`). Override the release mode with:
+`napi-zig build --release` uses the `fast` optimize mode for every cross-compiled binary. For development, `napi-zig build` uses whatever `-Doptimize` you specify (default `debug`). Override the release mode with:
 
 ```sh
-napi-zig build --release --optimize=safe    # ReleaseSafe
-napi-zig build --release --optimize=small   # ReleaseSmall
+napi-zig build --release --optimize=safe    # keep safety checks
+napi-zig build --release --optimize=small   # optimize for size
 ```

@@ -87,17 +87,7 @@ function isMuslHost(): boolean {
 }
 
 function formatOptimize(opt: string | undefined): string {
-  if (!opt) return "Debug";
-  switch (opt) {
-    case "fast":
-      return "ReleaseFast";
-    case "safe":
-      return "ReleaseSafe";
-    case "small":
-      return "ReleaseSmall";
-    default:
-      return opt;
-  }
+  return opt ?? "debug";
 }
 
 export async function buildDev(

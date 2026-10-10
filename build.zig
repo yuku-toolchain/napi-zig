@@ -29,7 +29,7 @@ pub const LibOptions = struct {
     name: []const u8,
     root: std.Build.LazyPath,
     target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
+    optimize: std.lang.Optimize,
     imports: []const Import = &.{},
     npm: ?NpmConfig = null,
     /// strip debug info and the symbol table from the addon. defaults
@@ -78,7 +78,7 @@ pub fn addLib(b: *std.Build, napi_dep: *std.Build.Dependency, options: LibOption
         .root_source_file = options.root,
         .target = options.target,
         .optimize = options.optimize,
-        .strip = options.strip orelse defaultStrip(options.target, options.optimize != .Debug),
+        .strip = options.strip orelse defaultStrip(options.target, options.optimize != .debug),
     });
     lib_mod.addImport("napi-zig", napi_module);
     for (options.imports) |imp| lib_mod.addImport(imp.name, imp.module);
@@ -113,35 +113,32 @@ pub fn addLib(b: *std.Build, napi_dep: *std.Build.Dependency, options: LibOption
     }
 }
 
-// `b.option` panics on a duplicate name. When `addLib` is called more than
-// once in the same build, only the first call declares `-Dnpm`; later calls
-// read the existing value.
-fn npmFlag(b: *std.Build) bool {
-    if (b.available_options_map.contains("npm")) {
-        const opt_ptr = b.user_input_options.getPtr("npm") orelse return false;
-        opt_ptr.used = true;
-        return switch (opt_ptr.value) {
+// `b.option` panics on a duplicate name, and `addLib` runs once per addon.
+// The first call declares the option. Later calls read the value the first
+// call already validated.
+fn sharedOption(b: *std.Build, comptime T: type, name: []const u8, description: []const u8) ?T {
+    if (!b.available_options_map.contains(name)) return b.option(T, name, description);
+    const provided = b.user_input_options.get(name) orelse return null;
+    return switch (T) {
+        bool => switch (provided) {
             .flag => true,
             .scalar => |s| std.mem.eql(u8, s, "true"),
-            else => false,
-        };
-    }
-    return b.option(bool, "npm", "Cross-compile and generate npm packages") orelse false;
+            else => null,
+        },
+        []const u8 => switch (provided) {
+            .scalar => |s| s,
+            else => null,
+        },
+        else => @compileError("sharedOption: unsupported type " ++ @typeName(T)),
+    };
 }
 
-// duplicate-declaration guard like npmFlag, the first addLib call declares the
-// option and later calls read the cached input
+fn npmFlag(b: *std.Build) bool {
+    return sharedOption(b, bool, "npm", "Cross-compile and generate npm packages") orelse false;
+}
+
 fn npmHostOnly(b: *std.Build) bool {
-    if (b.available_options_map.contains("npm-host")) {
-        const opt_ptr = b.user_input_options.getPtr("npm-host") orelse return false;
-        opt_ptr.used = true;
-        return switch (opt_ptr.value) {
-            .flag => true,
-            .scalar => |s| std.mem.eql(u8, s, "true"),
-            else => false,
-        };
-    }
-    return b.option(bool, "npm-host", "Cross-compile only the host platform") orelse false;
+    return sharedOption(b, bool, "npm-host", "Cross-compile only the host platform") orelse false;
 }
 
 // Zig bundles no bionic libc, so android compiles need explicit libc paths
@@ -159,7 +156,7 @@ fn applyLibcFile(b: *std.Build, lib: *std.Build.Step.Compile, target: std.Build.
     const explicit = libcFilePath(b);
     if (!target.result.abi.isAndroid()) return;
     if (explicit) |p| {
-        lib.setLibCFile(.{ .cwd_relative = p });
+        lib.setLibCFile(b.graph.cwdRelativePath(p));
         return;
     }
     if (ndkLibcFile(b, target)) |generated| {
@@ -191,6 +188,9 @@ fn androidLibcAvailable(b: *std.Build) bool {
 // null when no NDK is advertised or the install does not have that layout,
 // which is what makes android skippable rather than fatal.
 fn ndkSysroot(b: *std.Build) ?[]const u8 {
+    // the answer depends on the environment and on the NDK's directory
+    // listing, neither of which the configure cache can track
+    b.graph.poisonCache();
     const ndk = for ([_][]const u8{
         "ANDROID_NDK_ROOT", "ANDROID_NDK_HOME", "ANDROID_NDK_LATEST_HOME", "ANDROID_NDK",
     }) |name| {
@@ -210,7 +210,7 @@ fn ndkSysroot(b: *std.Build) ?[]const u8 {
     var it = prebuilt_dir.iterate();
     while (it.next(io) catch null) |entry| {
         if (entry.kind == .directory) {
-            return b.pathJoin(&.{ prebuilt, b.dupe(entry.name), "sysroot" });
+            return b.pathJoin(&.{ prebuilt, entry.name, "sysroot" });
         }
     }
     return null;
@@ -235,26 +235,21 @@ fn ndkLibcFile(b: *std.Build, target: std.Build.ResolvedTarget) ?std.Build.LazyP
         \\include_dir={s}/usr/include
         \\sys_include_dir={s}/usr/include/{s}
         \\crt_dir={s}/usr/lib/{s}/{d}
+        \\cc_dir={s}/usr/lib/{s}/{d}
         \\msvc_lib_dir=
         \\kernel32_lib_dir=
-        \\gcc_dir=
         \\
-    , .{ sysroot, sysroot, triple, sysroot, triple, api });
+    , .{ sysroot, sysroot, triple, sysroot, triple, api, sysroot, triple, api });
     return b.addWriteFiles().add(b.fmt("libc-{s}-{d}.txt", .{ triple, api }), content);
 }
 
-// duplicate-declaration guard like npmFlag, the first addLib call declares the
-// option and later calls read the cached input
 fn libcFilePath(b: *std.Build) ?[]const u8 {
-    if (b.available_options_map.contains("libc-file")) {
-        const opt_ptr = b.user_input_options.getPtr("libc-file") orelse return null;
-        opt_ptr.used = true;
-        return switch (opt_ptr.value) {
-            .scalar => |s| s,
-            else => null,
-        };
-    }
-    return b.option([]const u8, "libc-file", "libc paths file applied to android addon compiles (see `zig libc`)");
+    return sharedOption(
+        b,
+        []const u8,
+        "libc-file",
+        "libc paths file applied to android addon compiles (see `zig libc`)",
+    );
 }
 
 // Why a platform in `.npm.platforms` cannot be compiled here, or null when it
@@ -269,7 +264,7 @@ fn skipReason(b: *std.Build, platform: Platform) ?[]const u8 {
 
 // addLib runs once per addon, so without this the same skip would be reported
 // once per addon in a multi-addon repo.
-var skip_warned = std.EnumSet(Platform).initEmpty();
+var skip_warned: std.EnumSet(Platform) = .empty;
 
 // Drops platforms this machine cannot compile so a full cross build stays
 // usable (11 of 12 platforms beats a failed release build), and warns for each
@@ -312,15 +307,7 @@ fn npmSelected(b: *std.Build, name: []const u8) bool {
 }
 
 fn npmOnlyRaw(b: *std.Build) ?[]const u8 {
-    if (b.available_options_map.contains("npm-only")) {
-        const opt_ptr = b.user_input_options.getPtr("npm-only") orelse return null;
-        opt_ptr.used = true;
-        return switch (opt_ptr.value) {
-            .scalar => |s| s,
-            else => null,
-        };
-    }
-    return b.option([]const u8, "npm-only", "Comma-separated addon names to build (default: all)");
+    return sharedOption(b, []const u8, "npm-only", "Comma-separated addon names to build (default: all)");
 }
 
 fn installDts(
@@ -345,7 +332,7 @@ fn installDts(
             const user_host_mod = b.createModule(.{
                 .root_source_file = options.root,
                 .target = host,
-                .optimize = .Debug,
+                .optimize = .debug,
             });
             user_host_mod.addImport("napi-zig", napi_module);
             for (options.imports) |imp| user_host_mod.addImport(imp.name, imp.module);
@@ -353,7 +340,7 @@ fn installDts(
             const emit_mod = b.createModule(.{
                 .root_source_file = napi_dep.path("build/dts_emit.zig"),
                 .target = host,
-                .optimize = .Debug,
+                .optimize = .debug,
             });
             emit_mod.addImport("napi-zig", napi_module);
             emit_mod.addImport("user-root", user_host_mod);
@@ -364,7 +351,7 @@ fn installDts(
             });
 
             const run = b.addRunArtifact(exe);
-            const out = run.addOutputFileArg("index.d.ts");
+            const out = run.addOutputFileArg2("index.d.ts", .{});
 
             const step = b.addInstallFileWithDir(out, install_dir, sub_path);
             b.getInstallStep().dependOn(&step.step);
@@ -427,7 +414,7 @@ fn addNpmRelease(
         const lib_mod = b.createModule(.{
             .root_source_file = options.root,
             .target = target,
-            .optimize = .ReleaseFast,
+            .optimize = .fast,
             .strip = options.strip orelse defaultStrip(target, true),
         });
         lib_mod.addImport("napi-zig", napi_module);
@@ -467,7 +454,7 @@ fn installIndexJs(
     const user_host_mod = b.createModule(.{
         .root_source_file = options.root,
         .target = host,
-        .optimize = .Debug,
+        .optimize = .debug,
     });
     user_host_mod.addImport("napi-zig", napi_module);
     for (options.imports) |imp| user_host_mod.addImport(imp.name, imp.module);
@@ -475,7 +462,7 @@ fn installIndexJs(
     const emit_mod = b.createModule(.{
         .root_source_file = napi_dep.path("build/index_js_emit.zig"),
         .target = host,
-        .optimize = .Debug,
+        .optimize = .debug,
     });
     emit_mod.addImport("napi-zig", napi_module);
     emit_mod.addImport("user-root", user_host_mod);
@@ -486,7 +473,7 @@ fn installIndexJs(
     });
 
     const run = b.addRunArtifact(exe);
-    const out = run.addOutputFileArg("index.js");
+    const out = run.addOutputFileArg2("index.js", .{});
 
     const step = b.addInstallFileWithDir(out, install_dir, "index.js");
     b.getInstallStep().dependOn(&step.step);
@@ -519,20 +506,20 @@ fn configureLinkerFlags(b: *std.Build, lib: *std.Build.Step.Compile, target: std
 fn rootPackageJson(alloc: std.mem.Allocator, name: []const u8, npm: NpmConfig) []const u8 {
     var deps: []const u8 = "";
     for (npm.platforms, 0..) |platform, i| {
-        deps = std.fmt.allocPrint(alloc, "{s}    \"{s}/binding-{s}\": \"0.0.0\"{s}\n", .{
+        deps = alloc.print("{s}    \"{s}/binding-{s}\": \"0.0.0\"{s}\n", .{
             deps,                                       npm.scope, platform.suffix(),
             if (i < npm.platforms.len - 1) "," else "",
         }) catch return "";
     }
 
     const desc_line = if (npm.description.len > 0)
-        std.fmt.allocPrint(alloc, "  \"description\": \"{s}\",\n", .{npm.description}) catch ""
+        alloc.print("  \"description\": \"{s}\",\n", .{npm.description}) catch ""
     else
         "";
 
     const repo_line = repositoryLine(alloc, npm.repository, 2);
 
-    return std.fmt.allocPrint(alloc,
+    return alloc.print(
         \\{{
         \\  "name": "{s}",
         \\  "version": "0.0.0",
@@ -554,13 +541,13 @@ fn rootPackageJson(alloc: std.mem.Allocator, name: []const u8, npm: NpmConfig) [
 
 fn platformPackageJson(alloc: std.mem.Allocator, name: []const u8, npm: NpmConfig, platform: Platform) []const u8 {
     const libc_line = if (platform.npmLibc()) |libc|
-        std.fmt.allocPrint(alloc, "  \"libc\": [\"{s}\"],\n", .{libc}) catch ""
+        alloc.print("  \"libc\": [\"{s}\"],\n", .{libc}) catch ""
     else
         "";
 
     const repo_line = repositoryLine(alloc, npm.repository, 2);
 
-    return std.fmt.allocPrint(alloc,
+    return alloc.print(
         \\{{
         \\  "name": "{s}/binding-{s}",
         \\  "version": "0.0.0",
@@ -588,7 +575,7 @@ fn repositoryLine(alloc: std.mem.Allocator, repo: []const u8, indent: usize) []c
     const lead = pad[0..@min(indent, pad.len)];
     const url = repositoryUrl(alloc, repo);
     if (url.len == 0) return "";
-    return std.fmt.allocPrint(alloc,
+    return alloc.print(
         \\{s}"repository": {{
         \\{s}  "type": "git",
         \\{s}  "url": "{s}"
@@ -609,11 +596,11 @@ fn repositoryUrl(alloc: std.mem.Allocator, repo: []const u8) []const u8 {
     {
         return alloc.dupe(u8, repo) catch "";
     }
-    return std.fmt.allocPrint(alloc, "git+https://github.com/{s}.git", .{repo}) catch "";
+    return alloc.print("git+https://github.com/{s}.git", .{repo}) catch "";
 }
 
 fn bindingJs(alloc: std.mem.Allocator, name: []const u8, scope: []const u8) []const u8 {
-    return std.fmt.allocPrint(alloc,
+    return alloc.print(
         \\import {{ createRequire }} from 'node:module';
         \\import {{ readFileSync }} from 'node:fs';
         \\import {{ execSync }} from 'node:child_process';

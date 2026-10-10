@@ -24,22 +24,22 @@ fn emitNamespace(comptime T: type, comptime indent: usize, comptime where: Where
         var out: []const u8 = "";
         const pad = spaces(indent);
 
-        for (@typeInfo(T).@"struct".decls) |decl| {
-            if (decl.name[0] == '_') continue;
-            const js_name = util.snakeToCamel(decl.name);
+        for (@typeInfo(T).@"struct".decl_names) |name| {
+            if (name[0] == '_') continue;
+            const js_name = util.snakeToCamel(name);
 
-            switch (module.classify(T, decl.name)) {
+            switch (module.classify(T, name)) {
                 .skip => {},
-                .func => out = out ++ emitFn(js_name, @TypeOf(@field(T, decl.name)), indent, where),
+                .func => out = out ++ emitFn(js_name, @TypeOf(@field(T, name)), indent, where),
                 .constant => {
                     const kw = if (where == .top) "export const " else pad ++ "const ";
-                    out = out ++ kw ++ js_name ++ ": " ++ tsType(@TypeOf(@field(T, decl.name))) ++ ";\n";
+                    out = out ++ kw ++ js_name ++ ": " ++ tsType(@TypeOf(@field(T, name))) ++ ";\n";
                 },
-                .class => out = out ++ emitClass(js_name, @field(T, decl.name), indent, where),
+                .class => out = out ++ emitClass(js_name, @field(T, name), indent, where),
                 .namespace => {
                     const kw = if (where == .top) "export namespace " else pad ++ "namespace ";
                     out = out ++ kw ++ js_name ++ " {\n";
-                    out = out ++ emitNamespace(@field(T, decl.name), indent + 2, .nested);
+                    out = out ++ emitNamespace(@field(T, name), indent + 2, .nested);
                     out = out ++ pad ++ "}\n\n";
                 },
             }
@@ -51,19 +51,19 @@ fn emitNamespace(comptime T: type, comptime indent: usize, comptime where: Where
 fn emitFn(comptime js_name: []const u8, comptime Fn: type, comptime indent: usize, comptime where: Where) []const u8 {
     comptime {
         const info = @typeInfo(Fn).@"fn";
-        const params = info.params;
+        const param_types = info.param_types;
         const kw = if (where == .top) "export function " else spaces(indent) ++ "function ";
 
         // raw mode (env, callinfo) has no inferable signature.
-        if (params.len >= 2 and
-            params[0].type.? == Env and
-            params[1].type.? == val_mod.CallInfo)
+        if (param_types.len >= 2 and
+            param_types[0].? == Env and
+            param_types[1].? == val_mod.CallInfo)
         {
             return kw ++ js_name ++ "(...args: unknown[]): unknown;\n";
         }
 
-        const start: usize = if (params.len > 0 and params[0].type.? == Env) 1 else 0;
-        return kw ++ js_name ++ "(" ++ paramList(params, start) ++ "): " ++ returnTs(info) ++ ";\n";
+        const start: usize = if (param_types.len > 0 and param_types[0].? == Env) 1 else 0;
+        return kw ++ js_name ++ "(" ++ paramList(param_types, start) ++ "): " ++ returnTs(info) ++ ";\n";
     }
 }
 
@@ -75,16 +75,16 @@ fn emitClass(comptime js_name: []const u8, comptime Wrapper: type, comptime inde
         const prefix = if (where == .top) "export class " else pad ++ "class ";
 
         const init_info = @typeInfo(@TypeOf(@field(T, "init"))).@"fn";
-        const init_skip: usize = if (init_info.params.len > 0 and init_info.params[0].type.? == Env) 1 else 0;
+        const init_skip: usize = if (init_info.param_types.len > 0 and init_info.param_types[0].? == Env) 1 else 0;
 
         var out: []const u8 = prefix ++ js_name ++ " {\n";
-        out = out ++ inner ++ "constructor(" ++ paramList(init_info.params, init_skip) ++ ");\n";
+        out = out ++ inner ++ "constructor(" ++ paramList(init_info.param_types, init_skip) ++ ");\n";
 
         for (class_mod.collectMethods(T)) |m| {
             const m_info = @typeInfo(@TypeOf(@field(T, m))).@"fn";
-            const m_skip: usize = if (m_info.params.len > 1 and m_info.params[1].type.? == Env) 2 else 1;
+            const m_skip: usize = if (m_info.param_types.len > 1 and m_info.param_types[1].? == Env) 2 else 1;
             out = out ++ inner ++ util.snakeToCamel(m) ++ "(" ++
-                paramList(m_info.params, m_skip) ++ "): " ++ returnTs(m_info) ++ ";\n";
+                paramList(m_info.param_types, m_skip) ++ "): " ++ returnTs(m_info) ++ ";\n";
         }
 
         if (class_mod.isIterator(T)) {
@@ -96,11 +96,11 @@ fn emitClass(comptime js_name: []const u8, comptime Wrapper: type, comptime inde
     }
 }
 
-fn paramList(comptime params: []const std.builtin.Type.Fn.Param, comptime start: usize) []const u8 {
+fn paramList(comptime param_types: []const ?type, comptime start: usize) []const u8 {
     comptime {
         var out: []const u8 = "";
-        for (start..params.len) |i| {
-            const T = params[i].type.?;
+        for (start..param_types.len) |i| {
+            const T = param_types[i].?;
             if (i > start) out = out ++ ", ";
             const opt = @typeInfo(T) == .optional or
                 (@typeInfo(T) == .@"struct" and isAllDefaults(T));
@@ -110,7 +110,7 @@ fn paramList(comptime params: []const std.builtin.Type.Fn.Param, comptime start:
     }
 }
 
-fn returnTs(comptime info: std.builtin.Type.Fn) []const u8 {
+fn returnTs(comptime info: std.lang.Type.Fn) []const u8 {
     comptime {
         const Return = info.return_type orelse void;
         const Payload = switch (@typeInfo(Return)) {
@@ -151,9 +151,9 @@ fn tsType(comptime T: type) []const u8 {
             .optional => |opt| tsType(opt.child) ++ " | null",
             .@"enum" => |info| blk: {
                 var s: []const u8 = "";
-                for (info.fields, 0..) |f, i| {
+                for (info.field_names, 0..) |name, i| {
                     if (i > 0) s = s ++ " | ";
-                    s = s ++ "\"" ++ util.snakeToCamel(f.name) ++ "\"";
+                    s = s ++ "\"" ++ util.snakeToCamel(name) ++ "\"";
                 }
                 break :blk s;
             },
@@ -171,17 +171,17 @@ fn tsType(comptime T: type) []const u8 {
                 if (@hasDecl(T, "_dts")) break :blk T._dts;
                 if (info.is_tuple) {
                     var s: []const u8 = "[";
-                    for (info.fields, 0..) |f, i| {
+                    for (info.field_types, 0..) |Field, i| {
                         if (i > 0) s = s ++ ", ";
-                        s = s ++ tsType(f.type);
+                        s = s ++ tsType(Field);
                     }
                     break :blk s ++ "]";
                 }
                 var s: []const u8 = "{ ";
-                for (info.fields, 0..) |f, i| {
+                for (info.field_names, info.field_types, info.field_attrs, 0..) |name, Field, attrs, i| {
                     if (i > 0) s = s ++ "; ";
-                    const opt = if (f.default_value_ptr != null or @typeInfo(f.type) == .optional) "?" else "";
-                    s = s ++ util.snakeToCamel(f.name) ++ opt ++ ": " ++ tsType(f.type);
+                    const opt = if (attrs.default_value_ptr != null or @typeInfo(Field) == .optional) "?" else "";
+                    s = s ++ util.snakeToCamel(name) ++ opt ++ ": " ++ tsType(Field);
                 }
                 break :blk s ++ " }";
             },
@@ -191,8 +191,8 @@ fn tsType(comptime T: type) []const u8 {
 }
 
 fn isAllDefaults(comptime T: type) bool {
-    inline for (@typeInfo(T).@"struct".fields) |f| {
-        if (f.default_value_ptr == null) return false;
+    inline for (@typeInfo(T).@"struct".field_attrs) |attrs| {
+        if (attrs.default_value_ptr == null) return false;
     }
     return true;
 }
@@ -214,7 +214,7 @@ test "generate emits export function for plain fn" {
         }
     };
     const dts = comptime generate(M);
-    try testing.expect(std.mem.indexOf(u8, dts, "export function add(a0: number, a1: number): number;") != null);
+    try testing.expect(std.mem.find(u8, dts, "export function add(a0: number, a1: number): number;") != null);
 }
 
 test "generate camelCases snake_case names" {
@@ -224,7 +224,7 @@ test "generate camelCases snake_case names" {
         }
     };
     const dts = comptime generate(M);
-    try testing.expect(std.mem.indexOf(u8, dts, "readFile(") != null);
+    try testing.expect(std.mem.find(u8, dts, "readFile(") != null);
 }
 
 test "generate emits namespace for nested struct" {
@@ -236,8 +236,8 @@ test "generate emits namespace for nested struct" {
         };
     };
     const dts = comptime generate(M);
-    try testing.expect(std.mem.indexOf(u8, dts, "export namespace crypto") != null);
-    try testing.expect(std.mem.indexOf(u8, dts, "function hash(") != null);
+    try testing.expect(std.mem.find(u8, dts, "export namespace crypto") != null);
+    try testing.expect(std.mem.find(u8, dts, "function hash(") != null);
 }
 
 test "generate emits exports for constants" {
@@ -246,8 +246,8 @@ test "generate emits exports for constants" {
         pub const max_buf: u32 = 4096;
     };
     const dts = comptime generate(M);
-    try testing.expect(std.mem.indexOf(u8, dts, "export const version: string;") != null);
-    try testing.expect(std.mem.indexOf(u8, dts, "export const maxBuf: number;") != null);
+    try testing.expect(std.mem.find(u8, dts, "export const version: string;") != null);
+    try testing.expect(std.mem.find(u8, dts, "export const maxBuf: number;") != null);
 }
 
 test "generate emits export class for napi.class wrapper" {
@@ -267,10 +267,10 @@ test "generate emits export class for napi.class wrapper" {
         });
     };
     const dts = comptime generate(M);
-    try testing.expect(std.mem.indexOf(u8, dts, "export class Counter {") != null);
-    try testing.expect(std.mem.indexOf(u8, dts, "constructor(a0: number);") != null);
-    try testing.expect(std.mem.indexOf(u8, dts, "increment(): number;") != null);
-    try testing.expect(std.mem.indexOf(u8, dts, "get(): number;") != null);
+    try testing.expect(std.mem.find(u8, dts, "export class Counter {") != null);
+    try testing.expect(std.mem.find(u8, dts, "constructor(a0: number);") != null);
+    try testing.expect(std.mem.find(u8, dts, "increment(): number;") != null);
+    try testing.expect(std.mem.find(u8, dts, "get(): number;") != null);
 }
 
 test "generate emits Symbol.iterator for iterator classes" {
@@ -289,14 +289,14 @@ test "generate emits Symbol.iterator for iterator classes" {
         });
     };
     const dts = comptime generate(M);
-    try testing.expect(std.mem.indexOf(u8, dts, "[Symbol.iterator](): IterableIterator<number>;") != null);
-    try testing.expect(std.mem.indexOf(u8, dts, "next(): number | null;") != null);
+    try testing.expect(std.mem.find(u8, dts, "[Symbol.iterator](): IterableIterator<number>;") != null);
+    try testing.expect(std.mem.find(u8, dts, "next(): number | null;") != null);
 }
 
 test "tsType maps enums to string union" {
     const E = enum { ok, not_found, internal_error };
     const ts = comptime tsType(E);
-    try testing.expect(std.mem.indexOf(u8, ts, "\"ok\"") != null);
-    try testing.expect(std.mem.indexOf(u8, ts, "\"notFound\"") != null);
-    try testing.expect(std.mem.indexOf(u8, ts, "\"internalError\"") != null);
+    try testing.expect(std.mem.find(u8, ts, "\"ok\"") != null);
+    try testing.expect(std.mem.find(u8, ts, "\"notFound\"") != null);
+    try testing.expect(std.mem.find(u8, ts, "\"internalError\"") != null);
 }
