@@ -238,6 +238,7 @@ fn ndkLibcFile(b: *std.Build, target: std.Build.ResolvedTarget) ?std.Build.LazyP
         \\cc_dir={s}/usr/lib/{s}/{d}
         \\msvc_lib_dir=
         \\kernel32_lib_dir=
+        \\darwin_sdk_dir=
         \\
     , .{ sysroot, sysroot, triple, sysroot, triple, api, sysroot, triple, api });
     return b.addWriteFiles().add(b.fmt("libc-{s}-{d}.txt", .{ triple, api }), content);
